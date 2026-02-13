@@ -107,46 +107,65 @@ async function callGeminiWithRetry(url, prompt, maxRetries = 2) {
   return { ok: false, error: lastError || '未知のエラー' };
 }
 
-async function callOpenAiOnce(prompt) {
+async function callOpenAiWithRetry(prompt, maxRetries = 2) {
   if (!OPENAI_API_KEY || !OPENAI_API_KEY.trim()) {
     return { ok: false, error: 'サーバーに OPENAI_API_KEY が設定されていません。Railway の Variables で設定してください。' };
   }
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
-  try {
-    const resp = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY.trim()}`
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o',
-        messages: [
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 1024
-      })
-    });
-    const raw = await resp.text();
-    let data = null;
+  let lastError = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      if (raw) data = JSON.parse(raw);
-    } catch (_) {}
-    if (!resp.ok) {
-      const msg = data?.error?.message || data?.error || `HTTP ${resp.status}`;
-      return { ok: false, error: String(msg) };
+      const resp = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY.trim()}`
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: [
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 1024
+        })
+      });
+      const raw = await resp.text();
+      let data = null;
+      try {
+        if (raw) data = JSON.parse(raw);
+      } catch (_) {}
+      if (!resp.ok) {
+        const msg = data?.error?.message || data?.error || `HTTP ${resp.status}`;
+        lastError = String(msg);
+        const retriable =
+          resp.status >= 500 ||
+          resp.status === 429;
+        if (retriable && attempt < maxRetries) {
+          await sleep(800 * (attempt + 1));
+          continue;
+        }
+        return { ok: false, error: lastError };
+      }
+      const text = data?.choices?.[0]?.message?.content;
+      if (text && text.trim()) {
+        return { ok: true, text: text.trim() };
+      }
+      return { ok: false, error: 'APIは応答しましたが、診断テキストが含まれていませんでした。' };
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      lastError = msg;
+      if (attempt < maxRetries) {
+        await sleep(800 * (attempt + 1));
+        continue;
+      }
+      return { ok: false, error: '通信エラー: ' + msg };
     }
-    const text = data?.choices?.[0]?.message?.content;
-    if (text && text.trim()) {
-      return { ok: true, text: text.trim() };
-    }
-    return { ok: false, error: 'APIは応答しましたが、診断テキストが含まれていませんでした。' };
-  } catch (e) {
-    const msg = (e && e.message) ? e.message : String(e);
-    return { ok: false, error: '通信エラー: ' + msg };
   }
+  return { ok: false, error: lastError || '未知のエラー' };
 }
+
+const APOLOGY_MESSAGE = '申し訳ありません。現在、利用可能なAI（Gemini / OpenAI）がいずれも高負荷またはエラーのため診断結果を生成できませんでした。時間をおいてもう一度お試しください。';
 
 // Gemini 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/gemini-diagnosis', async (req, res) => {
@@ -167,11 +186,25 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
   try {
-    const result = await callGeminiWithRetry(url, prompt, 2);
-    if (result.ok) {
-      return res.json(result);
+    const primary = await callGeminiWithRetry(url, prompt, 2);
+    if (primary.ok) {
+      return res.json(primary);
     }
-    return res.status(502).json({ ok: false, error: result.error });
+
+    // Gemini が3回とも失敗した場合、OpenAI で再試行（キーがあれば）
+    let fallbackError = primary.error;
+    if (OPENAI_API_KEY && OPENAI_API_KEY.trim()) {
+      const secondary = await callOpenAiWithRetry(prompt, 2);
+      if (secondary.ok) {
+        return res.json(secondary);
+      }
+      fallbackError = secondary.error || fallbackError;
+    }
+
+    return res.status(502).json({
+      ok: false,
+      error: `${APOLOGY_MESSAGE}（詳細: ${fallbackError}）`
+    });
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
     return res.status(500).json({ ok: false, error: '通信エラー: ' + msg });
@@ -184,11 +217,33 @@ app.post('/api/openai-diagnosis', async (req, res) => {
   if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ ok: false, error: 'prompt が必要です。' });
   }
-  const result = await callOpenAiOnce(prompt);
-  if (result.ok) {
-    return res.json(result);
+  try {
+    const primary = await callOpenAiWithRetry(prompt, 2);
+    if (primary.ok) {
+      return res.json(primary);
+    }
+
+    // OpenAI が3回とも失敗した場合、Gemini で再試行（キーがあれば）
+    let fallbackError = primary.error;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey && apiKey.trim()) {
+      const geminiModel = 'gemini-2.5-flash-lite';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+      const secondary = await callGeminiWithRetry(url, prompt, 2);
+      if (secondary.ok) {
+        return res.json(secondary);
+      }
+      fallbackError = secondary.error || fallbackError;
+    }
+
+    return res.status(502).json({
+      ok: false,
+      error: `${APOLOGY_MESSAGE}（詳細: ${fallbackError}）`
+    });
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    return res.status(500).json({ ok: false, error: '通信エラー: ' + msg });
   }
-  return res.status(502).json({ ok: false, error: result.error });
 });
 
 // 診断結果の蓄積（生年・性別・チェックしたイベントの年とイベント名）
