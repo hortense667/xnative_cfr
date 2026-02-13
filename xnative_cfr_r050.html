@@ -1192,6 +1192,60 @@
     filePath: 'timeline.json'
   };
 
+  // ===== CFR プロンプト設定 =====
+  const DEFAULT_CFR_PROMPTS = {
+    topTitle: 'Xnative/Timeline メディアスタック・クロノロジー診断テスト',
+    topDescription: 'あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。',
+    eventChecklistDescription: '好きだったコンテンツやハードウェア、影響を受けた本や映画などをチェックしてください。終わったら画面右下の「診断へ」を選んでください。',
+    geminiPromptHead: '【役割】 あなたはポップカルチャーの変遷に精通したジョーク作家です。提示されるデータから、誰もが簡単には気づかないような視点からその人物の感性をまったく新た表現で面白く言い換えてください。\n【タスク】 以下のアンケート結果に基づき、対象者の感性を分析してて診断した対象に語りかけてください。\n生年・性別から各コンテンツに触れた時期（幼少期〜成人）を特定する。コンテンツや製品を羅列した説明は不要。\nその当時の社会情勢や技術的背景（時代背景）を分析に組み込む。\n最後に一行空白をおいて「あなたは●●●型ネイティブです」という一文で締めくくる。\n【厳守すべき制約】\n形式: 箇条書きやリスト形式、見出し、ハッシュタグは一切使用禁止です。\n構成: 全体を**「単一の段落」または「接続詞でつながれた一続きの散文」**として構成してください。\n文字数: 合計で300文字以内を厳守してください。 冗長な修飾語を省き、情報の密度を高めること。\n禁止事項: 「承知いたしました」「分析結果を述べます」などの前置きや、末尾の補足説明は一切不要です。分析本文のみを出力してください。\n\n【データ】\n\n',
+    usageTitle: '使いかた映像（ダミー）',
+    usageDescription: 'ここでは「HARC の紹介」と「Xnative Timeline の紹介」の映像が流れます（ダミー画面）。しばらくご覧いただいたあと、下の「スタート」ボタンで最初の画面に戻ります。'
+  };
+  let cfrPromptsConfig = null;   // cfr_prompts.json 全体
+  let activeCfrPrompts = null;   // 現在の年表ファイルに対応する設定
+
+  async function loadCfrPromptsFromGitHub() {
+    try {
+      const owner = githubConfig.owner || 'hortense667';
+      const repo  = githubConfig.repo  || 'xnative';
+      const path  = 'cfr_prompts.json';
+      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${path}`;
+      const res = await fetch(rawUrl);
+      if (!res.ok) {
+        console.warn('cfr_prompts.json の取得に失敗しました:', res.status);
+        return null;
+      }
+      const json = await res.json();
+      return json;
+    } catch (e) {
+      console.warn('cfr_prompts.json の読み込みエラー:', e);
+      return null;
+    }
+  }
+
+  function selectActiveCfrPrompts() {
+    const cfg = cfrPromptsConfig || {};
+    const byFilePath = cfg.byFilePath || {};
+    const filePath = githubConfig.filePath || '';
+    if (filePath && byFilePath[filePath]) {
+      return byFilePath[filePath];
+    }
+    const base = filePath.split('/').pop();
+    if (base) {
+      for (const key in byFilePath) {
+        if (Object.prototype.hasOwnProperty.call(byFilePath, key)) {
+          const kBase = String(key).split('/').pop();
+          if (kBase === base) return byFilePath[key];
+        }
+      }
+    }
+    return cfg.default || DEFAULT_CFR_PROMPTS;
+  }
+
+  function getCfrPrompts() {
+    return activeCfrPrompts || DEFAULT_CFR_PROMPTS;
+  }
+
   // 初期化時にリモートからデータを読み込み
   let events = {};
   
@@ -1297,6 +1351,9 @@
         saveEvents();
         renderEvents();
         console.log('初期化: GitHubからデータ読み込み成功');
+        // CFR プロンプト設定も同じリポジトリから読み込む
+        cfrPromptsConfig = await loadCfrPromptsFromGitHub();
+        activeCfrPrompts = selectActiveCfrPrompts();
         return;
       } else {
         throw new Error('GitHubからデータを取得できませんでした');
@@ -1809,9 +1866,11 @@
         </li>
       `;
     }).join('');
+    const cfr = getCfrPrompts();
+    const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
     probeEventsPanel.innerHTML = `
       <h4>${y}年のイベント</h4>
-      <p style="margin:2px 0 4px; font-size:18px; color:#666;">好きだったコンテンツやハードウェア、影響を受けた本や映画などをチェックしてください。終わったら画面右下の「診断へ」を選んでください。</p>
+      <p style="margin:2px 0 4px; font-size:18px; color:#666;">${(desc || '').replace(/</g,'&lt;')}</p>
       <ul>${listHtml}</ul>
     `;
     // イベント年の〇の少し右に出す（スクロール時に追従できるよう座標を記録）
@@ -4649,7 +4708,9 @@
       finishBtn.style.display = 'none';
     } else if (kioskState.step === 3) {
       titleEl.textContent = 'ステップ3：思い出のコンテンツを選択';
-      bodyEl.textContent = '下の青い丸を動かして、右側に出てくる年ごとのイベントにチェックを付けてください。10個以上チェックすると「診断へ」ボタンが押せるようになります。';
+      const cfr = getCfrPrompts();
+      const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
+      bodyEl.textContent = desc + ' 10個以上チェックすると「診断へ」ボタンが押せるようになります。';
       nextBtn.style.display = 'none';
       finishBtn.style.display = 'inline-block';
       finishBtn.textContent = '診断へ';
@@ -4880,10 +4941,13 @@
 
     const renderStep = () => {
       if (wizard.step === 1) {
+        const cfr = getCfrPrompts();
+        const topTitle = cfr.topTitle || DEFAULT_CFR_PROMPTS.topTitle;
+        const topDesc  = cfr.topDescription || DEFAULT_CFR_PROMPTS.topDescription;
         overlay.innerHTML = `
           <div class="inner">
-            <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px; white-space:nowrap;">Xnative/Timeline メディアスタック・クロノロジー診断テスト</h2>
-            <p style="font-size:18px; line-height:1.7;">あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。</p>
+            <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px; white-space:nowrap;">${escapeHtmlText(topTitle)}</h2>
+            <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
             <p style="margin-top:24px; font-size:12px; color:#888; text-align:left;">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
             <div class="actions">
               <button type="button" id="kioskStep1NextBtn">次へ</button>
@@ -5144,13 +5208,14 @@
     return { report, aggregateHtml };
   }
 
-  const GEMINI_PROMPT_HEAD = '【役割】 あなたはポップカルチャーの変遷に精通したジョーク作家です。提示されるデータから、誰もが簡単には気づかないような視点からその人物の感性をまったく新た表現で面白く言い換えてください。\n【タスク】 以下のアンケート結果に基づき、対象者の感性を分析してて診断した対象に語りかけてください。\n生年・性別から各コンテンツに触れた時期（幼少期〜成人）を特定する。コンテンツや製品を羅列した説明は不要。\nその当時の社会情勢や技術的背景（時代背景）を分析に組み込む。\n最後に一行空白をおいて「あなたは●●●型ネイティブです」という一文で締めくくる。\n【厳守すべき制約】\n形式: 箇条書きやリスト形式、見出し、ハッシュタグは一切使用禁止です。\n構成: 全体を**「単一の段落」または「接続詞でつながれた一続きの散文」**として構成してください。\n文字数: 合計で300文字以内を厳守してください。 冗長な修飾語を省き、情報の密度を高めること。\n禁止事項: 「承知いたしました」「分析結果を述べます」などの前置きや、末尾の補足説明は一切不要です。分析本文のみを出力してください。\n\n【データ】\n\n';
   function buildGeminiPrompt() {
     const birthYear = (typeof probeBlue !== 'undefined' && probeBlue.birthYear != null) ? probeBlue.birthYear : '';
     const gender = kioskState.gender || '';
     const nickname = normalizeKioskNickname(kioskState.nickname || '');
     const lines = kioskState.selections.map(s => `${s.year}年: ${s.label}`).join('\n');
-    return GEMINI_PROMPT_HEAD + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`;
+    const cfr = getCfrPrompts();
+    const head = cfr.geminiPromptHead || DEFAULT_CFR_PROMPTS.geminiPromptHead;
+    return head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`;
   }
   const GEMINI_MODEL = 'gemini-2.5-flash-lite';
   // ローカル開発時（localhost）にブラウザから直接Gemini APIを呼ぶヘルパー
@@ -5329,8 +5394,10 @@
       lastProbeEventYear = null;
     }
     const nickname = normalizeKioskNickname(kioskState.nickname || '');
+    const cfr = getCfrPrompts();
+    const topTitle = cfr.topTitle || DEFAULT_CFR_PROMPTS.topTitle;
     const html = `
-      <h4>あなたのXnative/Timeline メディアスタック・クロノロジー診断の結果です</h4>
+      <h4>あなたの${escapeHtmlText(topTitle)}の結果です</h4>
       <p style="margin:8px 0 10px; font-size:14px;">ニックネーム: <strong>${escapeHtmlText(nickname)}</strong></p>
       <p style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${report.replace(/</g,'&lt;')}</p>
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
@@ -5510,7 +5577,7 @@
       })
       .join('');
     const html = `
-      <p style="font-size:20px;">これまでにチェックしたコンテンツ一覧です。OKなら「終了して診断」を選んでください。</p>
+      <p style="font-size:20px;">これまでにチェックした項目の一覧です。OKなら「終了して診断」を選んでください。</p>
       <ul style="max-height:300px; overflow-y:auto; padding-left:18px; font-size:18px; margin-top:8px;">
         ${itemsHtml}
       </ul>
@@ -5605,19 +5672,19 @@
   let kioskUsageMouseHandler = null;
   function showKioskUsageScreen() {
     if (!window.kioskMode) return;
+    const cfr = getCfrPrompts();
+    const desc = cfr.usageDescription || DEFAULT_CFR_PROMPTS.usageDescription;
     const html = `
       <div style="height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:14px; color:#666; gap:16px;">
-        <div>
-          ここでは「HARC の紹介」と「Xnative Timeline の紹介」の映像が流れます（ダミー画面）。<br>
-          しばらくご覧いただいたあと、下の「スタート」ボタンで最初の画面に戻ります。
-        </div>
+        <div>${(desc || '').replace(/</g,'&lt;').replace(/\\n/g,'<br>')}</div>
         <button type="button" id="kioskUsageStartBtn" style="padding:8px 16px; border-radius:10px; border:1px solid #ccc; background:#007bff; color:#fff; cursor:pointer;">
           スタート
         </button>
       </div>
     `;
     kioskModalPhase = 'usage';
-    openModal('使いかた映像（ダミー）', html, { footer: 'none' });
+    const usageTitle = cfr.usageTitle || DEFAULT_CFR_PROMPTS.usageTitle;
+    openModal(usageTitle, html, { footer: 'none' });
     const startBtn = document.getElementById('kioskUsageStartBtn');
     if (startBtn) {
       startBtn.addEventListener('click', () => {
