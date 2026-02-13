@@ -14,6 +14,10 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DIAGNOSTIC_RESULTS_FILE = path.join(DATA_DIR, 'diagnostic-results.json');
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -45,6 +49,63 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'xnative_cfr_r050.html'));
 });
 
+async function callGeminiWithRetry(url, prompt, maxRetries = 2) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const geminiRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 2048 }
+        })
+      });
+
+      const raw = await geminiRes.text();
+      let data = null;
+      try {
+        if (raw) data = JSON.parse(raw);
+      } catch (_) {}
+
+      if (!geminiRes.ok) {
+        const msg = data?.error?.message || data?.error || `HTTP ${geminiRes.status}`;
+        lastError = String(msg);
+        // 高負荷や一時的エラーと思われる場合はリトライ
+        const retriable =
+          geminiRes.status >= 500 ||
+          geminiRes.status === 429 ||
+          (typeof lastError === 'string' &&
+            /high demand|please try again later/i.test(lastError));
+        if (retriable && attempt < maxRetries) {
+          await sleep(800 * (attempt + 1));
+          continue;
+        }
+        return { ok: false, error: lastError };
+      }
+
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text && text.trim()) {
+        return { ok: true, text: text.trim() };
+      }
+      return {
+        ok: false,
+        error: 'APIは応答しましたが、診断テキストが含まれていませんでした。'
+      };
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      lastError = msg;
+      // 通信系の一時エラーはリトライ
+      if (attempt < maxRetries) {
+        await sleep(800 * (attempt + 1));
+        continue;
+      }
+      return { ok: false, error: '通信エラー: ' + msg };
+    }
+  }
+  return { ok: false, error: lastError || '未知のエラー' };
+}
+
 // Gemini 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/gemini-diagnosis', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -64,34 +125,11 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
   try {
-    const geminiRes = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048 }
-      })
-    });
-
-    const raw = await geminiRes.text();
-    let data = null;
-    try {
-      if (raw) data = JSON.parse(raw);
-    } catch (_) {}
-
-    if (!geminiRes.ok) {
-      const errMsg = data?.error?.message || data?.error || `HTTP ${geminiRes.status}`;
-      return res.status(502).json({ ok: false, error: String(errMsg) });
+    const result = await callGeminiWithRetry(url, prompt, 2);
+    if (result.ok) {
+      return res.json(result);
     }
-
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (text && text.trim()) {
-      return res.json({ ok: true, text: text.trim() });
-    }
-    return res.status(502).json({
-      ok: false,
-      error: 'APIは応答しましたが、診断テキストが含まれていませんでした。'
-    });
+    return res.status(502).json({ ok: false, error: result.error });
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
     return res.status(500).json({ ok: false, error: '通信エラー: ' + msg });
