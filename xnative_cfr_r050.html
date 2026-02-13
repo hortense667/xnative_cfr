@@ -672,9 +672,15 @@
       kioskModalPhase = null;
       if (phase === 'diag') {
         if (typeof showKioskOverallResult === 'function') {
-          // 2回目の Gemini 呼び出し用に診断中のスピナーを表示してから総合結果画面へ
-          const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>AIで追加のおすすめを生成しています。<br>しばらくお待ちください。</p></div>';
-          openModal('診断中', loadingHtml, { footer: 'none' });
+          // プロンプト2が設定されている場合のみ、2回目のAI呼び出し用に診断中スピナーを表示
+          try {
+            const cfr = getCfrPrompts();
+            const secondHead = (cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '').trim();
+            if (secondHead) {
+              const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>AIで追加のおすすめを生成しています。<br>しばらくお待ちください。</p></div>';
+              openModal('診断中', loadingHtml, { footer: 'none' });
+            }
+          } catch (_) {}
           showKioskOverallResult();
         }
       } else if (phase === 'overall') {
