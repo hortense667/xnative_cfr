@@ -2877,7 +2877,8 @@
         headers: {
           'Authorization': `Bearer ${githubConfig.accessToken}`,
           'Accept': 'application/vnd.github.v3+json'
-        }
+        },
+        cache: 'no-store'
       });
 
       if (!response.ok) {
@@ -2920,7 +2921,7 @@
       const rawUrl = `https://raw.githubusercontent.com/${githubConfig.owner}/${githubConfig.repo}/main/${githubConfig.filePath}`;
       console.log('GitHub raw URL:', rawUrl);
       
-      const response = await fetch(rawUrl);
+      const response = await fetch(rawUrl, { cache: 'no-store' });
       
       if (!response.ok) {
         throw new Error(`GitHub raw file error: ${response.status} ${response.statusText}`);
@@ -3711,7 +3712,8 @@
         headers: {
           'Authorization': `Bearer ${githubConfig.accessToken}`,
           'Accept': 'application/vnd.github.v3+json'
-        }
+        },
+        cache: 'no-store'
       });
 
       if (!response.ok) {
