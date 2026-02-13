@@ -1198,6 +1198,9 @@
     topDescription: 'あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。',
     eventChecklistDescription: '好きだったコンテンツやハードウェア、影響を受けた本や映画などをチェックしてください。終わったら画面右下の「診断へ」を選んでください。',
     geminiPromptHead: '【役割】 あなたはポップカルチャーの変遷に精通したジョーク作家です。提示されるデータから、誰もが簡単には気づかないような視点からその人物の感性をまったく新た表現で面白く言い換えてください。\n【タスク】 以下のアンケート結果に基づき、対象者の感性を分析してて診断した対象に語りかけてください。\n生年・性別から各コンテンツに触れた時期（幼少期〜成人）を特定する。コンテンツや製品を羅列した説明は不要。\nその当時の社会情勢や技術的背景（時代背景）を分析に組み込む。\n最後に一行空白をおいて「あなたは●●●型ネイティブです」という一文で締めくくる。\n【厳守すべき制約】\n形式: 箇条書きやリスト形式、見出し、ハッシュタグは一切使用禁止です。\n構成: 全体を**「単一の段落」または「接続詞でつながれた一続きの散文」**として構成してください。\n文字数: 合計で300文字以内を厳守してください。 冗長な修飾語を省き、情報の密度を高めること。\n禁止事項: 「承知いたしました」「分析結果を述べます」などの前置きや、末尾の補足説明は一切不要です。分析本文のみを出力してください。\n\n【データ】\n\n',
+    overallTitle: '総合結果',
+    overallDescription: 'ここに「総合結果（ダミー）」を表示します。実際の実装では、複数人分の傾向や集計結果などを表示する予定です。',
+    secondPromptHead: '',
     usageTitle: '使いかた映像（ダミー）',
     usageDescription: 'ここでは「HARC の紹介」と「Xnative Timeline の紹介」の映像が流れます（ダミー画面）。しばらくご覧いただいたあと、下の「スタート」ボタンで最初の画面に戻ります。'
   };
@@ -5216,13 +5219,13 @@
     return { report, aggregateHtml };
   }
 
-  function buildGeminiPrompt() {
+  function buildGeminiPrompt(headOverride) {
     const birthYear = (typeof probeBlue !== 'undefined' && probeBlue.birthYear != null) ? probeBlue.birthYear : '';
     const gender = kioskState.gender || '';
     const nickname = normalizeKioskNickname(kioskState.nickname || '');
     const lines = kioskState.selections.map(s => `${s.year}年: ${s.label}`).join('\n');
     const cfr = getCfrPrompts();
-    const head = cfr.geminiPromptHead || DEFAULT_CFR_PROMPTS.geminiPromptHead;
+    const head = headOverride || cfr.geminiPromptHead || DEFAULT_CFR_PROMPTS.geminiPromptHead;
     return head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`;
   }
   const GEMINI_MODEL = 'gemini-2.5-flash-lite';
@@ -5296,9 +5299,9 @@
     return { ok: false, error: lastError };
   }
 
-  // 実際に診断テキストを取得するメイン関数
-  async function fetchGeminiDiagnosis() {
-    const prompt = buildGeminiPrompt();
+  // 実際に診断テキストを取得するメイン関数（headOverride を指定すると別プロンプトで呼び出し）
+  async function fetchGeminiDiagnosis(headOverride) {
+    const prompt = buildGeminiPrompt(headOverride);
     const apiKey = (typeof window !== 'undefined' && window.GEMINI_API_KEY) ? String(window.GEMINI_API_KEY).trim() : '';
     const isLocalhost =
       typeof location !== 'undefined' &&
@@ -5623,6 +5626,31 @@
 
   async function showKioskOverallResult() {
     if (!window.kioskMode) return;
+    const cfr = getCfrPrompts();
+    const overallTitle = cfr.overallTitle || DEFAULT_CFR_PROMPTS.overallTitle;
+    const overallDesc  = cfr.overallDescription || DEFAULT_CFR_PROMPTS.overallDescription;
+    let secondPromptHtml = '';
+
+    // プロンプト2が設定されている場合は、診断結果画面の「次へ」でここに来たタイミングで追加のGemini呼び出しを行う
+    const secondHead = cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '';
+    if (secondHead && secondHead.trim()) {
+      try {
+        const secondResult = await fetchGeminiDiagnosis(secondHead);
+        if (secondResult && secondResult.ok && secondResult.text) {
+          secondPromptHtml = `
+      <div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">
+        <h4 style="margin:0 0 8px; font-size:16px;">追加のおすすめコンテンツ</h4>
+        <p style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${secondResult.text.replace(/</g,'&lt;')}</p>
+      </div>`;
+        } else if (secondResult && !secondResult.ok && secondResult.error) {
+          secondPromptHtml = `
+      <p style="margin-top:12px; font-size:12px; color:#b91c1c;">※ 追加診断の取得に失敗しました: ${secondResult.error.replace(/</g,'&lt;')}</p>`;
+        }
+      } catch (e) {
+        // 追加診断が失敗しても全体画面の表示自体は続行
+        console.warn('追加Gemini診断の取得に失敗しました:', e);
+      }
+    }
     let sessions = [];
     try {
       sessions = JSON.parse(localStorage.getItem(KIOSK_SESSIONS_KEY) || '[]');
@@ -5649,8 +5677,8 @@
       : `<p style="margin:0 0 8px; font-size:16px;">この端末に保存されたチェック内容（${sessions.length}件のセッション）：</p><div style="max-height:320px; overflow-y:auto; border:1px solid #ddd; border-radius:8px; padding:10px 12px; background:#fafafa; font-size:14px; line-height:1.6;">${sessions.map((ses, idx) => formatSessionRow(ses, idx, formatDate)).join('')}</div>`;
     const accumulatedHtml = serverHtml ? `<div style="margin-bottom:16px;">${serverHtml}</div><h4 style="margin:12px 0 8px; font-size:16px;">この端末（localStorage）</h4>${localHtml}` : `<h4 style="margin:0 0 8px; font-size:16px;">蓄積されたチェック内容</h4>${localHtml}`;
     const html = `
-      <p style="font-size:18px;">ここに「総合結果（ダミー）」を表示します。</p>
-      <p style="margin-top:8px; font-size:18px; color:#666;">実際の実装では、複数人分の傾向や集計結果などを表示する予定です。</p>
+      <p style="font-size:18px;">${overallDesc.replace(/</g,'&lt;')}</p>
+      ${secondPromptHtml}
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
         <h4 style="margin:0 0 8px; font-size:16px;">蓄積されたチェック内容</h4>
         ${accumulatedHtml}
@@ -5667,7 +5695,7 @@
       </div>
     `;
     kioskModalPhase = 'overall';
-    openModal('総合結果（ダミー）', html, { footer: 'next' });
+    openModal(overallTitle, html, { footer: 'next' });
     const btn = document.getElementById('kioskXnativeBtn');
     const wrap = document.getElementById('kioskXnativeFrameWrap');
     if (btn && wrap) {
