@@ -1246,6 +1246,14 @@
     return activeCfrPrompts || DEFAULT_CFR_PROMPTS;
   }
 
+  async function ensureCfrPromptsLoaded() {
+    if (activeCfrPrompts) return;
+    if (!cfrPromptsConfig) {
+      cfrPromptsConfig = await loadCfrPromptsFromGitHub();
+    }
+    activeCfrPrompts = selectActiveCfrPrompts();
+  }
+
   // 初期化時にリモートからデータを読み込み
   let events = {};
   
@@ -5719,13 +5727,22 @@
     selectedGenres.clear();
     updateGenreFilterButtonText && updateGenreFilterButtonText();
     renderEvents();
-    // 最初のオーバーレイを再表示
-    openKioskStartOverlay();
+    // 最初のオーバーレイを再表示（必要なら CFR プロンプト設定を読み込んでから）
+    try {
+      ensureCfrPromptsLoaded().then(() => {
+        openKioskStartOverlay();
+      });
+    } catch (_) {
+      openKioskStartOverlay();
+    }
   }
 
-  (function setupKioskFlow(){
+  (async function setupKioskFlow(){
     if (!window.kioskMode) return;
-    // スタートオーバーレイ
+    // CFR プロンプト設定を先に読み込んでからスタートオーバーレイを表示
+    try {
+      await ensureCfrPromptsLoaded();
+    } catch (_) {}
     openKioskStartOverlay();
     const hintBox = ensureKioskHint();
     const nextBtn = hintBox.querySelector('#kioskNextBtn');
