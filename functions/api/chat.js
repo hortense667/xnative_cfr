@@ -1,4 +1,14 @@
-export async function onRequestPost(context) {
+export async function onRequest(context) {
+  // GET は疎通確認用
+  if (context.request.method === "GET") {
+    return new Response("ok", { status: 200 });
+  }
+
+  // POST 以外は拒否
+  if (context.request.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 });
+  }
+
   const apiKey = context.env.GEMINI_API_KEY;
   if (!apiKey) {
     return new Response(
@@ -25,7 +35,6 @@ export async function onRequestPost(context) {
     );
   }
 
-  // Gemini API (Generative Language API) 呼び出し
   const url =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" +
     encodeURIComponent(apiKey);
@@ -38,11 +47,10 @@ export async function onRequestPost(context) {
     }),
   });
 
-  const text = await upstream.text(); // 失敗時も中身を返せるように text で受ける
+  const text = await upstream.text();
 
   return new Response(text, {
     status: upstream.status,
     headers: { "Content-Type": "application/json" },
   });
 }
-
