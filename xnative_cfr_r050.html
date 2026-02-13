@@ -5302,9 +5302,37 @@
     return { ok: false, error: lastError };
   }
 
+  // OpenAI をサーバ側経由で呼び出す
+  async function callOpenAiViaBackend(prompt) {
+    try {
+      const res = await fetch('/api/openai-diagnosis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        const msg = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        return { ok: false, error: String(msg) };
+      }
+      return data;
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      return { ok: false, error: '通信エラー: ' + msg };
+    }
+  }
+
   // 実際に診断テキストを取得するメイン関数（headOverride を指定すると別プロンプトで呼び出し）
   async function fetchGeminiDiagnosis(headOverride) {
     const prompt = buildGeminiPrompt(headOverride);
+    const cfr = getCfrPrompts();
+    const provider = ((cfr.aiProvider || DEFAULT_CFR_PROMPTS.aiProvider || 'gemini') + '').toLowerCase();
+
+    // OpenAI が指定されている場合は常にサーバ経由で OpenAI を呼び出す
+    if (provider === 'openai') {
+      return await callOpenAiViaBackend(prompt);
+    }
+
     const apiKey = (typeof window !== 'undefined' && window.GEMINI_API_KEY) ? String(window.GEMINI_API_KEY).trim() : '';
     const isLocalhost =
       typeof location !== 'undefined' &&

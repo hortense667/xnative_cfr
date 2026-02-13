@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 // 蓄積データの保存先（Railway で永続化する場合は Volume を DATA_DIR にマウント推奨）
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DIAGNOSTIC_RESULTS_FILE = path.join(DATA_DIR, 'diagnostic-results.json');
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -106,6 +107,47 @@ async function callGeminiWithRetry(url, prompt, maxRetries = 2) {
   return { ok: false, error: lastError || '未知のエラー' };
 }
 
+async function callOpenAiOnce(prompt) {
+  if (!OPENAI_API_KEY || !OPENAI_API_KEY.trim()) {
+    return { ok: false, error: 'サーバーに OPENAI_API_KEY が設定されていません。Railway の Variables で設定してください。' };
+  }
+  const apiUrl = 'https://api.openai.com/v1/chat/completions';
+  try {
+    const resp = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY.trim()}`
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-4o',
+        messages: [
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1024
+      })
+    });
+    const raw = await resp.text();
+    let data = null;
+    try {
+      if (raw) data = JSON.parse(raw);
+    } catch (_) {}
+    if (!resp.ok) {
+      const msg = data?.error?.message || data?.error || `HTTP ${resp.status}`;
+      return { ok: false, error: String(msg) };
+    }
+    const text = data?.choices?.[0]?.message?.content;
+    if (text && text.trim()) {
+      return { ok: true, text: text.trim() };
+    }
+    return { ok: false, error: 'APIは応答しましたが、診断テキストが含まれていませんでした。' };
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    return { ok: false, error: '通信エラー: ' + msg };
+  }
+}
+
 // Gemini 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/gemini-diagnosis', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -134,6 +176,19 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
     const msg = (e && e.message) ? e.message : String(e);
     return res.status(500).json({ ok: false, error: '通信エラー: ' + msg });
   }
+});
+
+// OpenAI 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
+app.post('/api/openai-diagnosis', async (req, res) => {
+  const { prompt } = req.body || {};
+  if (!prompt || typeof prompt !== 'string') {
+    return res.status(400).json({ ok: false, error: 'prompt が必要です。' });
+  }
+  const result = await callOpenAiOnce(prompt);
+  if (result.ok) {
+    return res.json(result);
+  }
+  return res.status(502).json({ ok: false, error: result.error });
 });
 
 // 診断結果の蓄積（生年・性別・チェックしたイベントの年とイベント名）
