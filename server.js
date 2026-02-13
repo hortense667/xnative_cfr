@@ -104,6 +104,22 @@ app.post('/api/diagnostic-result', (req, res) => {
   if (!record || typeof record !== 'object') {
     return res.status(400).json({ ok: false, error: 'body が必要です。' });
   }
+  // 年表JSONのパスとファイル名
+  const filePath = record.filePath != null ? String(record.filePath) : '';
+
+  // 選択されたイベント（ジャンルコードを配列で保持）
+  const selections = Array.isArray(record.selections)
+    ? record.selections.map(s => ({
+        year: s.year != null ? s.year : null,
+        label: s.label != null ? String(s.label) : '',
+        genreCodes: Array.isArray(s.genre)
+          ? s.genre.map(g => String(g))
+          : (s.genre != null && s.genre !== '')
+            ? [String(s.genre)]
+            : []
+      }))
+    : [];
+
   const normalized = {
     timestamp: record.timestamp || new Date().toISOString(),
     gender: record.gender != null ? String(record.gender) : '',
@@ -111,13 +127,11 @@ app.post('/api/diagnostic-result', (req, res) => {
     nickname: record.nickname != null ? String(record.nickname) : '',
     owner: record.owner != null ? String(record.owner) : '',
     repo: record.repo != null ? String(record.repo) : '',
-    filePath: record.filePath != null ? String(record.filePath) : '',
-    selections: Array.isArray(record.selections)
-      ? record.selections.map(s => ({
-          year: s.year != null ? s.year : null,
-          label: s.label != null ? String(s.label) : '',
-          genre: s.genre != null ? String(s.genre) : ''
-        }))
+    filePath,
+    timelineFileName: filePath ? path.basename(filePath) : '',
+    selections,
+    selectedGenres: Array.isArray(record.selectedGenres)
+      ? record.selectedGenres.map(g => String(g))
       : []
   };
   try {

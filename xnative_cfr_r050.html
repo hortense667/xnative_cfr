@@ -5307,7 +5307,9 @@
       owner: githubConfig.owner || '',
       repo: githubConfig.repo || '',
       filePath: githubConfig.filePath || '',
-      selections: kioskState.selections.map(s => ({ year: s.year, label: s.label, genre: s.genre != null ? s.genre : '' }))
+      selections: kioskState.selections.map(s => ({ year: s.year, label: s.label, genre: s.genre != null ? s.genre : '' })),
+      // 診断実行時点でジャンル選択モーダルで選ばれていたジャンルコードの一覧
+      selectedGenres: Array.from(selectedGenres || [])
     };
     submitDiagnosticResultToBackend(record);
     const { report: dummyReport, aggregateHtml } = buildKioskReportAndAggregate();
