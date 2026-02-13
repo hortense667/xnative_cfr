@@ -467,7 +467,6 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <!-- 既定の年表JSON（初回ロード時のみ使用）。以降は localStorage を優先。-->
   <script id="events-json" type="application/json">{
@@ -5249,7 +5248,7 @@
     // 4) どちらも使えない場合
     return {
       ok: false,
-      error: backendResult.error || 'Gemini APIの呼び出し方法が構成されていません。（環境変数付きバックエンドか、ローカル用config.jsを設定してください）'
+      error: backendResult.error || 'Gemini APIの呼び出し方法が構成されていません。（環境変数付きバックエンドか、ローカル用を設定してください）'
     };
   }
 
