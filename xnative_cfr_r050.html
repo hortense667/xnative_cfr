@@ -23,7 +23,7 @@
   .filters select{padding:6px 8px; border:1px solid #ccc; border-radius:8px; background:#fff;}
   .search{display:flex; gap:6px; align-items:center; margin-left:auto}
   .search input{padding:6px 8px; border:1px solid #ccc; border-radius:8px; min-width:220px}
-  .viewport{width:100%;height:calc(100% - 58px);overflow:auto;background:#fff}
+  .viewport{width:100%;height:calc(100% - 58px);overflow:auto;background:#fff;user-select:none;-webkit-user-select:none}
   .stage{width:2400px;height:2600px;transform-origin:0 0}
   .tooltip{position:absolute;background:#fff;border:1px solid #ccc;padding:8px 10px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.08);pointer-events:none;font-size:12px;z-index:20}
   .hint{font-size:12px;color:#666}
@@ -394,6 +394,38 @@
   #probeEventsPanel li{
     margin:2px 0;
   }
+
+  /* スマホ向け: 左側イベント列を非表示（操作に直接関係しないため） */
+  @media (max-width: 768px) {
+    #eventColBg, #events, .eventColBorder { display: none !important; }
+    #decades { display: none !important; }
+  }
+
+  /* スマホ向け: プローブ用イベント一覧をボトムシート風に */
+  @media (max-width: 768px) {
+    #probeEventsPanel {
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      top: auto !important;
+      width: 100% !important;
+      max-width: 100%;
+      max-height: 45vh;
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -4px 24px rgba(0,0,0,.2);
+    }
+  }
+
+  /* スマホ向け: ヘッダー・モーダルをコンパクトに */
+  @media (max-width: 768px) {
+    header { padding: 8px 10px; gap: 8px; }
+    header .btn, .filters select, .search input { padding: 8px 10px; min-height: 44px; }
+    header .chip, .chipCircle { min-width: 44px; min-height: 44px; }
+    .modal { width: calc(100% - 16px) !important; max-height: 80vh; }
+  }
+
+  /* プローブハンドル: タッチでスクロールさせない */
+  .handle { touch-action: none; }
 </style>
 </head>
 <body>
@@ -542,6 +574,11 @@
   function applyPageZoom(){
     document.body.style.zoom = pageZoom;
   }
+  function applyMobileViewportScroll(){
+    if (window.innerWidth <= 768 && vp) vp.scrollLeft = LEFT_COL_W;
+  }
+  applyMobileViewportScroll();
+  window.addEventListener('resize', applyMobileViewportScroll);
   // クリップパス
   const ns='http://www.w3.org/2000/svg';
   const defs=document.createElementNS(ns,'defs');
@@ -4319,10 +4356,10 @@
     const state={eventYear:color==='blue'?2010:1999,birthYear:color==='blue'?1990:1964};
     const stroke=(color==='red'?'#ff3333':'#4da3ff');
     const eventLine=lineEl(ORIGIN_X,0,ORIGIN_X,0); eventLine.style.stroke=stroke; eventLine.style.strokeWidth=3; // 水平（交点まで）
-    const vLine=lineEl(0,0,0,ORIGIN_Y);           vLine.style.stroke=stroke; vLine.style.strokeWidth=3; vLine.setAttribute('pointer-events','stroke');
+    const vLine=lineEl(0,0,0,ORIGIN_Y);           vLine.style.stroke=stroke; vLine.style.strokeWidth=3; vLine.setAttribute('pointer-events','stroke'); vLine.style.touchAction='none';
     const diag=lineEl(0,0,0,0);                    diag.style.stroke=stroke;  diag.style.strokeWidth=3; // 左上斜め
-    const eh=circleEl(HANDLE_X,0,8,'handle');      eh.setAttribute('stroke',stroke); eh.setAttribute('fill','#fff');
-    const bh=circleEl(HANDLE_X,0,8,'handle');      bh.setAttribute('stroke',stroke); bh.setAttribute('fill','#fff');
+    const eh=circleEl(HANDLE_X,0,8,'handle');      eh.setAttribute('stroke',stroke); eh.setAttribute('fill','#fff'); eh.style.touchAction='none';
+    const bh=circleEl(HANDLE_X,0,8,'handle');      bh.setAttribute('stroke',stroke); bh.setAttribute('fill','#fff'); bh.style.touchAction='none';
     // 年齢表示を固定位置のHTML要素として作成
     const ageTextElement = document.createElement('div');
     ageTextElement.style.cssText = `
@@ -4386,13 +4423,12 @@
     function endDrag(){ document.body.classList.remove('dragging'); }
     function dragByYear(el,prop){
       let dragging=false, startY=0, startVal=0;
-      el.addEventListener('mousedown',e=>{
+      function onDragStart(clientY){
         dragging=true;
-        startY=e.clientY;
+        startY=clientY;
         startVal=state[prop];
         startDrag();
         // ★ユーザー視点の「上の青い〇」は birthYear 側（bh）
-        // 「上の青い〇…」を消して「下の青い〇…」案内に切り替えるのは bh を掴んだとき
         if (window.kioskMode && color==='blue' && el===bh && window.kioskState && !window.kioskState.eventYearMoved) {
           window.kioskState.eventYearMoved = true;
           window.kioskState.step = 3;
@@ -4400,50 +4436,50 @@
           updateKioskHint();
           updateKioskStepOverlay();
         }
-        // ★ユーザー視点の「下の青い〇」は eventYear 側（eh）
-        // 「上の青い〇」「下の青い〇」の案内まわり
         if (window.kioskMode && color==='blue' && el===eh && window.kioskState) {
           if (!window.kioskState.eventYearMoved) {
-            // まだ上の〇（生年側）を動かしていない状態で、先に下の〇を動かした場合
-            // 「上の青い〇を…」メッセージを消し、「下の青い〇を…」案内も出さない
             window.kioskState.eventYearMoved = true;
             window.kioskState.step = 3;
             window.kioskState.showLowerOverlay = false;
             updateKioskHint();
             updateKioskStepOverlay();
           } else if (window.kioskState.showLowerOverlay) {
-            // 既に上の〇を動かしていて、「下の青い〇…」案内が出ているときは、eh を掴んだ瞬間に消す
             window.kioskState.showLowerOverlay = false;
             updateKioskStepOverlay();
           }
         }
-        // 生年側の〇（bh）を動かし始めたときは、右側の一覧を消す
         if(color==='blue' && el===bh && window.updateProbeEventsPanel){
           const panel = document.getElementById('probeEventsPanel');
-          if (panel){
-            panel.style.display = 'none';
-            panel.innerHTML = '';
-          }
+          if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
         }
-        e.preventDefault();
-        e.stopPropagation();
-      });
-      window.addEventListener('mousemove',e=>{
+      }
+      function onDragMove(clientY){
         if(!dragging) return;
-        const dy=e.clientY-startY;
+        const dy=clientY-startY;
         const dYear=Math.round(dy/PX_PER_YEAR);
         state[prop]=Math.max(YEAR_MIN,Math.min(YEAR_MAX,startVal+dYear));
         redraw();
-        // 「下の青い〇」（eh）をドラッグ中は、その年のイベント一覧を右側に表示
-        if(color==='blue' && el===eh && window.updateProbeEventsPanel){
-          window.updateProbeEventsPanel(state.eventYear);
-        }
+        if(color==='blue' && el===eh && window.updateProbeEventsPanel){ window.updateProbeEventsPanel(state.eventYear); }
+      }
+      function onDragEnd(){ if(dragging){ dragging=false; endDrag(); } }
+      el.addEventListener('mousedown',e=>{ onDragStart(e.clientY); e.preventDefault(); e.stopPropagation(); });
+      window.addEventListener('mousemove',e=>{ onDragMove(e.clientY); });
+      window.addEventListener('mouseup',onDragEnd);
+      el.addEventListener('touchstart',e=>{
+        if(e.touches.length!==1) return;
+        onDragStart(e.touches[0].clientY);
+        e.preventDefault();
+      },{passive:false});
+      window.addEventListener('touchmove',e=>{
+        if(!dragging || e.touches.length!==1) return;
+        onDragMove(e.touches[0].clientY);
+        e.preventDefault();
+      },{passive:false});
+      window.addEventListener('touchend',e=>{
+        if(e.touches.length===0) onDragEnd();
       });
-      window.addEventListener('mouseup',()=>{
-        if(dragging){
-          dragging=false;
-          endDrag();
-        }
+      window.addEventListener('touchcancel',e=>{
+        if(e.touches.length===0) onDragEnd();
       });
     }
     dragByYear(eh,'eventYear'); dragByYear(bh,'birthYear'); dragByYear(vLine,'birthYear');
