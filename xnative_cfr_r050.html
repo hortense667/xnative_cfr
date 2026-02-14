@@ -5632,22 +5632,29 @@
     } catch (e) {}
   }
 
-  // 診断結果をサーバー側に送信（Cloudflare/Netlify で集約用）。ローカル・送信失敗時も握りつぶす
+  // 診断結果をサーバー側に送信（Railway/Fly.io は /api/、Netlify は .netlify/functions/）。1つ成功したら終了
   function submitDiagnosticResultToBackend(record) {
     const endpoints = [
-      '/api/diagnostic-result',
-      '/.netlify/functions/diagnostic-result'
+      '/api/diagnostic-result',                 // Railway / Fly.io (Express)
+      '/.netlify/functions/diagnostic-result'  // Netlify Functions
     ];
     const body = JSON.stringify(record);
-    endpoints.forEach(ep => {
-      fetch(ep, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body
-      }).then(res => {
-        if (res.ok) console.log('診断結果をサーバーに送信しました:', ep);
-      }).catch(() => {});
-    });
+    (async function tryEndpoints() {
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+          });
+          if (res.ok) {
+            console.log('診断結果をサーバーに送信しました:', ep);
+            return;
+          }
+          if (res.status === 404) continue;
+        } catch (_) {}
+      }
+    })();
   }
 
   async function showKioskResult() {
