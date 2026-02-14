@@ -2084,14 +2084,14 @@
     webPreviewFrame.src = url;
     const z = pageZoom || 1;
     if (isWebPreviewMobile()) {
-      // スマホ: 全体が入るように表示し、外タップで閉じる
+      // スマホ: 幅8割・左に余白・上下1割ずつ短く、外タップで閉じる
       if (webPreviewOverlay) {
         webPreviewOverlay.style.display = 'block';
       }
-      el.style.left = '2vw';
-      el.style.top = '2vh';
-      el.style.width = '96vw';
-      el.style.height = '96vh';
+      el.style.left = '10vw';
+      el.style.top = '10vh';
+      el.style.width = '80vw';
+      el.style.height = '80vh';
       el.style.maxWidth = 'none';
       el.style.borderRadius = '12px';
     } else {
