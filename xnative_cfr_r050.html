@@ -135,6 +135,19 @@
     font-size:18px;
     line-height:1.8;
     border-left:4px solid var(--diag-accent);
+    box-sizing:border-box;
+  }
+  @media (max-width: 768px) {
+    #kioskStartOverlay .inner{
+      max-width:calc(100vw - 24px);
+      margin:12px;
+      padding:18px 16px;
+    }
+    #kioskStartOverlay h2{
+      font-size:18px !important;
+      word-wrap:break-word;
+      overflow-wrap:break-word;
+    }
   }
   #kioskStartOverlay h2{
     margin:0 0 8px;
@@ -5076,7 +5089,7 @@
         const topDesc  = cfr.topDescription || DEFAULT_CFR_PROMPTS.topDescription;
         overlay.innerHTML = `
           <div class="inner">
-            <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px; white-space:nowrap;">${escapeHtmlText(topTitle)}</h2>
+            <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px;">${escapeHtmlText(topTitle)}</h2>
             <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
             <p style="margin-top:24px; font-size:12px; color:#888; text-align:left;">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
             <div class="actions">
