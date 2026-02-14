@@ -194,6 +194,16 @@
     color:var(--diag-highlight);
     margin-top:6px;
   }
+  /* スマホ・ステップ3で操作開始後: 診断へ＋選択数だけの1行表示 */
+  #kioskHint.kiosk-hint-step3-compact {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+  }
+  #kioskHint.kiosk-hint-step3-compact #kioskFinishBtn { order: 1; }
+  #kioskHint.kiosk-hint-step3-compact .count { order: 2; margin-top: 0; font-size: 16px; color: #fff; }
   /* ステップごとの上部メッセージ（反転色） */
   #kioskStepOverlay{
     position:fixed;
@@ -1893,6 +1903,9 @@
             if (i !== -1) window.kioskState.selections.splice(i,1);
           }
         }
+      }
+      if (window.kioskMode && window.kioskState && window.kioskState.step === 3) {
+        window.kioskState.step3StartedOperating = true;
       }
       if (window.kioskMode && typeof updateKioskHint === 'function') {
         updateKioskHint();
@@ -4445,11 +4458,14 @@
             window.kioskState.eventYearMoved = true;
             window.kioskState.step = 3;
             window.kioskState.showLowerOverlay = false;
+            window.kioskState.step3StartedOperating = true;
             updateKioskHint();
             updateKioskStepOverlay();
           } else if (window.kioskState.showLowerOverlay) {
             window.kioskState.showLowerOverlay = false;
+            window.kioskState.step3StartedOperating = true;
             updateKioskStepOverlay();
+            updateKioskHint();
           }
         }
         if(color==='blue' && el===bh && window.updateProbeEventsPanel){
@@ -4689,6 +4705,7 @@
   window.kioskMode = true;
   const kioskState = {
     step: 0,          // 0: スタート前, 1: ジャンル選択, 2: 生年セット, 3: イベント選択中, 4: 診断表示
+    step3StartedOperating: false, // スマホでステップ3の説明を消しコンパクト表示にするフラグ
     gender: '',       // スタート時アンケートの性別
     nickname: '',     // スタート時アンケートのニックネーム（保存しない）
     selections: [],   // { year, label, genre, imp }
@@ -4730,6 +4747,12 @@
       el.style.display = 'none';
       return;
     }
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const step3Compact = kioskState.step === 3 && isMobile && kioskState.step3StartedOperating;
+    if (step3Compact) {
+      el.style.display = 'none';
+      return;
+    }
     let text = '';
     if (kioskState.step === 1) {
       text = 'ジャンルを選んでください。１～数個のジャンルを選んでください。';
@@ -4754,6 +4777,10 @@
     const nextBtn = box.querySelector('#kioskNextBtn');
     const finishBtn = box.querySelector('#kioskFinishBtn');
 
+    titleEl.style.display = '';
+    bodyEl.style.display = '';
+    countEl.style.display = '';
+    box.classList.remove('kiosk-hint-step3-compact');
     box.style.display = 'block';
     finishBtn.style.display = 'none';
 
@@ -4770,14 +4797,32 @@
       nextBtn.style.display = 'none';
       finishBtn.style.display = 'none';
     } else if (kioskState.step === 3) {
-      titleEl.textContent = 'ステップ3：思い出のコンテンツを選択';
-      const cfr = getCfrPrompts();
-      const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
-      bodyEl.textContent = desc + ' 10個以上チェックすると「診断へ」ボタンが押せるようになります。';
-      nextBtn.style.display = 'none';
-      finishBtn.style.display = 'inline-block';
-      finishBtn.textContent = '診断へ';
-      finishBtn.disabled = count < 10;
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      const step3Compact = isMobile && kioskState.step3StartedOperating;
+      if (step3Compact) {
+        titleEl.style.display = 'none';
+        bodyEl.style.display = 'none';
+        box.classList.add('kiosk-hint-step3-compact');
+        countEl.textContent = '選択数：' + count + '（10個以上選んでください）';
+        countEl.style.display = 'block';
+        nextBtn.style.display = 'none';
+        finishBtn.style.display = 'inline-block';
+        finishBtn.textContent = '診断へ';
+        finishBtn.disabled = count < 10;
+      } else {
+        titleEl.style.display = '';
+        bodyEl.style.display = '';
+        box.classList.remove('kiosk-hint-step3-compact');
+        titleEl.textContent = 'ステップ3：思い出のコンテンツを選択';
+        const cfr = getCfrPrompts();
+        const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
+        bodyEl.textContent = desc + ' 10個以上チェックすると「診断へ」ボタンが押せるようになります。';
+        countEl.textContent = '選んだコンテンツ数: ' + count + ' / 10 以上で診断できます';
+        nextBtn.style.display = 'none';
+        finishBtn.style.display = 'inline-block';
+        finishBtn.textContent = '診断へ';
+        finishBtn.disabled = count < 10;
+      }
     } else if (kioskState.step === 4) {
       titleEl.textContent = 'ありがとうございました';
       bodyEl.textContent = 'お疲れさまでした。m(_ _)m ';
@@ -4795,6 +4840,7 @@
     kioskState.step = 2;
     kioskState.eventYearMoved = false;
     kioskState.showLowerOverlay = false;
+    kioskState.step3StartedOperating = false;
     updateKioskHint();
   }
   window.kioskOnGenresApplied = kioskOnGenresApplied;
@@ -5174,6 +5220,7 @@
           });
         }
       });
+      kioskState.step3StartedOperating = true;
       closeModal();
       updateKioskHint();
     });
@@ -5824,6 +5871,7 @@
     kioskState.nickname = '';
     kioskState.eventYearMoved = false;
     kioskState.showLowerOverlay = false;
+    kioskState.step3StartedOperating = false;
     // チェック状態クリア
     if (typeof probeCheckedKeys !== 'undefined' && probeCheckedKeys.clear) {
       probeCheckedKeys.clear();
