@@ -4456,7 +4456,8 @@
       bh.setAttribute('cx',HANDLE_X);bh.setAttribute('cy',yB);
       // HTML要素の年齢表示を更新（線の右側に表示）
       ageTextElement.textContent = `${age}歳`;
-      ageTextElement.style.left = `${ix + 10}px`;
+      const leftPx = ix + 10;
+      ageTextElement.style.left = (window.innerWidth <= 768 && vp) ? `${leftPx - vp.scrollLeft}px` : `${leftPx}px`;
       ageTextElement.style.display = 'block';
       
       // 年齢表示の位置をヘッダーの高さに応じて調整
@@ -4571,6 +4572,13 @@
       vp.scrollTop = Math.max(0, Math.min(maxScroll, top));
     }catch(_e){}
   })();
+
+  vp.addEventListener('scroll', ()=>{
+    if (window.innerWidth <= 768) {
+      probeBlue.redraw();
+      probeRed.redraw();
+    }
+  });
 
   // ライン表示トグル（小丸ボタン）
   const blueGroup=document.getElementById('probe-blue');
