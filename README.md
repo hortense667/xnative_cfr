@@ -15,7 +15,7 @@
 - **メインHTML:** `xnative_cfr_r050.html`
 - **サーバー:** Node + Express（`server.js`）— 静的配信・診断API・診断結果の蓄積
 - **設定:** `cfr_prompts.json` で年表ごとのタイトル・説明・AIプロンプトを切り替え
-- **URL:** `?filePath=タイムラインJSON名` で年表を指定可能
+- **URL:** `?filePath=タイムラインJSON名` で年表を指定可能。`editmode=ON` を付けるとヘッダに「設定」ボタンが表示され、設定画面（GitHub同期設定など）を開ける。
 
 ---
 

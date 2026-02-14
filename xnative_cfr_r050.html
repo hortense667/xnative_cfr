@@ -509,11 +509,10 @@
       <button class="btn" id="nextBtn">次</button>
     </div>
     <div class="legend">
-      <button class="btn" id="settingsBtn" title="設定">設定</button>
+      <button class="btn" id="settingsBtn" title="設定" style="display:none;">設定</button>
       <button class="btn" id="helpBtn" title="ヘルプ">ヘルプ</button>
       <input type="file" id="fileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values,text/plain" style="display:none" />
-      <button class="chip chipCircle" id="toggleBlue" aria-pressed="true" title="水色ラインの表示／非表示"><span class="dot blue"></span></button>
-      <button class="chip chipCircle" id="toggleRed" aria-pressed="true" title="赤色ラインの表示／非表示"><span class="dot red"></span></button>
+      <button class="chip chipCircle" id="toggleRed" aria-pressed="true" title="赤色ラインの表示／非表示" style="display:none;"><span class="dot red"></span></button>
     </div>
   </header>
   <div class="viewport" id="viewport">
@@ -599,7 +598,10 @@
   const nextBtn=document.getElementById('nextBtn');
   const loadCsvBtn=null;
   const settingsBtn=document.getElementById('settingsBtn');
-  console.log('settingsBtn:', settingsBtn);
+  (function(){
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('editmode') === 'ON' && settingsBtn) settingsBtn.style.display = '';
+  })();
   const helpBtn=document.getElementById('helpBtn');
   const fileInput=document.getElementById('fileInput');
   const eventColBg=document.getElementById('eventColBg');
@@ -4662,14 +4664,14 @@
   // ライン表示トグル（小丸ボタン）
   const blueGroup=document.getElementById('probe-blue');
   const redGroup =document.getElementById('probe-red');
-  const toggleBlueBtn=document.getElementById('toggleBlue');
   const toggleRedBtn =document.getElementById('toggleRed');
-  function setToggle(btn, group, on){ group.style.display = on ? '' : 'none'; btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.classList.toggle('off', !on); }
-  toggleBlueBtn.addEventListener('click',()=>{ const visible = blueGroup.style.display !== 'none'; setToggle(toggleBlueBtn, blueGroup, !visible); });
-  toggleRedBtn.addEventListener('click',()=>{ const visible = redGroup.style.display !== 'none'; setToggle(toggleRedBtn, redGroup, !visible); });
-  // 赤プローブは常にオフ＆ボタンも非表示
-  setToggle(toggleRedBtn, redGroup, false);
-  toggleRedBtn.style.display = 'none';
+  function setToggle(btn, group, on){ group.style.display = on ? '' : 'none'; if(btn){ btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.classList.toggle('off', !on); } }
+  // 青プローブは常に表示（オン/オフボタンは廃止）
+  if (toggleRedBtn) {
+    toggleRedBtn.addEventListener('click',()=>{ const visible = redGroup.style.display !== 'none'; setToggle(toggleRedBtn, redGroup, !visible); });
+    setToggle(toggleRedBtn, redGroup, false);
+    toggleRedBtn.style.display = 'none';
+  }
 
   // フィルタ変更
   function onFilterChange(){ filterImp=selImp.value.trim(); renderEvents(); }
