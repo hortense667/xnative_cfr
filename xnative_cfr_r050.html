@@ -5107,21 +5107,21 @@
       const activeCss = 'background:#6366f1; color:#fff; border-color:#6366f1;';
       const normalCss = 'background:#f8fafc; color:#1e293b;';
 
-      const bottomRow = document.createElement('div');
-      bottomRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%;';
-      const leftGroup = document.createElement('div');
-      leftGroup.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-start;';
-      const rightGroup = document.createElement('div');
-      rightGroup.style.cssText = 'display:flex; gap:6px; justify-content:flex-end;';
-
+      // 1行目: かな・カナ・ABC・abc のみ（スマホレイアウト）
+      const modeRow = document.createElement('div');
+      modeRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-start; width:100%; margin-bottom:8px;';
       const kanaBtn = mkBtn('かな', () => { st.mode = 'kana'; render(); }, modeBtnCss + (st.mode === 'kana' ? activeCss : normalCss));
       const kataBtn = mkBtn('カナ', () => { st.mode = 'kata'; render(); }, modeBtnCss + (st.mode === 'kata' ? activeCss : normalCss));
       const abcBtn  = mkBtn('ABC', () => { st.mode = 'upper'; render(); }, modeBtnCss + (st.mode === 'upper' ? activeCss : normalCss));
       const abcLowerBtn = mkBtn('abc', () => { st.mode = 'lower'; render(); }, modeBtnCss + (st.mode === 'lower' ? activeCss : normalCss));
-      leftGroup.appendChild(kanaBtn);
-      leftGroup.appendChild(kataBtn);
-      leftGroup.appendChild(abcBtn);
-      leftGroup.appendChild(abcLowerBtn);
+      modeRow.appendChild(kanaBtn);
+      modeRow.appendChild(kataBtn);
+      modeRow.appendChild(abcBtn);
+      modeRow.appendChild(abcLowerBtn);
+
+      // 2行目: 空白・Clear・←（かな/カナの下に空白、ABCの下にClear、abcの下に←のイメージで配置）
+      const actionRow = document.createElement('div');
+      actionRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%;';
       subWrap.style.display = 'none';
 
       const keyCss = 'padding:0; height:50px; border-radius:8px; border:1px solid #9f9f9f; background:#e6e6e6; color:#222; cursor:pointer; font-size:20px; line-height:1.2; font-weight:500;';
@@ -5169,12 +5169,11 @@
       const spaceBtn = mkBtn('空白', () => pushChar(' '), actionBaseCss + 'border:1px solid #8a8a8a; background:#e0e0e0; color:#111; font-size:16px; font-weight:500; min-width:88px;');
       const clearBtn = mkBtn('Clear', clearAll, actionBaseCss + 'border:1px solid #c45b5b; background:#fff; color:#7a1b1b; font-size:20px; font-weight:500; min-width:88px;');
       const backBtn = mkBtn('←', backspaceOne, actionBaseCss + 'border:1px solid #c45b5b; background:#fff; color:#7a1b1b; font-size:24px; font-weight:800; min-width:76px;');
-      rightGroup.appendChild(spaceBtn);
-      rightGroup.appendChild(clearBtn);
-      rightGroup.appendChild(backBtn);
-      bottomRow.appendChild(leftGroup);
-      bottomRow.appendChild(rightGroup);
-      modeWrap.appendChild(bottomRow);
+      actionRow.appendChild(spaceBtn);
+      actionRow.appendChild(clearBtn);
+      actionRow.appendChild(backBtn);
+      modeWrap.appendChild(modeRow);
+      modeWrap.appendChild(actionRow);
     }
 
     input.readOnly = true;
