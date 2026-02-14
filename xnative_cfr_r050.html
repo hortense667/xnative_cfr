@@ -622,11 +622,21 @@
   function applyPageZoom(){
     document.body.style.zoom = pageZoom;
   }
+  const HANDLE_R = 8; // プローブの〇の半径（直径で余白をとる）
   function applyMobileViewportScroll(){
-    if (window.innerWidth <= 768 && vp) vp.scrollLeft = LEFT_COL_W;
+    if (window.innerWidth <= 768 && vp) {
+      const minLeft = LEFT_COL_W - HANDLE_LANE_W - (HANDLE_R * 2);
+      vp.scrollLeft = Math.max(minLeft, vp.scrollLeft);
+    }
   }
   applyMobileViewportScroll();
   window.addEventListener('resize', applyMobileViewportScroll);
+  vp.addEventListener('scroll', ()=>{
+    if (window.innerWidth <= 768 && vp) {
+      const minLeft = LEFT_COL_W - HANDLE_LANE_W - (HANDLE_R * 2);
+      if (vp.scrollLeft < minLeft) vp.scrollLeft = minLeft;
+    }
+  });
   // クリップパス
   const ns='http://www.w3.org/2000/svg';
   const defs=document.createElementNS(ns,'defs');
@@ -1291,7 +1301,7 @@
     temperature: 0.9,
     topTitle: 'Xnative/Timeline メディアスタック・クロノロジー診断テスト',
     topDescription: 'あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。',
-    eventChecklistDescription: 'チェックが終わったら画面右下の「診断へ」を選んでください。',
+    eventChecklistDescription: 'チェックが終わったら画面右下の「診断」を選んでください。',
     geminiPromptHead: '【役割】 あなたはポップカルチャーの変遷に精通したジョーク作家です。提示されるデータから、誰もが簡単には気づかないような視点からその人物の感性をまったく新た表現で面白く言い換えてください。\n【タスク】 以下のアンケート結果に基づき、対象者の感性を分析してて診断した対象に語りかけてください。\n生年・性別から各コンテンツに触れた時期（幼少期〜成人）を特定する。コンテンツや製品を羅列した説明は不要。\nその当時の社会情勢や技術的背景（時代背景）を分析に組み込む。\n最後に一行空白をおいて「あなたは●●●型ネイティブです」という一文で締めくくる。\n【厳守すべき制約】\n形式: 箇条書きやリスト形式、見出し、ハッシュタグは一切使用禁止です。\n構成: 全体を**「単一の段落」または「接続詞でつながれた一続きの散文」**として構成してください。\n文字数: 合計で300文字以内を厳守してください。 冗長な修飾語を省き、情報の密度を高めること。\n禁止事項: 「承知いたしました」「分析結果を述べます」などの前置きや、末尾の補足説明は一切不要です。分析本文のみを出力してください。\n\n【データ】\n\n',
     overallTitle: '総合結果',
     overallDescription: 'ここに「総合結果（ダミー）」を表示します。実際の実装では、複数人分の傾向や集計結果などを表示する予定です。',
@@ -4833,7 +4843,7 @@
         countEl.style.display = 'block';
         nextBtn.style.display = 'none';
         finishBtn.style.display = 'inline-block';
-        finishBtn.textContent = '診断へ';
+        finishBtn.textContent = '診断';
         finishBtn.disabled = count < 10;
       } else {
         titleEl.style.display = '';
@@ -4842,11 +4852,11 @@
         titleEl.textContent = 'ステップ3：思い出のコンテンツを選択';
         const cfr = getCfrPrompts();
         const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
-        bodyEl.textContent = desc + ' 10個以上チェックすると「診断へ」ボタンが押せるようになります。';
+        bodyEl.textContent = desc + ' 10個以上チェックすると「診断」ボタンが押せるようになります。';
         countEl.textContent = '選んだコンテンツ数: ' + count + ' / 10 以上で診断できます';
         nextBtn.style.display = 'none';
         finishBtn.style.display = 'inline-block';
-        finishBtn.textContent = '診断へ';
+        finishBtn.textContent = '診断';
         finishBtn.disabled = count < 10;
       }
     } else if (kioskState.step === 4) {
