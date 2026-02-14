@@ -1203,6 +1203,7 @@
 
   // ===== CFR プロンプト設定 =====
   const DEFAULT_CFR_PROMPTS = {
+    temperature: 0.9,
     topTitle: 'Xnative/Timeline メディアスタック・クロノロジー診断テスト',
     topDescription: 'あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。',
     eventChecklistDescription: '好きだったコンテンツやハードウェア、影響を受けた本や映画などをチェックしてください。終わったら画面右下の「診断へ」を選んでください。',
@@ -5241,15 +5242,23 @@
   }
   const GEMINI_MODEL = 'gemini-2.5-flash-lite';
   // ローカル開発時（localhost）にブラウザから直接Gemini APIを呼ぶヘルパー
+  function getTemperature() {
+    const cfr = getCfrPrompts();
+    const t = cfr.temperature ?? DEFAULT_CFR_PROMPTS.temperature ?? 0.9;
+    const n = Number(t);
+    return (Number.isNaN(n) || n < 0 || n > 2) ? 0.9 : n;
+  }
+
   async function callGeminiDirect(apiKey, prompt) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const temp = getTemperature();
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 2048 }
+          generationConfig: { maxOutputTokens: 2048, temperature: temp }
         })
       });
       let data = null;
@@ -5274,7 +5283,7 @@
 
   // Cloudflare / Netlify などのサーバ側で環境変数を使って呼び出す場合のバックエンド経由呼び出し
   async function callGeminiViaBackend(prompt) {
-    const payload = { prompt, model: GEMINI_MODEL };
+    const payload = { prompt, model: GEMINI_MODEL, temperature: getTemperature() };
     const endpoints = [
       '/api/gemini-diagnosis',                 // Cloudflare Pages Functions 等で /api/ 以下に配置した場合
       '/.netlify/functions/gemini-diagnosis'   // Netlify Functions
@@ -5316,7 +5325,7 @@
       const res = await fetch('/api/openai-diagnosis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({ prompt, temperature: getTemperature() })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) {

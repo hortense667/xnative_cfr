@@ -50,7 +50,15 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'xnative_cfr_r050.html'));
 });
 
-async function callGeminiWithRetry(url, prompt, maxRetries = 2) {
+function clampTemperature(t) {
+  if (t == null || t === '') return 0.9;
+  const n = Number(t);
+  if (Number.isNaN(n)) return 0.9;
+  return Math.min(2, Math.max(0, n));
+}
+
+async function callGeminiWithRetry(url, prompt, maxRetries = 2, temperature = 0.9) {
+  const temp = clampTemperature(temperature);
   let lastError = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -59,7 +67,7 @@ async function callGeminiWithRetry(url, prompt, maxRetries = 2) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 2048 }
+          generationConfig: { maxOutputTokens: 2048, temperature: temp }
         })
       });
 
@@ -107,10 +115,11 @@ async function callGeminiWithRetry(url, prompt, maxRetries = 2) {
   return { ok: false, error: lastError || '未知のエラー' };
 }
 
-async function callOpenAiWithRetry(prompt, maxRetries = 2) {
+async function callOpenAiWithRetry(prompt, maxRetries = 2, temperature = 0.9) {
   if (!OPENAI_API_KEY || !OPENAI_API_KEY.trim()) {
     return { ok: false, error: 'サーバーに OPENAI_API_KEY が設定されていません。Railway の Variables で設定してください。' };
   }
+  const temp = clampTemperature(temperature);
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
   let lastError = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -126,7 +135,7 @@ async function callOpenAiWithRetry(prompt, maxRetries = 2) {
           messages: [
             { role: 'user', content: prompt }
           ],
-          temperature: 0.7,
+          temperature: temp,
           max_tokens: 1024
         })
       });
@@ -177,16 +186,17 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
     });
   }
 
-  const { prompt, model } = req.body || {};
+  const { prompt, model, temperature } = req.body || {};
   if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ ok: false, error: 'prompt が必要です。' });
   }
+  const temp = clampTemperature(temperature);
 
   const geminiModel = model || 'gemini-2.5-flash-lite';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
   try {
-    const primary = await callGeminiWithRetry(url, prompt, 2);
+    const primary = await callGeminiWithRetry(url, prompt, 2, temp);
     if (primary.ok) {
       return res.json(primary);
     }
@@ -194,7 +204,7 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
     // Gemini が3回とも失敗した場合、OpenAI で再試行（キーがあれば）
     let fallbackError = primary.error;
     if (OPENAI_API_KEY && OPENAI_API_KEY.trim()) {
-      const secondary = await callOpenAiWithRetry(prompt, 2);
+      const secondary = await callOpenAiWithRetry(prompt, 2, temp);
       if (secondary.ok) {
         return res.json(secondary);
       }
@@ -213,12 +223,13 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
 
 // OpenAI 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/openai-diagnosis', async (req, res) => {
-  const { prompt } = req.body || {};
+  const { prompt, temperature } = req.body || {};
   if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ ok: false, error: 'prompt が必要です。' });
   }
+  const temp = clampTemperature(temperature);
   try {
-    const primary = await callOpenAiWithRetry(prompt, 2);
+    const primary = await callOpenAiWithRetry(prompt, 2, temp);
     if (primary.ok) {
       return res.json(primary);
     }
@@ -229,7 +240,7 @@ app.post('/api/openai-diagnosis', async (req, res) => {
     if (apiKey && apiKey.trim()) {
       const geminiModel = 'gemini-2.5-flash-lite';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
-      const secondary = await callGeminiWithRetry(url, prompt, 2);
+      const secondary = await callGeminiWithRetry(url, prompt, 2, temp);
       if (secondary.ok) {
         return res.json(secondary);
       }
