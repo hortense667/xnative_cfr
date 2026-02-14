@@ -210,6 +210,7 @@
     top:72px;
     left:50%;
     transform:translateX(-50%);
+    max-width:calc(100vw - 24px);
     background:var(--diag-dark);
     color:#fff;
     padding:8px 16px;
@@ -219,6 +220,20 @@
     z-index:1450;
     box-shadow:0 8px 32px rgba(49,46,129,.45);
     display:none;
+    box-sizing:border-box;
+  }
+  @media (max-width: 768px) {
+    #kioskStepOverlay{
+      left:12px;
+      right:12px;
+      transform:none;
+      width:auto;
+      max-width:none;
+      border-radius:12px;
+      font-size:15px;
+      padding:10px 14px;
+      text-align:center;
+    }
   }
   .kiosk-qr-box{
     margin-top:8px;
@@ -424,6 +439,10 @@
       max-height: 45vh;
       border-radius: 16px 16px 0 0;
       box-shadow: 0 -4px 24px rgba(0,0,0,.2);
+    }
+    /* キオスク・ステップ3で「診断へ」＋選択数表示中は、その上にパネルを表示 */
+    body.kiosk-step3-compact-hint #probeEventsPanel {
+      bottom: 88px !important;
     }
   }
 
@@ -4781,6 +4800,7 @@
     bodyEl.style.display = '';
     countEl.style.display = '';
     box.classList.remove('kiosk-hint-step3-compact');
+    document.body.classList.remove('kiosk-step3-compact-hint');
     box.style.display = 'block';
     finishBtn.style.display = 'none';
 
@@ -4800,6 +4820,7 @@
       const isMobile = window.matchMedia('(max-width: 768px)').matches;
       const step3Compact = isMobile && kioskState.step3StartedOperating;
       if (step3Compact) {
+        document.body.classList.add('kiosk-step3-compact-hint');
         titleEl.style.display = 'none';
         bodyEl.style.display = 'none';
         box.classList.add('kiosk-hint-step3-compact');
@@ -5872,6 +5893,7 @@
     kioskState.eventYearMoved = false;
     kioskState.showLowerOverlay = false;
     kioskState.step3StartedOperating = false;
+    document.body.classList.remove('kiosk-step3-compact-hint');
     // チェック状態クリア
     if (typeof probeCheckedKeys !== 'undefined' && probeCheckedKeys.clear) {
       probeCheckedKeys.clear();
