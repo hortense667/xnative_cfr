@@ -636,6 +636,7 @@
       const minLeft = LEFT_COL_W - HANDLE_LANE_W - (HANDLE_R * 2);
       if (vp.scrollLeft < minLeft) vp.scrollLeft = minLeft;
     }
+    updateAgeDisplayPosition();
   });
   // クリップパス
   const ns='http://www.w3.org/2000/svg';
@@ -1815,8 +1816,11 @@
       height: 20px;
       pointer-events: none;
       z-index: 100;
+      overflow: hidden;
     `;
-    
+    const inner = document.createElement('div');
+    inner.id = 'fixed-age-labels-inner';
+    inner.style.cssText = 'position: absolute; left: 0; top: 0; height: 20px;';
     for(let a=0;a<=AGE_MAX;a+=10){
       const x = xFromAge(a);
       const label = document.createElement('div');
@@ -1831,9 +1835,9 @@
         transform: translateX(-50%);
         pointer-events: none;
       `;
-      fixedAgeContainer.appendChild(label);
+      inner.appendChild(label);
     }
-    
+    fixedAgeContainer.appendChild(inner);
     document.body.appendChild(fixedAgeContainer);
   }
   
@@ -1849,9 +1853,11 @@
       height: 24px;
       pointer-events: none;
       z-index: 3;
+      overflow: hidden;
     `;
-    
-    // 年齢目盛りエリア全体（0から最大年齢まで）に白い帯を作成
+    const inner = document.createElement('div');
+    inner.id = 'age-band-inner';
+    inner.style.cssText = 'position: absolute; left: 0; top: 0; height: 24px;';
     const ageBand = document.createElement('div');
     ageBand.style.cssText = `
       position: absolute;
@@ -1862,8 +1868,8 @@
       background: white;
       pointer-events: none;
     `;
-    bandContainer.appendChild(ageBand);
-    
+    inner.appendChild(ageBand);
+    bandContainer.appendChild(inner);
     document.body.appendChild(bandContainer);
   }
   
@@ -1871,7 +1877,9 @@
   function updateAgeDisplayPosition() {
     const header = document.querySelector('header');
     const ageLabels = document.getElementById('fixed-age-labels');
+    const ageLabelsInner = document.getElementById('fixed-age-labels-inner');
     const ageBand = document.getElementById('age-band');
+    const ageBandInner = document.getElementById('age-band-inner');
     const ageTextBlue = document.getElementById('age-text-blue');
     const ageTextRed = document.getElementById('age-text-red');
     
@@ -1879,19 +1887,21 @@
       const headerHeight = header.offsetHeight;
       const newTop = headerHeight + 4; // ヘッダーの下に4pxの余白
       
-      // 年齢ラベルの位置を更新
       ageLabels.style.top = `${newTop}px`;
-      
-      // 年齢バンドの位置を更新
       ageBand.style.top = `${newTop - 4}px`;
       
-      // プローブの年齢表示の位置を更新
-      if (ageTextBlue) {
-        ageTextBlue.style.top = `${newTop + 20}px`;
+      // スマホ時: 横スクロールに合わせて年齢目盛りをずらす
+      const isMobile = window.innerWidth <= 768;
+      const scrollLeft = vp ? vp.scrollLeft : 0;
+      if (ageLabelsInner) {
+        ageLabelsInner.style.left = isMobile ? `${-scrollLeft}px` : '0';
       }
-      if (ageTextRed) {
-        ageTextRed.style.top = `${newTop + 20}px`;
+      if (ageBandInner) {
+        ageBandInner.style.left = isMobile ? `${-scrollLeft}px` : '0';
       }
+      
+      if (ageTextBlue) ageTextBlue.style.top = `${newTop + 20}px`;
+      if (ageTextRed) ageTextRed.style.top = `${newTop + 20}px`;
     }
   }
 
