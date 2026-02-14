@@ -4562,14 +4562,28 @@
       const vpH = vp.clientHeight || 0;
       const maxScroll = Math.max(0, vp.scrollHeight - vpH);
       if (vpH <= 0) return;
-      // 下の〇がヘッダより2年分下に来る位置（ビューポート上端から 2*PX_PER_YEAR 下に〇）
       const offsetFromTop = 2 * PX_PER_YEAR;
       let targetScroll = yBirth - offsetFromTop;
       targetScroll = Math.max(0, Math.min(maxScroll, targetScroll));
       vp.scrollTop = targetScroll;
     } catch (_e) {}
   }
+  // 下の〇（イベント年）がヘッダより2年分下に来るようにスクロール（▼/▲用）
+  function scrollProbeEventYearIntoView() {
+    try {
+      if (typeof probeBlue === 'undefined' || !vp) return;
+      const yEvent = yFromBirthYear(probeBlue.eventYear);
+      const vpH = vp.clientHeight || 0;
+      const maxScroll = Math.max(0, vp.scrollHeight - vpH);
+      if (vpH <= 0) return;
+      const offsetFromTop = 2 * PX_PER_YEAR;
+      let targetScroll = yEvent - offsetFromTop;
+      targetScroll = Math.max(0, Math.min(maxScroll, targetScroll));
+      vp.scrollTop = targetScroll;
+    } catch (_e) {}
+  }
   window.scrollProbeBirthYearIntoView = scrollProbeBirthYearIntoView;
+  window.scrollProbeEventYearIntoView = scrollProbeEventYearIntoView;
 
   vp.addEventListener('scroll', ()=>{
     if (window.innerWidth <= 768) {
@@ -4868,8 +4882,8 @@
         finishBtn.textContent = '診断';
         finishBtn.disabled = count < 10;
         if (yearControls) yearControls.style.display = 'flex';
-        if (typeof window.scrollProbeBirthYearIntoView === 'function') {
-          setTimeout(function() { window.scrollProbeBirthYearIntoView(); }, 100);
+        if (typeof window.scrollProbeEventYearIntoView === 'function') {
+          setTimeout(function() { window.scrollProbeEventYearIntoView(); }, 100);
         }
       } else {
         titleEl.style.display = '';
@@ -5985,17 +5999,19 @@
     if (yearUpBtn) {
       yearUpBtn.addEventListener('click', () => {
         if (typeof probeBlue === 'undefined') return;
-        probeBlue.birthYear = Math.min(YEAR_MAX, probeBlue.birthYear + 1);
+        probeBlue.eventYear = Math.min(YEAR_MAX, probeBlue.eventYear + 1);
         probeBlue.redraw();
-        if (typeof window.scrollProbeBirthYearIntoView === 'function') window.scrollProbeBirthYearIntoView();
+        if (typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
+        if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
       });
     }
     if (yearDownBtn) {
       yearDownBtn.addEventListener('click', () => {
         if (typeof probeBlue === 'undefined') return;
-        probeBlue.birthYear = Math.max(YEAR_MIN, probeBlue.birthYear - 1);
+        probeBlue.eventYear = Math.max(YEAR_MIN, probeBlue.eventYear - 1);
         probeBlue.redraw();
-        if (typeof window.scrollProbeBirthYearIntoView === 'function') window.scrollProbeBirthYearIntoView();
+        if (typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
+        if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
       });
     }
     // 右側チェックリストに一本化したため、マウスアップ時のチェックリストモーダルは使用しない
