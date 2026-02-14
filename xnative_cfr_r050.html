@@ -221,6 +221,12 @@
   #kioskHint.kiosk-hint-step3-compact .count { order: 2; margin-top: 0; font-size: 16px; color: #fff; }
   #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls { order: 3; display: flex !important; align-items: center; gap: 6px; }
   #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls button { padding: 6px 10px; font-size: 14px; }
+  /* ニックネームパッド: PCでは文字種とアクションを1行に */
+  @media (min-width: 768px) {
+    .kiosk-pad-modes-inner { flex-direction: row !important; justify-content: space-between !important; align-items: center !important; }
+    .kiosk-pad-mode-row { margin-bottom: 0 !important; }
+    .kiosk-pad-action-row { width: auto !important; }
+  }
   /* ステップごとの上部メッセージ（反転色） */
   #kioskStepOverlay{
     position:fixed;
@@ -5107,8 +5113,13 @@
       const activeCss = 'background:#6366f1; color:#fff; border-color:#6366f1;';
       const normalCss = 'background:#f8fafc; color:#1e293b;';
 
-      // 1行目: かな・カナ・ABC・abc のみ（スマホレイアウト）
+      // ラッパー: スマホは2段（かな〜abc / 空白〜←）、PCは1行（左: かな〜abc、右: 空白〜←）
+      const bottomWrap = document.createElement('div');
+      bottomWrap.className = 'kiosk-pad-modes-inner';
+      bottomWrap.style.cssText = 'display:flex; flex-direction:column; gap:8px; width:100%;';
+      // 1行目: かな・カナ・ABC・abc
       const modeRow = document.createElement('div');
+      modeRow.className = 'kiosk-pad-mode-row';
       modeRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-start; width:100%; margin-bottom:8px;';
       const kanaBtn = mkBtn('かな', () => { st.mode = 'kana'; render(); }, modeBtnCss + (st.mode === 'kana' ? activeCss : normalCss));
       const kataBtn = mkBtn('カナ', () => { st.mode = 'kata'; render(); }, modeBtnCss + (st.mode === 'kata' ? activeCss : normalCss));
@@ -5119,8 +5130,9 @@
       modeRow.appendChild(abcBtn);
       modeRow.appendChild(abcLowerBtn);
 
-      // 2行目: 空白・Clear・←（かな/カナの下に空白、ABCの下にClear、abcの下に←のイメージで配置）
+      // 2行目: 空白・Clear・←（スマホでは下段、PCでは右側に表示）
       const actionRow = document.createElement('div');
+      actionRow.className = 'kiosk-pad-action-row';
       actionRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%;';
       subWrap.style.display = 'none';
 
@@ -5172,8 +5184,9 @@
       actionRow.appendChild(spaceBtn);
       actionRow.appendChild(clearBtn);
       actionRow.appendChild(backBtn);
-      modeWrap.appendChild(modeRow);
-      modeWrap.appendChild(actionRow);
+      bottomWrap.appendChild(modeRow);
+      bottomWrap.appendChild(actionRow);
+      modeWrap.appendChild(bottomWrap);
     }
 
     input.readOnly = true;
