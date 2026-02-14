@@ -140,9 +140,15 @@
     box-sizing:border-box;
   }
   @media (max-width: 768px) {
+    #kioskStartOverlay{
+      align-items:flex-start;
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+      padding:12px 0;
+    }
     #kioskStartOverlay .inner{
       max-width:calc(100vw - 24px);
-      margin:12px;
+      margin:12px auto;
       padding:18px 16px;
     }
     #kioskStartOverlay h2{
