@@ -2047,16 +2047,20 @@
 
   // ===== ウェブプレビュー（地球マークホバー用） =====
   let webPreviewEl = null;
+  let webPreviewOverlay = null;
   let webPreviewFrame = null;
   let webPreviewHideTimer = null;
   function ensureWebPreview(){
     if (webPreviewEl) return webPreviewEl;
+    webPreviewOverlay = document.createElement('div');
+    webPreviewOverlay.id = 'kioskWebPreviewOverlay';
+    webPreviewOverlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:2499; display:none;';
+    webPreviewOverlay.addEventListener('click', () => { hideWebPreview(); });
+    document.body.appendChild(webPreviewOverlay);
     webPreviewEl = document.createElement('div');
     webPreviewEl.id = 'kioskWebPreview';
-    // モーダルより前面に出しつつ、画面の縦方向をほぼフルに使って表示
     webPreviewEl.style.cssText = 'position:fixed; width:70vw; height:80vh; max-width:1100px; background:#fff; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,.45); border:1px solid #ccc; z-index:2500; display:none; overflow:hidden;';
     webPreviewFrame = document.createElement('iframe');
-    // transform による縮小はぼやけや余白の原因になるため使わず、そのまま 1:1 で表示
     webPreviewFrame.style.cssText = 'width:100%; height:100%; border:0;';
     webPreviewEl.appendChild(webPreviewFrame);
     document.body.appendChild(webPreviewEl);
@@ -2067,31 +2071,58 @@
       }
     });
     webPreviewEl.addEventListener('mouseleave', () => {
-      hideWebPreview();
+      if (!isWebPreviewMobile()) hideWebPreview();
     });
     return webPreviewEl;
+  }
+  function isWebPreviewMobile() {
+    return window.matchMedia('(max-width: 768px)').matches;
   }
   function showWebPreview(url, anchor){
     if (!url) return;
     const el = ensureWebPreview();
     webPreviewFrame.src = url;
-    const rect = anchor.getBoundingClientRect();
     const z = pageZoom || 1;
-    // ページ全体のズームを考慮しつつ、縦方向は画面の 80% を使い、常にほぼ中央付近に固定表示する
-    let left = (rect.right + 8) / z;
-    // 上から 10% 程度の位置に固定（高さ 80vh と組み合わせて、上端〜下端の約 8割を占有）
-    let top  = (window.innerHeight * 0.1) / z;
-    el.style.left = `${left}px`;
-    el.style.top  = `${top}px`;
+    if (isWebPreviewMobile()) {
+      // スマホ: 全体が入るように表示し、外タップで閉じる
+      if (webPreviewOverlay) {
+        webPreviewOverlay.style.display = 'block';
+      }
+      el.style.left = '2vw';
+      el.style.top = '2vh';
+      el.style.width = '96vw';
+      el.style.height = '96vh';
+      el.style.maxWidth = 'none';
+      el.style.borderRadius = '12px';
+    } else {
+      const rect = anchor.getBoundingClientRect();
+      let left = (rect.right + 8) / z;
+      let top  = (window.innerHeight * 0.1) / z;
+      el.style.left = `${left}px`;
+      el.style.top  = `${top}px`;
+      el.style.width = '70vw';
+      el.style.height = '80vh';
+      el.style.maxWidth = '1100px';
+      el.style.borderRadius = '8px';
+    }
     el.style.display = 'block';
   }
   function hideWebPreview(){
-    if (!webPreviewEl) return;
-    webPreviewEl.style.display = 'none';
-    webPreviewFrame.src = 'about:blank';
+    if (webPreviewOverlay) webPreviewOverlay.style.display = 'none';
+    if (webPreviewEl) {
+      webPreviewEl.style.display = 'none';
+      webPreviewEl.style.width = '';
+      webPreviewEl.style.height = '';
+      webPreviewEl.style.maxWidth = '';
+      webPreviewEl.style.left = '';
+      webPreviewEl.style.top = '';
+      webPreviewEl.style.borderRadius = '';
+    }
+    if (webPreviewFrame) webPreviewFrame.src = 'about:blank';
   }
-  // 地球マークにホバーしたらプレビューを表示／外れたら少し待って閉じる
+  // 地球マークにホバー（PC）またはタップ（スマホ）でプレビュー表示
   document.addEventListener('mouseover', (e) => {
+    if (isWebPreviewMobile()) return;
     const target = e.target;
     if (target && target.classList && target.classList.contains('probe-web-icon')) {
       const url = target.getAttribute('data-web-url');
@@ -2103,6 +2134,7 @@
     }
   });
   document.addEventListener('mouseout', (e) => {
+    if (isWebPreviewMobile()) return;
     const target = e.target;
     if (target && target.classList && target.classList.contains('probe-web-icon')) {
       if (webPreviewHideTimer) clearTimeout(webPreviewHideTimer);
@@ -2111,6 +2143,15 @@
       }, 150);
     }
   });
+  document.addEventListener('click', (e) => {
+    if (!isWebPreviewMobile()) return;
+    const target = e.target;
+    if (target && target.classList && target.classList.contains('probe-web-icon')) {
+      e.preventDefault();
+      const url = target.getAttribute('data-web-url');
+      if (url) showWebPreview(url, target);
+    }
+  }, true);
   
   try {
   drawGrid();
