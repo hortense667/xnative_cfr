@@ -219,6 +219,8 @@
   }
   #kioskHint.kiosk-hint-step3-compact #kioskFinishBtn { order: 1; }
   #kioskHint.kiosk-hint-step3-compact .count { order: 2; margin-top: 0; font-size: 16px; color: #fff; }
+  #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls { order: 3; display: flex !important; align-items: center; gap: 6px; }
+  #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls button { padding: 6px 10px; font-size: 14px; }
   /* ステップごとの上部メッセージ（反転色） */
   #kioskStepOverlay{
     position:fixed;
@@ -507,7 +509,6 @@
       <button class="btn" id="nextBtn">次</button>
     </div>
     <div class="legend">
-      <button class="btn" id="syncBtn" title="GitHubと同期">同期</button>
       <button class="btn" id="settingsBtn" title="設定">設定</button>
       <button class="btn" id="helpBtn" title="ヘルプ">ヘルプ</button>
       <input type="file" id="fileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values,text/plain" style="display:none" />
@@ -597,7 +598,6 @@
   const prevBtn=document.getElementById('prevBtn');
   const nextBtn=document.getElementById('nextBtn');
   const loadCsvBtn=null;
-  const syncBtn=document.getElementById('syncBtn');
   const settingsBtn=document.getElementById('settingsBtn');
   console.log('settingsBtn:', settingsBtn);
   const helpBtn=document.getElementById('helpBtn');
@@ -1294,7 +1294,7 @@
     accessToken: '',
     owner: 'hortense667',
     repo: 'xnative',
-    filePath: 'timeline.json'
+    filePath: 'timeline_popculture_02.json'
   };
 
   // ===== CFR プロンプト設定 =====
@@ -3891,15 +3891,15 @@
         </label>
         <label style="display: block; margin-bottom: 8px;">
           <strong>ファイルパス:</strong><br>
-          <small style="color: #666;">通常は「timeline.json」</small><br>
-          <input type="text" id="filePath" value="${githubConfig.filePath || 'timeline.json'}" 
+          <small style="color: #666;">通常は「timeline_popculture_02.json」</small><br>
+          <input type="text" id="filePath" value="${githubConfig.filePath || 'timeline_popculture_02.json'}" 
                  style="width: 100%; padding: 6px; margin-top: 4px;" 
-                 placeholder="timeline.json" />
+                 placeholder="timeline_popculture_02.json" />
         </label>
         <div style="margin: 12px 0; padding: 8px; background: #f0f8ff; border: 1px solid #b3d9ff; border-radius: 6px; font-size: 12px;">
           <strong>URLパラメータでの指定:</strong><br>
           <code>?owner=ユーザー名&repo=リポジトリ名&filePath=ファイルパス</code><br>
-          <small style="color: #666;">例: ?owner=hortense667&repo=xnative&filePath=timeline.json</small>
+          <small style="color: #666;">例: ?owner=hortense667&repo=xnative&filePath=timeline_popculture_02.json</small>
         </div>
       </div>
       <div style="margin: 16px 0; padding: 12px; background: #e3f2fd; border: 1px solid #2196f3; border-radius: 6px;">
@@ -3914,7 +3914,7 @@
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
           <button class="btn" id="settingsLoadCsvBtn" title="CSV/TSVを読み込んで追加" onclick="settingsLoadCsv()">ロード</button>
           <p style="margin: 0; font-size: 12px; color: #856404;">
-            ロードはデータを一括登録する機能です。詳しい使い方はユーザーガイドをご覧ください。文字コードは必ず「UTF-8」にしてください。また、通常、timeline.jsonとなっている「ファイルパス」をtimeline-test.jsonに変更して正しくロードされるか確認してからtimeline.jsonにロードするようにしてください。
+            ロードはデータを一括登録する機能です。詳しい使い方はユーザーガイドをご覧ください。文字コードは必ず「UTF-8」にしてください。また、通常、 timeline_popculture_02.jsonとなっている「ファイルパス」をtimeline-test.jsonに変更して正しくロードされるか確認してからtimeline_popculture_02.jsonにロードするようにしてください。
           </p>
         </div>
         <p style="margin: 8px 0; font-size: 12px; color: #856404;">
@@ -3939,11 +3939,11 @@
     const pathInput = document.getElementById('filePath');
     
     if (tokenInput && ownerInput && repoInput && pathInput) {
-      const prevFilePath = githubConfig.filePath || 'timeline.json';
+      const prevFilePath = githubConfig.filePath || 'timeline_popculture_02.json';
       githubConfig.accessToken = tokenInput.value.trim();
       githubConfig.owner = ownerInput.value.trim();
       githubConfig.repo = repoInput.value.trim();
-      githubConfig.filePath = (pathInput.value.trim() || 'timeline.json');
+      githubConfig.filePath = (pathInput.value.trim() || 'timeline_popculture_02.json');
       saveGitHubConfig();
       // URLのfilePath等も同期
       try{
@@ -3975,8 +3975,8 @@
   // 設定画面内のロード処理
   async function settingsLoadCsv() {
     const pathInput = document.getElementById('filePath');
-    const newPath = (pathInput && pathInput.value ? pathInput.value.trim() : '') || 'timeline.json';
-    const prevFilePath = githubConfig.filePath || 'timeline.json';
+    const newPath = (pathInput && pathInput.value ? pathInput.value.trim() : '') || 'timeline_popculture_02.json';
+    const prevFilePath = githubConfig.filePath || 'timeline_popculture_02.json';
     const filePathChanged = newPath !== prevFilePath;
     if (filePathChanged) {
       githubConfig.filePath = newPath;
@@ -4157,23 +4157,8 @@
   window.settingsLoadCsv = settingsLoadCsv;
   window.clearAllDataAndReload = clearAllDataAndReload;
 
-  // 同期状態の表示
-  function updateSyncStatus() {
-    const lastSync = localStorage.getItem('lastSync');
-    const lastEdit = localStorage.getItem('lastEdit');
-    
-    if (lastEdit && lastEdit > lastSync) {
-      // 未同期の変更がある
-      syncBtn.style.background = '#ffeb3b';
-      syncBtn.style.color = '#000';
-      syncBtn.title = '未同期の変更があります - クリックして同期';
-    } else {
-      // 同期済み
-      syncBtn.style.background = '#4caf50';
-      syncBtn.style.color = '#fff';
-      syncBtn.title = '同期済み';
-    }
-  }
+  // 同期状態の表示（同期ボタン削除のため未使用）
+  function updateSyncStatus() {}
 
   // 自動保存機能
   function autoSave() {
@@ -4199,7 +4184,7 @@
     const lastEdit = localStorage.getItem('lastEdit');
     
     if (lastEdit && lastSync && lastEdit > lastSync) {
-      return '未同期の変更があります。\n\nページを閉じる前に同期することをお勧めします。\n\n本当にページを閉じますか？';
+      return '保存されていない変更があります。\n\n本当にページを閉じますか？';
     }
     return null;
   }
@@ -4216,7 +4201,7 @@
 
   // 初期化時に同期状態を更新
   updateSyncStatus();
-  
+
   // ウィンドウリサイズ時に年齢表示の位置を再調整
   window.addEventListener('resize', updateAgeDisplayPosition);
   
@@ -4236,9 +4221,6 @@
   }
 
   // イベントリスナー
-  syncBtn.addEventListener('click', async () => {
-    await clearAllDataAndReload({ requireConfirm: true, githubOnly: true });
-  });
   settingsBtn.addEventListener('click', function() {
     console.log('Settings button clicked');
     showSettings();
@@ -4573,6 +4555,20 @@
     }catch(_e){}
   })();
 
+  function scrollProbeBirthYearIntoView() {
+    try {
+      if (typeof probeBlue === 'undefined' || !vp) return;
+      const yBirth = yFromBirthYear(probeBlue.birthYear);
+      const vpH = vp.clientHeight || 0;
+      const maxScroll = Math.max(0, vp.scrollHeight - vpH);
+      if (vpH <= 0) return;
+      let targetScroll = yBirth - vpH / 2;
+      targetScroll = Math.max(0, Math.min(maxScroll, targetScroll));
+      vp.scrollTop = targetScroll;
+    } catch (_e) {}
+  }
+  window.scrollProbeBirthYearIntoView = scrollProbeBirthYearIntoView;
+
   vp.addEventListener('scroll', ()=>{
     if (window.innerWidth <= 768) {
       probeBlue.redraw();
@@ -4779,6 +4775,10 @@
       <div class="count"></div>
       <button type="button" id="kioskNextBtn"></button>
       <button type="button" id="kioskFinishBtn" style="display:none;"></button>
+      <span class="kiosk-year-controls" id="kioskYearControls" style="display:none;">
+        <button type="button" id="kioskYearUpBtn" aria-label="年を1つ進める">▼年＋</button>
+        <button type="button" id="kioskYearDownBtn" aria-label="年を1つ戻す">▲年－</button>
+      </span>
     `;
     document.body.appendChild(box);
     return box;
@@ -4828,10 +4828,12 @@
     const countEl = box.querySelector('.count');
     const nextBtn = box.querySelector('#kioskNextBtn');
     const finishBtn = box.querySelector('#kioskFinishBtn');
+    const yearControls = box.querySelector('#kioskYearControls');
 
     titleEl.style.display = '';
     bodyEl.style.display = '';
     countEl.style.display = '';
+    if (yearControls) yearControls.style.display = 'none';
     box.classList.remove('kiosk-hint-step3-compact');
     document.body.classList.remove('kiosk-step3-compact-hint');
     box.style.display = 'block';
@@ -4857,17 +4859,21 @@
         titleEl.style.display = 'none';
         bodyEl.style.display = 'none';
         box.classList.add('kiosk-hint-step3-compact');
-        countEl.textContent = '選択数：' + count + '（10個以上選んでください）';
+        countEl.textContent = count + '/10';
         countEl.style.display = 'block';
         nextBtn.style.display = 'none';
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = '診断';
         finishBtn.disabled = count < 10;
+        if (yearControls) yearControls.style.display = 'flex';
+        if (typeof window.scrollProbeBirthYearIntoView === 'function') {
+          setTimeout(function() { window.scrollProbeBirthYearIntoView(); }, 100);
+        }
       } else {
         titleEl.style.display = '';
         bodyEl.style.display = '';
         box.classList.remove('kiosk-hint-step3-compact');
-        titleEl.textContent = 'ステップ3：思い出のコンテンツを選択';
+        titleEl.textContent = 'ステップ3：チェックボックで選択';
         const cfr = getCfrPrompts();
         const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
         bodyEl.textContent = desc + ' 10個以上チェックすると「診断」ボタンが押せるようになります。';
@@ -5965,6 +5971,8 @@
     const hintBox = ensureKioskHint();
     const nextBtn = hintBox.querySelector('#kioskNextBtn');
     const finishBtn = hintBox.querySelector('#kioskFinishBtn');
+    const yearUpBtn = hintBox.querySelector('#kioskYearUpBtn');
+    const yearDownBtn = hintBox.querySelector('#kioskYearDownBtn');
     // 「次へ」はステップ遷移には使わない（常に非表示）
     nextBtn.addEventListener('click', () => {});
     finishBtn.addEventListener('click', () => {
@@ -5972,6 +5980,22 @@
         showKioskSelectionsSummary();
       }
     });
+    if (yearUpBtn) {
+      yearUpBtn.addEventListener('click', () => {
+        if (typeof probeBlue === 'undefined') return;
+        probeBlue.birthYear = Math.min(YEAR_MAX, probeBlue.birthYear + 1);
+        probeBlue.redraw();
+        if (typeof window.scrollProbeBirthYearIntoView === 'function') window.scrollProbeBirthYearIntoView();
+      });
+    }
+    if (yearDownBtn) {
+      yearDownBtn.addEventListener('click', () => {
+        if (typeof probeBlue === 'undefined') return;
+        probeBlue.birthYear = Math.max(YEAR_MIN, probeBlue.birthYear - 1);
+        probeBlue.redraw();
+        if (typeof window.scrollProbeBirthYearIntoView === 'function') window.scrollProbeBirthYearIntoView();
+      });
+    }
     // 右側チェックリストに一本化したため、マウスアップ時のチェックリストモーダルは使用しない
   })();
 
