@@ -6,9 +6,10 @@
 <title>Xnative/Timeline 1.0</title>
 <style>
   :root { --bg:#fafafa; --grid:#d0d0d0; --axis:#888; --text:#222; }
-  html,body{height:100%}
-  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,sans-serif;color:var(--text);background:var(--bg)}
-  header{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #e5e5e5;display:flex;gap:12px;align-items:center;padding:10px 12px;flex-wrap:wrap}
+  html,body{height:100%; margin:0}
+  html{overflow-x:hidden}
+  body{display:flex;flex-direction:column;min-height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,sans-serif;color:var(--text);background:var(--bg);overflow-x:hidden}
+  header{flex-shrink:0;position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #e5e5e5;display:flex;gap:12px;align-items:center;padding:10px 12px;flex-wrap:wrap}
   header .btn{padding:6px 10px;border:1px solid #ccc;border-radius:8px;background:#f7f7f7;cursor:pointer}
   header .btn:active{transform:translateY(1px)}
   header .legend{display:flex;gap:8px;align-items:center;margin-left:auto}
@@ -23,7 +24,7 @@
   .filters select{padding:6px 8px; border:1px solid #ccc; border-radius:8px; background:#fff;}
   .search{display:flex; gap:6px; align-items:center; margin-left:auto}
   .search input{padding:6px 8px; border:1px solid #ccc; border-radius:8px; min-width:220px}
-  .viewport{width:100%;height:calc(100% - 58px);overflow:auto;background:#fff;user-select:none;-webkit-user-select:none}
+  .viewport{flex:1;min-height:0;width:100%;overflow:auto;background:#fff;user-select:none;-webkit-user-select:none}
   .stage{width:2400px;height:2600px;transform-origin:0 0}
   .tooltip{position:absolute;background:#fff;border:1px solid #ccc;padding:8px 10px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.08);pointer-events:none;font-size:12px;z-index:20}
   .hint{font-size:12px;color:#666}
@@ -416,11 +417,14 @@
     }
   }
 
-  /* スマホ向け: ヘッダー・モーダルをコンパクトに */
+  /* スマホ向け: ヘッダー・モーダルをコンパクトに・画面に収める */
   @media (max-width: 768px) {
-    header { padding: 8px 10px; gap: 8px; }
-    header .btn, .filters select, .search input { padding: 8px 10px; min-height: 44px; }
-    header .chip, .chipCircle { min-width: 44px; min-height: 44px; }
+    html, body { min-height: 100dvh; min-height: 100vh; }
+    header { padding: 8px 10px; gap: 6px; }
+    header strong { font-size: 1.1em; }
+    header .btn, .filters select, .search input { padding: 6px 8px; min-height: 40px; }
+    header .chip, .chipCircle { min-width: 40px; min-height: 40px; }
+    .search input { min-width: 0; }
     .modal { width: calc(100% - 16px) !important; max-height: 80vh; }
   }
 
@@ -1243,7 +1247,7 @@
     temperature: 0.9,
     topTitle: 'Xnative/Timeline メディアスタック・クロノロジー診断テスト',
     topDescription: 'あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。',
-    eventChecklistDescription: '好きだったコンテンツやハードウェア、影響を受けた本や映画などをチェックしてください。終わったら画面右下の「診断へ」を選んでください。',
+    eventChecklistDescription: 'チェックが終わったら画面右下の「診断へ」を選んでください。',
     geminiPromptHead: '【役割】 あなたはポップカルチャーの変遷に精通したジョーク作家です。提示されるデータから、誰もが簡単には気づかないような視点からその人物の感性をまったく新た表現で面白く言い換えてください。\n【タスク】 以下のアンケート結果に基づき、対象者の感性を分析してて診断した対象に語りかけてください。\n生年・性別から各コンテンツに触れた時期（幼少期〜成人）を特定する。コンテンツや製品を羅列した説明は不要。\nその当時の社会情勢や技術的背景（時代背景）を分析に組み込む。\n最後に一行空白をおいて「あなたは●●●型ネイティブです」という一文で締めくくる。\n【厳守すべき制約】\n形式: 箇条書きやリスト形式、見出し、ハッシュタグは一切使用禁止です。\n構成: 全体を**「単一の段落」または「接続詞でつながれた一続きの散文」**として構成してください。\n文字数: 合計で300文字以内を厳守してください。 冗長な修飾語を省き、情報の密度を高めること。\n禁止事項: 「承知いたしました」「分析結果を述べます」などの前置きや、末尾の補足説明は一切不要です。分析本文のみを出力してください。\n\n【データ】\n\n',
     overallTitle: '総合結果',
     overallDescription: 'ここに「総合結果（ダミー）」を表示します。実際の実装では、複数人分の傾向や集計結果などを表示する予定です。',
@@ -4732,7 +4736,7 @@
     } else if (kioskState.step === 2 && !kioskState.eventYearMoved) {
       text = '上の〇（青い斜め線の左上付近にある）を生年にあわせてください。スクロールして遡ることもできます';
     } else if (kioskState.step === 3 && kioskState.showLowerOverlay) {
-      text = '下の〇（青い横線の左端付近にある）を動かしてください。青い縦線の上にその年の年齢が表示されます。長期連載などのコンテンツもあるので０歳以前まで動かしてみましょう。出てきた一覧で好きだった・影響されたものをチェックしてください';
+      text = '下の〇（青い横線の左端付近にある）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。出てきた一覧でチェックしてください';
     }
     if (text) {
       el.textContent = text;
@@ -5135,7 +5139,7 @@
     }).join('');
 
     const html = `
-      <p><strong>${year}年</strong> のイベントの中から、あなたが実際に触れていて好きだったコンテンツを1～3個選んでください。</p>
+      <p><strong>${year}年</strong> のイベントの中から選んでください。</p>
       <div style="max-height:320px; overflow-y:auto; margin-top:8px;">
         ${itemsHtml}
       </div>
