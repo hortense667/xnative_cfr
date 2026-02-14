@@ -4562,7 +4562,9 @@
       const vpH = vp.clientHeight || 0;
       const maxScroll = Math.max(0, vp.scrollHeight - vpH);
       if (vpH <= 0) return;
-      let targetScroll = yBirth - vpH / 2;
+      // 下の〇がヘッダより2年分下に来る位置（ビューポート上端から 2*PX_PER_YEAR 下に〇）
+      const offsetFromTop = 2 * PX_PER_YEAR;
+      let targetScroll = yBirth - offsetFromTop;
       targetScroll = Math.max(0, Math.min(maxScroll, targetScroll));
       vp.scrollTop = targetScroll;
     } catch (_e) {}
