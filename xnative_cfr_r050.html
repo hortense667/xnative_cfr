@@ -802,7 +802,33 @@
   // ===== 検索ハイライトの状態 =====
   let matches=[]; let matchIndex=-1; let hlRect=null; let hlTarget=null; let clearOnNextMove=false;
   function clearHighlight(soft){ if(hlRect && hlRect.parentNode) hlRect.parentNode.removeChild(hlRect); if(hlTarget) hlTarget.classList.remove('hlText'); hlRect=null; hlTarget=null; if(!soft){ clearOnNextMove=false; } }
-  function highlight(el){ clearHighlight(true); const bbox=el.getBBox(); hlRect=document.createElementNS(ns,'rect'); const padX=6, padY=3; hlRect.setAttribute('x', bbox.x - padX); hlRect.setAttribute('y', bbox.y - padY); hlRect.setAttribute('width', bbox.width + padX*2); hlRect.setAttribute('height', bbox.height + padY*2); hlRect.setAttribute('rx', 4); hlRect.setAttribute('fill', '#000'); eventsG.insertBefore(hlRect, el); el.classList.add('hlText'); hlTarget=el; const r=el.getBoundingClientRect(); const rv=vp.getBoundingClientRect(); if(r.top < rv.top || r.bottom > rv.bottom){ vp.scrollTop += (r.top - rv.top) - 80; } clearOnNextMove=true; }
+  function highlight(el){
+    clearHighlight(true);
+    const bbox=el.getBBox();
+    hlRect=document.createElementNS(ns,'rect');
+    const padX=6, padY=3;
+    hlRect.setAttribute('x', bbox.x - padX); hlRect.setAttribute('y', bbox.y - padY);
+    hlRect.setAttribute('width', bbox.width + padX*2); hlRect.setAttribute('height', bbox.height + padY*2);
+    hlRect.setAttribute('rx', 4); hlRect.setAttribute('fill', '#000');
+    eventsG.insertBefore(hlRect, el);
+    el.classList.add('hlText'); hlTarget=el;
+    const r=el.getBoundingClientRect(); const rv=vp.getBoundingClientRect();
+    if(r.top < rv.top || r.bottom > rv.bottom){ vp.scrollTop += (r.top - rv.top) - 80; }
+    clearOnNextMove=true;
+    // 検索ヒット時: 下の〇をその年にセット（PC/スマホ共通）。スマホは下の〇がヘッダ2年分下に来るようスクロール
+    const yearAttr = el.getAttribute('data-year');
+    if (yearAttr != null && yearAttr !== '') {
+      const year = parseInt(yearAttr, 10);
+      if (!isNaN(year) && typeof probeBlue !== 'undefined') {
+        probeBlue.eventYear = Math.max(YEAR_MIN, Math.min(YEAR_MAX, year));
+        probeBlue.redraw();
+        if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
+        if (window.matchMedia('(max-width: 768px)').matches && typeof window.scrollProbeEventYearIntoView === 'function') {
+          window.scrollProbeEventYearIntoView();
+        }
+      }
+    }
+  }
 
   // ===== JSONロード/セーブ =====
   const LS_KEYS=['timelineEventsV2','timelineEventsV1'];
