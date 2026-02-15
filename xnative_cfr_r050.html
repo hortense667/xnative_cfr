@@ -469,9 +469,13 @@
       border-radius: 16px 16px 0 0;
       box-shadow: 0 -4px 24px rgba(0,0,0,.2);
     }
-    /* キオスク・ステップ3で「診断へ」＋選択数表示中は、その上にパネルを表示 */
+    /* キオスク・ステップ3で「診断へ」＋▼年+▲年－表示中は、チェックリストと重ならないようパネルを上に寄せる */
     body.kiosk-step3-compact-hint #probeEventsPanel {
-      bottom: 88px !important;
+      bottom: 72px !important;
+    }
+    body.kiosk-step3-compact-hint #kioskHint {
+      bottom: 12px;
+      max-height: 56px;
     }
   }
 
@@ -4996,6 +5000,7 @@
     document.body.classList.remove('kiosk-step3-compact-hint');
     box.style.display = 'block';
     finishBtn.style.display = 'none';
+    if (kioskState.step3StartedOperating) box.removeAttribute('data-step3-touch-listener');
 
     const count = kioskState.selections.length;
     countEl.textContent = `チェックされた数: ${count} / 10`;
@@ -5040,6 +5045,16 @@
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = '診断';
         finishBtn.disabled = count < 10;
+        // スマホ: 画面のどこかを触ったらステップ3の説明を消して「▼年+」「▲年－」のコンパクト表示へ
+        if (isMobile && !box.dataset.step3TouchListener) {
+          box.dataset.step3TouchListener = '1';
+          const goCompact = function() {
+            kioskState.step3StartedOperating = true;
+            updateKioskHint();
+          };
+          document.addEventListener('touchstart', goCompact, { once: true, passive: true });
+          document.addEventListener('click', goCompact, { once: true });
+        }
       }
     } else if (kioskState.step === 4) {
       titleEl.textContent = 'ありがとうございました';
