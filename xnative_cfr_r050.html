@@ -4492,21 +4492,24 @@
     const diag=lineEl(0,0,0,0);                    diag.style.stroke=stroke;  diag.style.strokeWidth=3; // 左上斜め
     const eh=circleEl(HANDLE_X,0,8,'handle');      eh.setAttribute('stroke',stroke); eh.setAttribute('fill','#fff'); eh.style.touchAction='none';
     const bh=circleEl(HANDLE_X,0,8,'handle');      bh.setAttribute('stroke',stroke); bh.setAttribute('fill','#fff'); bh.style.touchAction='none';
-    // 年齢表示を固定位置のHTML要素として作成
-    const ageTextElement = document.createElement('div');
-    ageTextElement.style.cssText = `
-      position: fixed;
-      top: 78px;
-      left: 0;
-      font-size: 18px;
-      font-weight: 700;
-      color: #000;
-      pointer-events: none;
-      z-index: 101;
-      display: none;
-    `;
-    ageTextElement.id = `age-text-${color}`;
-    document.body.appendChild(ageTextElement);
+    // 年齢表示（●歳）は青プローブのみ。赤プローブ用は表示しない
+    let ageTextElement = null;
+    if (color === 'blue') {
+      ageTextElement = document.createElement('div');
+      ageTextElement.style.cssText = `
+        position: fixed;
+        top: 78px;
+        left: 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: #000;
+        pointer-events: none;
+        z-index: 101;
+        display: none;
+      `;
+      ageTextElement.id = 'age-text-blue';
+      document.body.appendChild(ageTextElement);
+    }
     // スマホで上の〇ドラッグ中に生年を画面中央に大きく表示（離したら非表示）
     let birthYearOverlayEl = null;
     if(color==='blue'){
@@ -4531,13 +4534,13 @@
       diag.setAttribute('x1',ix);diag.setAttribute('y1',yE); diag.setAttribute('x2',ix-PX_PER_AGE*tMax);diag.setAttribute('y2',yE-PX_PER_YEAR*tMax);
       eh.setAttribute('cx',HANDLE_X);eh.setAttribute('cy',yE);
       bh.setAttribute('cx',HANDLE_X);bh.setAttribute('cy',yB);
-      // HTML要素の年齢表示を更新（線の右側に表示）。横スクロールに追従させる
-      ageTextElement.textContent = `${age}歳`;
-      const leftPx = ix + 10;
-      ageTextElement.style.left = (vp ? `${leftPx - vp.scrollLeft}px` : `${leftPx}px`);
-      ageTextElement.style.display = 'block';
-      
-      // 年齢表示の位置をヘッダーの高さに応じて調整
+      // HTML要素の年齢表示を更新（青プローブのみ、線の右側に表示）。横スクロールに追従させる
+      if (ageTextElement) {
+        ageTextElement.textContent = `${age}歳`;
+        const leftPx = ix + 10;
+        ageTextElement.style.left = (vp ? `${leftPx - vp.scrollLeft}px` : `${leftPx}px`);
+        ageTextElement.style.display = 'block';
+      }
       updateAgeDisplayPosition();
       
       eventYearText.textContent = `${state.eventYear}年`;
