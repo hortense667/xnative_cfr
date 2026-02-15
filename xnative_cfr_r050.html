@@ -2037,6 +2037,8 @@
       <p style="margin:2px 0 4px; font-size:18px; color:#666;">${(desc || '').replace(/</g,'&lt;')}</p>
       <ul>${listHtml}</ul>
     `;
+    // 「▼年+」「▲年－」で年を変えたときも先頭（●●●●年のイベント）から見えるようにする
+    probeEventsPanel.scrollTop = 0;
     // イベント年の〇の少し右に出す（スクロール時に追従できるよう座標を記録）
     lastProbeEventYear = y;
     const rect = stage.getBoundingClientRect();
