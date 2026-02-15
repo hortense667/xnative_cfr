@@ -1342,7 +1342,7 @@
     temperature: 0.9,
     topTitle: 'Xnative/Timeline メディアスタック・クロノロジー診断テスト',
     topDescription: 'あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。',
-    eventChecklistDescription: 'チェックが終わったら画面右下の「診断」を選んでください。',
+    eventChecklistDescription: '',
     geminiPromptHead: '【役割】 あなたはポップカルチャーの変遷に精通したジョーク作家です。提示されるデータから、誰もが簡単には気づかないような視点からその人物の感性をまったく新た表現で面白く言い換えてください。\n【タスク】 以下のアンケート結果に基づき、対象者の感性を分析してて診断した対象に語りかけてください。\n生年・性別から各コンテンツに触れた時期（幼少期〜成人）を特定する。コンテンツや製品を羅列した説明は不要。\nその当時の社会情勢や技術的背景（時代背景）を分析に組み込む。\n最後に一行空白をおいて「あなたは●●●型ネイティブです」という一文で締めくくる。\n【厳守すべき制約】\n形式: 箇条書きやリスト形式、見出し、ハッシュタグは一切使用禁止です。\n構成: 全体を**「単一の段落」または「接続詞でつながれた一続きの散文」**として構成してください。\n文字数: 合計で300文字以内を厳守してください。 冗長な修飾語を省き、情報の密度を高めること。\n禁止事項: 「承知いたしました」「分析結果を述べます」などの前置きや、末尾の補足説明は一切不要です。分析本文のみを出力してください。\n\n【データ】\n\n',
     overallTitle: '総合結果',
     overallDescription: 'ここに「総合結果（ダミー）」を表示します。実際の実装では、複数人分の傾向や集計結果などを表示する予定です。',
@@ -4906,9 +4906,9 @@
     if (kioskState.step === 1) {
       text = 'ジャンルを選んでください。１～数個のジャンルを選んでください。';
     } else if (kioskState.step === 2 && !kioskState.eventYearMoved) {
-      text = '上の〇（青い斜め線の左上付近にある）を生年にあわせてください。スクロールして遡ることもできます';
+      text = '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます';
     } else if (kioskState.step === 3 && kioskState.showLowerOverlay) {
-      text = '下の〇（青い横線の左端付近にある）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。出てきた一覧でチェックしてください';
+      text = '下の〇（青い横線の左にある）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。出てきた一覧でチェックしてください';
     }
     if (text) {
       el.textContent = text;
@@ -4937,15 +4937,15 @@
     finishBtn.style.display = 'none';
 
     const count = kioskState.selections.length;
-    countEl.textContent = `選んだコンテンツ数: ${count} / 10 以上で診断できます`;
+    countEl.textContent = `チェックされた数: ${count} / 10`;
 
     if (kioskState.step === 1) {
       titleEl.textContent = 'ステップ1：ジャンルを選びましょう';
-      bodyEl.textContent = '関心のあるジャンルをいくつか選んでください（マンガ、アニメ、ゲームなど）。「適用」を押すと次へ進みます。表示したいジャンルは画面上の「ジャンル選択」メニューからいつでも変更できます。';
+      bodyEl.textContent = '関心のあるジャンルをいくつか選んでください。「適用」を押すと次へ進みます。表示したいジャンルは画面上の「ジャンル選択」メニューからいつでも変更できます。';
       nextBtn.style.display = 'none';
     } else if (kioskState.step === 2) {
       titleEl.textContent = 'ステップ2：生まれた年をセット';
-      bodyEl.textContent = '青いプローブの上の丸を上下にドラッグして、左の年表にある自分の生まれ年の高さに合わせてください。';
+      bodyEl.textContent = '青い斜め線の左上の〇を上下にドラッグして自分の生まれ年に合わせてください。';
       nextBtn.style.display = 'none';
       finishBtn.style.display = 'none';
     } else if (kioskState.step === 3) {
@@ -4974,7 +4974,7 @@
         const cfr = getCfrPrompts();
         const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
         bodyEl.textContent = desc + ' 10個以上チェックすると「診断」ボタンが押せるようになります。';
-        countEl.textContent = '選んだコンテンツ数: ' + count + ' / 10 以上で診断できます';
+        countEl.textContent = 'チェックされた数: ' + count + ' / 10';
         nextBtn.style.display = 'none';
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = '診断';
@@ -5252,6 +5252,7 @@
               <div style="margin-top:8px;">
                 <div style="margin-bottom:6px; font-size:18px;">ニックネーム（最大16文字）:</div>
                 <input type="text" id="kioskNicknameInput" placeholder="Guest" style="width:100%; max-width:520px; font-size:18px; padding:8px 10px; border-radius:8px; border:1px solid #ccc;" aria-label="ニックネーム（クリック入力）">
+                <div style="margin-bottom:6px; font-size:14px;">※ニックネームはみんなのチェックリストで表示されます:</div>
                 <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;" id="kioskPadModes"></div>
                 <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;" id="kioskPadSubModes"></div>
                 <div id="kioskPadGrid" style="margin-top:8px; display:grid; grid-template-columns:repeat(10, minmax(0, 1fr)); gap:6px;"></div>
@@ -5296,7 +5297,7 @@
       overlay.innerHTML = `
         <div class="inner">
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※アンケート結果のみ集計に使われていただきます。
+            ※チェックした内容はこのアプリ内とアンケート結果のみ集計に使われていただきます。
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ※途中で出てくる地球マーク<span style="pointer-events:none;">🌐</span>にポインタを合わせるとWikipediaなどのページが表示されます。
