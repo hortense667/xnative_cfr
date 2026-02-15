@@ -4505,7 +4505,7 @@
     if(color==='blue'){
       birthYearOverlayEl = document.createElement('div');
       birthYearOverlayEl.id = 'kioskBirthYearOverlay';
-      birthYearOverlayEl.style.cssText = 'position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); font-size:min(18vw,120px); font-weight:800; color:#1e293b; background:rgba(255,255,255,.92); padding:24px 48px; border-radius:20px; box-shadow:0 8px 32px rgba(0,0,0,.2); pointer-events:none; z-index:1600; display:none; border:3px solid #6366f1;';
+      birthYearOverlayEl.style.cssText = 'position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); font-size:min(9vw,60px); font-weight:800; color:#1e293b; background:rgba(255,255,255,.92); padding:12px 24px; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.2); pointer-events:none; z-index:1600; display:none; border:2px solid #6366f1; white-space:nowrap;';
       document.body.appendChild(birthYearOverlayEl);
     }
     const ageText=textEl('',0,0,'ageTickText'); // SVG要素は非表示にする
