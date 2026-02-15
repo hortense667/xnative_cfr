@@ -4637,6 +4637,12 @@
         dragging = false;
         pendingBirthYearRelease = false;
         endDrag();
+        // 上の〇を離したら下の〇を生年+6年にセット
+        if(el===bh){
+          state.eventYear = Math.max(YEAR_MIN, Math.min(YEAR_MAX, state.birthYear + 6));
+          redraw();
+          if(color==='blue' && window.updateProbeEventsPanel){ window.updateProbeEventsPanel(state.eventYear); }
+        }
         if (doBirthYearRelease) {
           window.kioskState.eventYearMoved = true;
           window.kioskState.step = 3;
@@ -4963,7 +4969,7 @@
     } else if (kioskState.step === 2 && !kioskState.eventYearMoved) {
       text = '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます';
     } else if (kioskState.step === 3 && kioskState.showLowerOverlay) {
-      text = '下の〇（青い横線の左にある＝見えていないかもしれません）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。出てきた一覧でチェックしてください';
+      text = '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。出てきた一覧でチェックしてください';
     }
     if (text) {
       el.textContent = text;
