@@ -4500,7 +4500,14 @@
     `;
     ageTextElement.id = `age-text-${color}`;
     document.body.appendChild(ageTextElement);
-    
+    // スマホで上の〇ドラッグ中に生年を画面中央に大きく表示（離したら非表示）
+    let birthYearOverlayEl = null;
+    if(color==='blue'){
+      birthYearOverlayEl = document.createElement('div');
+      birthYearOverlayEl.id = 'kioskBirthYearOverlay';
+      birthYearOverlayEl.style.cssText = 'position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); font-size:min(18vw,120px); font-weight:800; color:#1e293b; background:rgba(255,255,255,.92); padding:24px 48px; border-radius:20px; box-shadow:0 8px 32px rgba(0,0,0,.2); pointer-events:none; z-index:1600; display:none; border:3px solid #6366f1;';
+      document.body.appendChild(birthYearOverlayEl);
+    }
     const ageText=textEl('',0,0,'ageTickText'); // SVG要素は非表示にする
     const eventYearText=textEl('', ORIGIN_X+8, 0, 'ageTickText'); eventYearText.style.fontSize='14px'; eventYearText.style.fill=stroke; eventYearText.setAttribute('text-anchor','start');
     const birthYearText=textEl('', ORIGIN_X+8, 0, 'ageTickText'); birthYearText.style.fontSize='14px'; birthYearText.style.fill=stroke; birthYearText.setAttribute('text-anchor','start');
@@ -4550,6 +4557,7 @@
     function dragByYear(el,prop){
       let dragging=false, startY=0, startVal=0;
       let pendingBirthYearRelease=false; // 上の〇をドラッグして手を離したらヒントを切り替える用
+      let lastScrollTime=0; // 0.1秒で約1年分スクロールするための時刻
       function onDragStart(clientY){
         dragging=true;
         startY=clientY;
@@ -4578,6 +4586,10 @@
           const panel = document.getElementById('probeEventsPanel');
           if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
         }
+        if(color==='blue' && el===bh && birthYearOverlayEl && window.matchMedia('(max-width: 768px)').matches){
+          birthYearOverlayEl.textContent = state.birthYear + '年';
+          birthYearOverlayEl.style.display = 'block';
+        }
       }
       function onDragMove(clientY){
         if(!dragging) return;
@@ -4593,13 +4605,15 @@
         }
         redraw();
         if(color==='blue' && el===eh && window.updateProbeEventsPanel){ window.updateProbeEventsPanel(state.eventYear); }
-        // ドラッグ中は〇が表示域から出そうになったらスクロールして追従（1回あたりの移動量を抑えてゆっくり）
+        if(color==='blue' && el===bh && birthYearOverlayEl && birthYearOverlayEl.style.display !== 'none'){
+          birthYearOverlayEl.textContent = state.birthYear + '年';
+        }
+        // ドラッグ中は〇が表示域から出そうになったらスクロールして追従（0.1秒で約1年分のスピード）
         if(vp){
           const y = yFromBirthYear(state[prop]);
           const vpH = vp.clientHeight || 0;
           const maxScroll = Math.max(0, vp.scrollHeight - vpH);
           const MARGIN = 80;
-          const STEP = 28; // 1回の移動量を小さくしてスクロールを穏やかに
           let targetTop = vp.scrollTop;
           if(y < vp.scrollTop + MARGIN){
             targetTop = Math.max(0, y - MARGIN);
@@ -4608,12 +4622,17 @@
           }
           if(targetTop !== vp.scrollTop){
             const d = targetTop - vp.scrollTop;
-            vp.scrollTop += (d > 0 ? Math.min(STEP, d) : Math.max(-STEP, d));
+            const now = Date.now();
+            const elapsed = lastScrollTime ? Math.min(now - lastScrollTime, 150) : 100;
+            const maxStep = (elapsed / 100) * PX_PER_YEAR; // 100msで1年分
+            lastScrollTime = now;
+            vp.scrollTop += (d > 0 ? Math.min(maxStep, d) : Math.max(-maxStep, d));
           }
         }
       }
       function onDragEnd(){
         if (!dragging) return;
+        if(el===bh && birthYearOverlayEl){ birthYearOverlayEl.style.display = 'none'; }
         const doBirthYearRelease = (el===bh && pendingBirthYearRelease && window.kioskMode && window.kioskState && !window.kioskState.eventYearMoved);
         dragging = false;
         pendingBirthYearRelease = false;
