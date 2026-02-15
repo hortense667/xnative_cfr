@@ -227,6 +227,11 @@
   #kioskHint.kiosk-hint-step3-compact .count { order: 2; margin-top: 0; font-size: 16px; color: #fff; }
   #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls { order: 3; display: flex !important; align-items: center; gap: 6px; }
   #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls button { padding: 6px 10px; font-size: 14px; }
+  /* ステップ3: 診断ボタンと▼年+▲年－を1行に（PCでは右寄せ） */
+  #kioskHint .step3-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; width: 100%; flex-wrap: wrap; }
+  #kioskHint.kiosk-hint-step3-pc .step3-actions { justify-content: space-between; }
+  #kioskHint.kiosk-hint-step3-pc .step3-actions .kiosk-year-controls { display: flex !important; gap: 6px; }
+  #kioskHint.kiosk-hint-step3-pc .step3-actions .kiosk-year-controls button { padding: 6px 10px; font-size: 14px; }
   /* ニックネームパッド: PCでは文字種とアクションを1行に */
   @media (min-width: 768px) {
     .kiosk-pad-modes-inner { flex-direction: row !important; justify-content: space-between !important; align-items: center !important; }
@@ -4938,11 +4943,13 @@
       <div class="body"></div>
       <div class="count"></div>
       <button type="button" id="kioskNextBtn"></button>
-      <button type="button" id="kioskFinishBtn" style="display:none;"></button>
-      <span class="kiosk-year-controls" id="kioskYearControls" style="display:none;">
-        <button type="button" id="kioskYearUpBtn" aria-label="年を1つ進める">▼年＋</button>
-        <button type="button" id="kioskYearDownBtn" aria-label="年を1つ戻す">▲年－</button>
-      </span>
+      <div class="step3-actions" id="kioskStep3Actions" style="display:none;">
+        <button type="button" id="kioskFinishBtn" style="display:none;"></button>
+        <span class="kiosk-year-controls" id="kioskYearControls" style="display:none;">
+          <button type="button" id="kioskYearUpBtn" aria-label="年を1つ進める">▼年＋</button>
+          <button type="button" id="kioskYearDownBtn" aria-label="年を1つ戻す">▲年－</button>
+        </span>
+      </div>
     `;
     document.body.appendChild(box);
     return box;
@@ -4993,12 +5000,15 @@
     const nextBtn = box.querySelector('#kioskNextBtn');
     const finishBtn = box.querySelector('#kioskFinishBtn');
     const yearControls = box.querySelector('#kioskYearControls');
+    const step3Actions = box.querySelector('#kioskStep3Actions');
 
     titleEl.style.display = '';
     bodyEl.style.display = '';
     countEl.style.display = '';
     if (yearControls) yearControls.style.display = 'none';
+    if (step3Actions) step3Actions.style.display = 'none';
     box.classList.remove('kiosk-hint-step3-compact');
+    box.classList.remove('kiosk-hint-step3-pc');
     document.body.classList.remove('kiosk-step3-compact-hint');
     box.style.display = 'block';
     finishBtn.style.display = 'none';
@@ -5027,6 +5037,7 @@
         countEl.textContent = count + '/10';
         countEl.style.display = 'block';
         nextBtn.style.display = 'none';
+        if (step3Actions) step3Actions.style.display = 'flex';
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = '診断';
         finishBtn.disabled = count < 10;
@@ -5044,9 +5055,14 @@
         bodyEl.textContent = desc + ' 10個以上チェックすると「診断」ボタンが押せるようになります。';
         countEl.textContent = 'チェックされた数: ' + count + ' / 10';
         nextBtn.style.display = 'none';
+        if (step3Actions) step3Actions.style.display = 'flex';
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = '診断';
         finishBtn.disabled = count < 10;
+        if (!isMobile) {
+          box.classList.add('kiosk-hint-step3-pc');
+          if (yearControls) yearControls.style.display = 'flex';
+        }
         // スマホ: 画面のどこかを触ったらステップ3の説明を消して「▼年+」「▲年－」のコンパクト表示へ
         if (isMobile && !box.dataset.step3TouchListener) {
           box.dataset.step3TouchListener = '1';
