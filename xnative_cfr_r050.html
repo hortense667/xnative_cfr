@@ -724,6 +724,7 @@
   createHandleLaneWithEraColors();
 
   function yFromBirthYear(by){return ORIGIN_Y+(by-YEAR_MIN)*PX_PER_YEAR;}
+  function yearFromY(y){return Math.max(YEAR_MIN,Math.min(YEAR_MAX,Math.round((y-ORIGIN_Y)/PX_PER_YEAR+YEAR_MIN)));}
   function xFromAge(age){return ORIGIN_X+age*PX_PER_AGE;}
   function lineEl(x1,y1,x2,y2,cls){let l=document.createElementNS('http://www.w3.org/2000/svg','line');l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);if(cls) l.setAttribute('class',cls);return l;}
   function textEl(txt,x,y,cls){let t=document.createElementNS('http://www.w3.org/2000/svg','text');t.textContent=txt;t.setAttribute('x',x);t.setAttribute('y',y);if(cls) t.setAttribute('class',cls);return t;}
@@ -4548,18 +4549,15 @@
     function endDrag(){ document.body.classList.remove('dragging'); }
     function dragByYear(el,prop){
       let dragging=false, startY=0, startVal=0;
+      let pendingBirthYearRelease=false; // 上の〇をドラッグして手を離したらヒントを切り替える用
       function onDragStart(clientY){
         dragging=true;
         startY=clientY;
         startVal=state[prop];
         startDrag();
-        // ★ユーザー視点の「上の青い〇」は birthYear 側（bh）
+        // ★上の〇(bh)はリリース時にヒント切り替え（onDragEndで処理）
         if (window.kioskMode && color==='blue' && el===bh && window.kioskState && !window.kioskState.eventYearMoved) {
-          window.kioskState.eventYearMoved = true;
-          window.kioskState.step = 3;
-          window.kioskState.showLowerOverlay = true;
-          updateKioskHint();
-          updateKioskStepOverlay();
+          pendingBirthYearRelease = true;
         }
         if (window.kioskMode && color==='blue' && el===eh && window.kioskState) {
           if (!window.kioskState.eventYearMoved) {
@@ -4583,13 +4581,45 @@
       }
       function onDragMove(clientY){
         if(!dragging) return;
-        const dy=clientY-startY;
-        const dYear=Math.round(dy/PX_PER_YEAR);
-        state[prop]=Math.max(YEAR_MIN,Math.min(YEAR_MAX,startVal+dYear));
+        // マウス（またはタッチ）位置をコンテンツ座標に変換し、その位置の年で〇を更新。スクロールしても〇がポインタからずれない
+        if(vp){
+          const vpRect = vp.getBoundingClientRect();
+          const contentY = vp.scrollTop + (clientY - vpRect.top);
+          state[prop] = yearFromY(contentY);
+        } else {
+          const dy=clientY-startY;
+          const dYear=Math.round(dy/PX_PER_YEAR);
+          state[prop]=Math.max(YEAR_MIN,Math.min(YEAR_MAX,startVal+dYear));
+        }
         redraw();
         if(color==='blue' && el===eh && window.updateProbeEventsPanel){ window.updateProbeEventsPanel(state.eventYear); }
+        // ドラッグ中は〇が表示域から出そうになったらスクロールして追従（リリース後はユーザー任せ）
+        if(vp){
+          const y = yFromBirthYear(state[prop]);
+          const vpH = vp.clientHeight || 0;
+          const maxScroll = Math.max(0, vp.scrollHeight - vpH);
+          const MARGIN = 80;
+          if(y < vp.scrollTop + MARGIN){
+            vp.scrollTop = Math.max(0, y - MARGIN);
+          } else if(y > vp.scrollTop + vpH - MARGIN){
+            vp.scrollTop = Math.min(maxScroll, y - vpH + MARGIN);
+          }
+        }
       }
-      function onDragEnd(){ if(dragging){ dragging=false; endDrag(); } }
+      function onDragEnd(){
+        if (!dragging) return;
+        const doBirthYearRelease = (el===bh && pendingBirthYearRelease && window.kioskMode && window.kioskState && !window.kioskState.eventYearMoved);
+        dragging = false;
+        pendingBirthYearRelease = false;
+        endDrag();
+        if (doBirthYearRelease) {
+          window.kioskState.eventYearMoved = true;
+          window.kioskState.step = 3;
+          window.kioskState.showLowerOverlay = true;
+          updateKioskHint();
+          updateKioskStepOverlay();
+        }
+      }
       el.addEventListener('mousedown',e=>{ onDragStart(e.clientY); e.preventDefault(); e.stopPropagation(); });
       window.addEventListener('mousemove',e=>{ onDragMove(e.clientY); });
       window.addEventListener('mouseup',onDragEnd);
@@ -5252,7 +5282,7 @@
               <div style="margin-top:8px;">
                 <div style="margin-bottom:6px; font-size:18px;">ニックネーム（最大16文字）:</div>
                 <input type="text" id="kioskNicknameInput" placeholder="Guest" style="width:100%; max-width:520px; font-size:18px; padding:8px 10px; border-radius:8px; border:1px solid #ccc;" aria-label="ニックネーム（クリック入力）">
-                <div style="margin-bottom:6px; font-size:14px;">※ニックネームはみんなのチェックリストで表示されます:</div>
+                <div style="margin-bottom:6px; font-size:14px;">※ニックネームはみんなのチェックリスト画面などで表示されます:</div>
                 <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;" id="kioskPadModes"></div>
                 <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;" id="kioskPadSubModes"></div>
                 <div id="kioskPadGrid" style="margin-top:8px; display:grid; grid-template-columns:repeat(10, minmax(0, 1fr)); gap:6px;"></div>
@@ -5297,7 +5327,7 @@
       overlay.innerHTML = `
         <div class="inner">
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※チェックした内容はこのアプリ内とアンケート結果のみ集計に使われていただきます。
+            ※チェックした内容はアンケート結果とその集計に使われていただきます。
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ※途中で出てくる地球マーク<span style="pointer-events:none;">🌐</span>にポインタを合わせるとWikipediaなどのページが表示されます。
