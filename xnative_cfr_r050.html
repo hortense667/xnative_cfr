@@ -1942,15 +1942,9 @@
       ageLabels.style.top = `${newTop}px`;
       ageBand.style.top = `${newTop - 4}px`;
       
-      // スマホ時: 横スクロールに合わせて年齢目盛りをずらす
-      const isMobile = window.innerWidth <= 768;
-      const scrollLeft = vp ? vp.scrollLeft : 0;
-      if (ageLabelsInner) {
-        ageLabelsInner.style.left = isMobile ? `${-scrollLeft}px` : '0';
-      }
-      if (ageBandInner) {
-        ageBandInner.style.left = isMobile ? `${-scrollLeft}px` : '0';
-      }
+      // 横スクロール時も年齢目盛り（0,10,20…）は動かさない（常に左0で固定）
+      if (ageLabelsInner) ageLabelsInner.style.left = '0';
+      if (ageBandInner) ageBandInner.style.left = '0';
       
       if (ageTextBlue) ageTextBlue.style.top = `${newTop + 20}px`;
       if (ageTextRed) ageTextRed.style.top = `${newTop + 20}px`;
@@ -4538,10 +4532,10 @@
       diag.setAttribute('x1',ix);diag.setAttribute('y1',yE); diag.setAttribute('x2',ix-PX_PER_AGE*tMax);diag.setAttribute('y2',yE-PX_PER_YEAR*tMax);
       eh.setAttribute('cx',HANDLE_X);eh.setAttribute('cy',yE);
       bh.setAttribute('cx',HANDLE_X);bh.setAttribute('cy',yB);
-      // HTML要素の年齢表示を更新（線の右側に表示）
+      // HTML要素の年齢表示を更新（線の右側に表示）。横スクロールしても一緒に動かさない（ビューポート基準で固定）
       ageTextElement.textContent = `${age}歳`;
       const leftPx = ix + 10;
-      ageTextElement.style.left = (window.innerWidth <= 768 && vp) ? `${leftPx - vp.scrollLeft}px` : `${leftPx}px`;
+      ageTextElement.style.left = `${leftPx}px`;
       ageTextElement.style.display = 'block';
       
       // 年齢表示の位置をヘッダーの高さに応じて調整
