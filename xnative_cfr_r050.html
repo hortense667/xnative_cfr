@@ -661,7 +661,7 @@
       const minLeft = LEFT_COL_W - HANDLE_LANE_W - (HANDLE_R * 2);
       if (vp.scrollLeft < minLeft) vp.scrollLeft = minLeft;
     }
-    updateAgeDisplayPosition();
+    requestAnimationFrame(updateAgeDisplayPosition);
   });
   // クリップパス
   const ns='http://www.w3.org/2000/svg';
@@ -1872,7 +1872,7 @@
     `;
     const inner = document.createElement('div');
     inner.id = 'fixed-age-labels-inner';
-    inner.style.cssText = 'position: absolute; left: 0; top: 0; height: 20px;';
+    inner.style.cssText = 'position: absolute; left: 0; top: 0; height: 20px; will-change: transform;';
     for(let a=0;a<=AGE_MAX;a+=10){
       const x = xFromAge(a);
       const label = document.createElement('div');
@@ -1909,7 +1909,7 @@
     `;
     const inner = document.createElement('div');
     inner.id = 'age-band-inner';
-    inner.style.cssText = 'position: absolute; left: 0; top: 0; height: 24px;';
+    inner.style.cssText = 'position: absolute; left: 0; top: 0; height: 24px; will-change: transform;';
     const ageBand = document.createElement('div');
     ageBand.style.cssText = `
       position: absolute;
@@ -1942,9 +1942,9 @@
       ageLabels.style.top = `${newTop}px`;
       ageBand.style.top = `${newTop - 4}px`;
       
-      // 横スクロール時も年齢目盛り（0,10,20…）は動かさない（常に左0で固定）
-      if (ageLabelsInner) ageLabelsInner.style.left = '0';
-      if (ageBandInner) ageBandInner.style.left = '0';
+      const scrollLeft = vp ? vp.scrollLeft : 0;
+      if (ageLabelsInner) { ageLabelsInner.style.left = '0'; ageLabelsInner.style.transform = `translateX(${-scrollLeft}px)`; }
+      if (ageBandInner) { ageBandInner.style.left = '0'; ageBandInner.style.transform = `translateX(${-scrollLeft}px)`; }
       
       if (ageTextBlue) ageTextBlue.style.top = `${newTop + 20}px`;
       if (ageTextRed) ageTextRed.style.top = `${newTop + 20}px`;
@@ -4532,10 +4532,10 @@
       diag.setAttribute('x1',ix);diag.setAttribute('y1',yE); diag.setAttribute('x2',ix-PX_PER_AGE*tMax);diag.setAttribute('y2',yE-PX_PER_YEAR*tMax);
       eh.setAttribute('cx',HANDLE_X);eh.setAttribute('cy',yE);
       bh.setAttribute('cx',HANDLE_X);bh.setAttribute('cy',yB);
-      // HTML要素の年齢表示を更新（線の右側に表示）。横スクロールしても一緒に動かさない（ビューポート基準で固定）
+      // HTML要素の年齢表示を更新（線の右側に表示）。横スクロールに追従させる
       ageTextElement.textContent = `${age}歳`;
       const leftPx = ix + 10;
-      ageTextElement.style.left = `${leftPx}px`;
+      ageTextElement.style.left = (vp ? `${leftPx - vp.scrollLeft}px` : `${leftPx}px`);
       ageTextElement.style.display = 'block';
       
       // 年齢表示の位置をヘッダーの高さに応じて調整
@@ -4735,10 +4735,10 @@
   window.scrollProbeEventYearIntoView = scrollProbeEventYearIntoView;
 
   vp.addEventListener('scroll', ()=>{
-    if (window.innerWidth <= 768) {
+    requestAnimationFrame(() => {
       probeBlue.redraw();
       probeRed.redraw();
-    }
+    });
   });
 
   // ライン表示トグル（小丸ボタン）
