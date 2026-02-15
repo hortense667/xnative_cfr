@@ -4515,11 +4515,10 @@
       birthYearOverlayEl.style.cssText = 'position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); font-size:min(9vw,60px); font-weight:800; color:#1e293b; background:rgba(255,255,255,.92); padding:12px 24px; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.2); pointer-events:none; z-index:1600; display:none; border:2px solid #6366f1; white-space:nowrap;';
       document.body.appendChild(birthYearOverlayEl);
     }
-    const ageText=textEl('',0,0,'ageTickText'); // SVG要素は非表示にする
     const eventYearText=textEl('', ORIGIN_X+8, 0, 'ageTickText'); eventYearText.style.fontSize='14px'; eventYearText.style.fill=stroke; eventYearText.setAttribute('text-anchor','start');
     const birthYearText=textEl('', ORIGIN_X+8, 0, 'ageTickText'); birthYearText.style.fontSize='14px'; birthYearText.style.fill=stroke; birthYearText.setAttribute('text-anchor','start');
 
-    g.append(eventLine,vLine,diag,eh,bh,ageText,eventYearText,birthYearText);
+    g.append(eventLine,vLine,diag,eh,bh,eventYearText,birthYearText);
 
     function redraw(){
       const yE=yFromBirthYear(state.eventYear);
@@ -4541,8 +4540,6 @@
       // 年齢表示の位置をヘッダーの高さに応じて調整
       updateAgeDisplayPosition();
       
-      // SVG要素は非表示
-      ageText.textContent = '';
       eventYearText.textContent = `${state.eventYear}年`;
       eventYearText.setAttribute('x', ORIGIN_X+8);
       eventYearText.setAttribute('y', yE-6);
