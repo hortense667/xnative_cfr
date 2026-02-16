@@ -4977,6 +4977,16 @@
       text = 'ジャンルを選んでください。１～数個のジャンルを選んでください。';
     } else if (kioskState.step === 2 && !kioskState.eventYearMoved) {
       text = '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます';
+      // 上の〇がメッセージの少し下に見える位置にスクロール（メッセージ top 72px + 高さ約40px + 10px）
+      if (typeof probeBlue !== 'undefined' && vp) {
+        try {
+          const yBirth = yFromBirthYear(probeBlue.birthYear);
+          const msgTop = 72, msgH = 40, gap = 10;
+          const targetY = msgTop + msgH + gap;
+          const maxScroll = Math.max(0, vp.scrollHeight - (vp.clientHeight || 0));
+          vp.scrollTop = Math.max(0, Math.min(maxScroll, yBirth - targetY));
+        } catch (_) {}
+      }
     } else if (kioskState.step === 3 && kioskState.showLowerOverlay) {
       text = '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。出てきた一覧でチェックしてください';
     }
