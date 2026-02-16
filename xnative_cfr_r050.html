@@ -6188,7 +6188,7 @@
         if (window.kioskState) { window.kioskState.showLowerOverlay = false; if (typeof window.updateKioskStepOverlay === 'function') window.updateKioskStepOverlay(); }
         probeBlue.eventYear = Math.min(YEAR_MAX, probeBlue.eventYear + 1);
         probeBlue.redraw();
-        if (typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
+        if (window.matchMedia('(max-width: 768px)').matches && typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
         if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
       });
     }
@@ -6198,7 +6198,7 @@
         if (window.kioskState) { window.kioskState.showLowerOverlay = false; if (typeof window.updateKioskStepOverlay === 'function') window.updateKioskStepOverlay(); }
         probeBlue.eventYear = Math.max(YEAR_MIN, probeBlue.eventYear - 1);
         probeBlue.redraw();
-        if (typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
+        if (window.matchMedia('(max-width: 768px)').matches && typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
         if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
       });
     }
