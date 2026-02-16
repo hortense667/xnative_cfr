@@ -5374,7 +5374,6 @@
           <div class="inner">
             <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px;">${escapeHtmlText(topTitle)}</h2>
             <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
-            <p style="font-size:15px; line-height:1.7;">※入力いただいた内容と診断結果はその結果表示と集計に使われていただきます。</p>
             <p style="margin-top:24px; font-size:12px; color:#888; text-align:left;">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
             <div class="actions">
               <button type="button" id="kioskStep1NextBtn">次へ</button>
@@ -5413,6 +5412,10 @@
                 <div id="kioskPadGrid" style="margin-top:8px; display:grid; grid-template-columns:repeat(10, minmax(0, 1fr)); gap:6px;"></div>
               </div>
             </div>
+            <div style="margin-top:6px; font-size:18px; color:#666;">
+              ※入力した内容や選択内容は診断結果の表示や集計に使わせていただきます。
+            </div>
+
             <div class="actions">
               <button type="button" id="kioskStep2NextBtn">次へ</button>
             </div>
@@ -5452,7 +5455,7 @@
       overlay.innerHTML = `
         <div class="inner">
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※該当の選択は項目のチェックボックスで行ってください。
+            ※該当する項目の選択はチェックボックスで行ってください。
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ※画面全体が収まらない解像度の場合、左右・上下にスクロール、拡大・縮小表示できます（青い〇のあるレーンを画面の左寄りに持ってくると使いやすい）。
