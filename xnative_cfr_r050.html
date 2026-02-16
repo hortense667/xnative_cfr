@@ -657,33 +657,6 @@
   applyMobileViewportScroll();
   window.addEventListener('resize', applyMobileViewportScroll);
 
-  (function setupPageHorizontalDrag() {
-    let dragging = false, startX = 0, startOffsetX = 0, pageOffsetX = 0;
-    function isPc() { return window.matchMedia('(min-width: 769px)').matches; }
-    function applyOffset() { document.body.style.transform = 'translateX(' + pageOffsetX + 'px)'; }
-    function onStart(e) {
-      if (!isPc()) return;
-      if (document.body.classList.contains('dragging')) return;
-      if (e.target.closest && e.target.closest('.handle')) return;
-      dragging = true;
-      startX = e.clientX != null ? e.clientX : e.touches[0].clientX;
-      startOffsetX = pageOffsetX;
-    }
-    function onMove(e) {
-      if (!dragging) return;
-      const x = e.clientX != null ? e.clientX : (e.touches[0] ? e.touches[0].clientX : startX);
-      pageOffsetX = startOffsetX + (x - startX);
-      applyOffset();
-    }
-    function onEnd() { dragging = false; }
-    document.addEventListener('mousedown', function(e) {
-      if (e.button !== 0) return;
-      onStart(e);
-    });
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onEnd);
-  })();
-
   vp.addEventListener('scroll', ()=>{
     if (window.innerWidth <= 768 && vp) {
       const minLeft = LEFT_COL_W - HANDLE_LANE_W - (HANDLE_R * 2);
@@ -2135,11 +2108,40 @@
     document.body.appendChild(webPreviewOverlay);
     webPreviewEl = document.createElement('div');
     webPreviewEl.id = 'kioskWebPreview';
-    webPreviewEl.style.cssText = 'position:fixed; width:70vw; height:80vh; max-width:1100px; background:#fff; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,.45); border:1px solid #ccc; z-index:2500; display:none; overflow:hidden;';
+    webPreviewEl.style.cssText = 'position:fixed; width:70vw; height:80vh; max-width:1100px; background:#fff; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,.45); border:1px solid #ccc; z-index:2500; display:none; overflow:hidden; flex-direction:column;';
+    webPreviewEl.style.display = 'none';
+    webPreviewEl.style.flexDirection = 'column';
+    var webPreviewDragBar = document.createElement('div');
+    webPreviewDragBar.id = 'webPreviewDragBar';
+    webPreviewDragBar.style.cssText = 'display:none; flex-shrink:0; height:28px; background:#4f46e5; color:#fff; font-size:12px; font-weight:600; text-align:center; line-height:28px; cursor:move; user-select:none; border-radius:8px 8px 0 0;';
+    webPreviewDragBar.textContent = '≡ ドラッグして位置を移動';
     webPreviewFrame = document.createElement('iframe');
-    webPreviewFrame.style.cssText = 'width:100%; height:100%; border:0;';
+    webPreviewFrame.style.cssText = 'width:100%; flex:1; min-height:0; border:0;';
+    webPreviewEl.appendChild(webPreviewDragBar);
     webPreviewEl.appendChild(webPreviewFrame);
     document.body.appendChild(webPreviewEl);
+    (function setupWebPreviewDrag() {
+      if (!window.matchMedia('(min-width: 769px)').matches) return;
+      var dragBar = webPreviewDragBar;
+      dragBar.style.display = 'block';
+      var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+      dragBar.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        dragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        var L = webPreviewEl.style.left, T = webPreviewEl.style.top;
+        startLeft = L ? parseFloat(L) : 0;
+        startTop = T ? parseFloat(T) : 0;
+      });
+      window.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        webPreviewEl.style.left = (startLeft + (e.clientX - startX)) + 'px';
+        webPreviewEl.style.top = (startTop + (e.clientY - startY)) + 'px';
+      });
+      window.addEventListener('mouseup', function() { dragging = false; });
+    })();
     webPreviewEl.addEventListener('mouseenter', () => {
       if (webPreviewHideTimer) {
         clearTimeout(webPreviewHideTimer);
@@ -2181,7 +2183,7 @@
       el.style.maxWidth = '1100px';
       el.style.borderRadius = '8px';
     }
-    el.style.display = 'block';
+    el.style.display = isWebPreviewMobile() ? 'block' : 'flex';
   }
   function hideWebPreview(){
     if (webPreviewOverlay) webPreviewOverlay.style.display = 'none';
