@@ -656,6 +656,34 @@
   }
   applyMobileViewportScroll();
   window.addEventListener('resize', applyMobileViewportScroll);
+
+  (function setupPageHorizontalDrag() {
+    let dragging = false, startX = 0, startOffsetX = 0, pageOffsetX = 0;
+    function isPc() { return window.matchMedia('(min-width: 769px)').matches; }
+    function applyOffset() { document.body.style.transform = 'translateX(' + pageOffsetX + 'px)'; }
+    function onStart(e) {
+      if (!isPc()) return;
+      if (document.body.classList.contains('dragging')) return;
+      if (e.target.closest && e.target.closest('.handle')) return;
+      dragging = true;
+      startX = e.clientX != null ? e.clientX : e.touches[0].clientX;
+      startOffsetX = pageOffsetX;
+    }
+    function onMove(e) {
+      if (!dragging) return;
+      const x = e.clientX != null ? e.clientX : (e.touches[0] ? e.touches[0].clientX : startX);
+      pageOffsetX = startOffsetX + (x - startX);
+      applyOffset();
+    }
+    function onEnd() { dragging = false; }
+    document.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      onStart(e);
+    });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+  })();
+
   vp.addEventListener('scroll', ()=>{
     if (window.innerWidth <= 768 && vp) {
       const minLeft = LEFT_COL_W - HANDLE_LANE_W - (HANDLE_R * 2);
