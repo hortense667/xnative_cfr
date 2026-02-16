@@ -2113,10 +2113,10 @@
     webPreviewEl.style.flexDirection = 'column';
     var webPreviewDragBar = document.createElement('div');
     webPreviewDragBar.id = 'webPreviewDragBar';
-    webPreviewDragBar.style.cssText = 'display:none; flex-shrink:0; height:28px; background:#4f46e5; color:#fff; font-size:12px; font-weight:600; text-align:center; line-height:28px; cursor:move; user-select:none; border-radius:8px 8px 0 0;';
+    webPreviewDragBar.style.cssText = 'display:none; flex-shrink:0; height:28px; background:#4f46e5; color:#fff; font-size:12px; font-weight:600; text-align:center; line-height:28px; cursor:move; user-select:none; touch-action:none; border-radius:8px 8px 0 0;';
     webPreviewDragBar.textContent = '≡ ドラッグして位置を移動';
     webPreviewFrame = document.createElement('iframe');
-    webPreviewFrame.style.cssText = 'width:100%; flex:1; min-height:0; border:0;';
+    webPreviewFrame.style.cssText = 'width:100%; height:100%; flex:1; min-height:0; border:0;';
     webPreviewEl.appendChild(webPreviewDragBar);
     webPreviewEl.appendChild(webPreviewFrame);
     document.body.appendChild(webPreviewEl);
@@ -2125,22 +2125,45 @@
       var dragBar = webPreviewDragBar;
       dragBar.style.display = 'block';
       var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
-      dragBar.addEventListener('mousedown', function(e) {
-        if (e.button !== 0) return;
-        e.preventDefault();
+      function getXY(e) {
+        if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        return { x: e.clientX, y: e.clientY };
+      }
+      function startDrag(x, y) {
         dragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
+        startX = x;
+        startY = y;
         var L = webPreviewEl.style.left, T = webPreviewEl.style.top;
         startLeft = L ? parseFloat(L) : 0;
         startTop = T ? parseFloat(T) : 0;
+      }
+      function moveDrag(x, y) {
+        if (!dragging) return;
+        webPreviewEl.style.left = (startLeft + (x - startX)) + 'px';
+        webPreviewEl.style.top = (startTop + (y - startY)) + 'px';
+      }
+      function endDrag() { dragging = false; }
+      dragBar.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        startDrag(e.clientX, e.clientY);
       });
+      dragBar.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        startDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: false });
       window.addEventListener('mousemove', function(e) {
         if (!dragging) return;
-        webPreviewEl.style.left = (startLeft + (e.clientX - startX)) + 'px';
-        webPreviewEl.style.top = (startTop + (e.clientY - startY)) + 'px';
+        moveDrag(e.clientX, e.clientY);
       });
-      window.addEventListener('mouseup', function() { dragging = false; });
+      window.addEventListener('touchmove', function(e) {
+        if (!dragging || !e.touches.length) return;
+        e.preventDefault();
+        moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: false });
+      window.addEventListener('mouseup', endDrag);
+      window.addEventListener('touchend', endDrag);
+      window.addEventListener('touchcancel', endDrag);
     })();
     webPreviewEl.addEventListener('mouseenter', () => {
       if (webPreviewHideTimer) {
@@ -2183,7 +2206,7 @@
       el.style.maxWidth = '1100px';
       el.style.borderRadius = '8px';
     }
-    el.style.display = isWebPreviewMobile() ? 'block' : 'flex';
+    el.style.display = 'flex';
   }
   function hideWebPreview(){
     if (webPreviewOverlay) webPreviewOverlay.style.display = 'none';
