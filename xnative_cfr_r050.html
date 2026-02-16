@@ -5374,6 +5374,7 @@
           <div class="inner">
             <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px;">${escapeHtmlText(topTitle)}</h2>
             <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
+            <p style="font-size:15px; line-height:1.7;">※入力いただいた内容と診断結果はその結果表示と集計に使われていただきます。</p>
             <p style="margin-top:24px; font-size:12px; color:#888; text-align:left;">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
             <div class="actions">
               <button type="button" id="kioskStep1NextBtn">次へ</button>
@@ -5450,17 +5451,14 @@
 
       overlay.innerHTML = `
         <div class="inner">
-          <div style="margin-top:6px; font-size:22px; color:#666;">
-            ※該当の選択は項目のチェックボックスをクリックまたはタッチしてチェックすることで行います。
+          <div style="margin-top:6px; font-size:18px; color:#666;">
+            ※該当の選択は項目のチェックボックスで行ってください。
           </div>
-          <div style="margin-top:6px; font-size:22px; color:#666;">
-            ※画面全体が収まらない解像度の場合、左右・上下にスクロール、拡大・縮小表示できるようになっています（青い〇のあるレーンを画面の左寄りに持ってくると使いやすくなります）。
+          <div style="margin-top:6px; font-size:18px; color:#666;">
+            ※画面全体が収まらない解像度の場合、左右・上下にスクロール、拡大・縮小表示できます（青い〇のあるレーンを画面の左寄りに持ってくると使いやすい）。
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ※途中で出てくる地球マーク<span style="pointer-events:none;">🌐</span>にポインタを合わせるとWikipediaなどのページが表示されます。紫のドラッグヘッダをつかんで移動することができます。
-          </div>
-          <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※チェックした内容はアンケート結果とその集計に使われていただきます。
           </div>
           <div class="actions">
             <button type="button" id="kioskStartBtn">診断スタート</button>
