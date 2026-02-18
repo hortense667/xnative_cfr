@@ -789,6 +789,9 @@
     if (modalFooter) { modalFooter.style.display = 'flex'; }
     modalClose.textContent = '閉じる';
     modalClose.classList.remove('btn-primary');
+    if (window.kioskMode && typeof window.updateKioskStepOverlay === 'function') {
+      window.updateKioskStepOverlay();
+    }
     // キオスク用のモーダル遷移
     if (window.kioskMode && kioskModalPhase) {
       const phase = kioskModalPhase;
@@ -4813,6 +4816,7 @@
   // ジャンル選択モーダル関連の関数
   function showGenreFilterModal() {
     const genreLabels = GENRE_LABELS;
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
     
     let genreButtonsHtml = '';
     for (const genre of GENRES) {
@@ -4828,20 +4832,35 @@
       `;
     }
     
-    const modalContent = `
-      <div style="margin-bottom: 16px;">
+    const gridCols = isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)';
+    const genreListInner = `
+      <div style="margin-bottom: 12px;">
         <button onclick="selectAllGenres()" style="margin-right: 8px; padding: 6px 12px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight:600;">すべてを選択</button>
         <button onclick="deselectAllGenres()" style="padding: 6px 12px; background: #475569; color: white; border: none; border-radius: 8px; cursor: pointer;">すべてを解除</button>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px;">
+      <div style="display: grid; grid-template-columns: ${gridCols}; gap: 8px;">
         ${genreButtonsHtml}
       </div>
+    `;
+    const genreListSection = isMobile
+      ? `<div style="max-height: 55vh; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px;">${genreListInner}</div>`
+      : `<div style="margin-bottom: 16px;">${genreListInner}</div>`;
+    
+    const mobileHeader = isMobile ? '<p style="margin: 0 0 12px; font-size: 17px; font-weight: 600;">１～数個のジャンルを選んでください。</p>' : '';
+    
+    const modalContent = `
+      ${mobileHeader}
+      ${genreListSection}
       <div style="text-align: right;">
         <button onclick="applyGenreFilter()" style="padding: 8px 16px; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight:600;">適用</button>
       </div>
     `;
     
     openModal('ジャンル選択', modalContent, { footer: 'none' });
+    if (window.kioskMode && isMobile) {
+      const overlay = document.getElementById('kioskStepOverlay');
+      if (overlay) overlay.style.display = 'none';
+    }
   }
   
   function toggleGenre(genre) {
@@ -5027,7 +5046,7 @@
     }
     let text = '';
     if (kioskState.step === 1) {
-      text = 'ジャンルを選んでください。１～数個のジャンルを選んでください。';
+      text = '１～数個のジャンルを選んでください。';
     } else if (kioskState.step === 2 && !kioskState.eventYearMoved) {
       text = '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます';
       // 上の〇がメッセージの少し下に見える位置にスクロール（メッセージ top 72px + 高さ約40px + 10px）
@@ -5458,7 +5477,7 @@
             ※該当する項目の選択はチェックボックスで行ってください。
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※画面全体が収まらない解像度の場合、左右・上下にスクロール、拡大・縮小表示できます（青い〇のあるレーンを画面の左寄りに持ってくると使いやすい）。
+            ※画面全体が収まらない解像度の場合、左右・上下にスクロール、拡大・縮小表示できます。PCでは横幅が足りないとき、自動的にタイムライン左端から表示されるようになっています（青い〇のあるレーンを画面の左寄りに持ってくるとより使いやすいです）。
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ※途中で出てくる地球マーク<span style="pointer-events:none;">🌐</span>にポインタを合わせるとWikipediaなどのページが表示されます。紫のドラッグヘッダをつかんで移動することができます。
@@ -6298,10 +6317,11 @@
       </ol>
       <h2>3. 基本操作</h2>
       <ul>
-        <li><strong>スクロール：</strong> ホイール／トラックパッド／矢印キー、スマホではタップなどの画面操作</li>
-        <li><strong>検索：</strong> 検索欄にラベル（作品名・製品名）を入力し「検索」。ヒットすると<strong>下の〇</strong>がその年にセットされ、スマホでは下の〇がヘッダの下に来るようスクロール。「前」「次」で別のヒットに移動。</li>
-        <li><strong>表示切替：</strong> 「ジャンル」でフィルタリングして表示。</li>
-        <li>スマホでは<strong>▼年＋</strong>と<strong>▲年－</strong>ボタンでチェックする年を変えていくことができます。</li>
+      <li><strong>スクロール：</strong> ホイール／トラックパッド／矢印キー、スマホではタップなどの画面操作</li>
+      <li><strong>検索：</strong> 検索欄にラベル（作品名・製品名）を入力し「検索」。ヒットすると<strong>下の〇</strong>がその年にセットされ、スマホでは下の〇がヘッダの下に来るようスクロール。「前」「次」で別のヒットに移動。</li>
+      <li><strong>表示切替：</strong> 「ジャンル」でフィルタリングして表示。</li>
+      <li>スマホでは<strong>▼年＋</strong>と<strong>▲年－</strong>ボタンでチェックする年を変えていくことができます。</li>
+      <li><strong>画面幅が足りない場合（PC）：</strong> タイムラインが横に収まりきらない場合は、自動的に左端から表示されます。必要に応じて左右にスクロールして閲覧できます。</li>
       </ul>
       <h2>4. チェックリストとウェブ表示</h2>
       <p>下の〇を動かすと、その年の<strong>イベント一覧</strong>が表示されます。</p>
