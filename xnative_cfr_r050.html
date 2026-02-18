@@ -5906,10 +5906,6 @@
         <div>
           <button type="button" id="kioskQrPersonalBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">個人レポートのQRを表示</button>
         </div>
-        <div>
-          <button type="button" id="kioskQrGroupBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">みんなとの比較QRを表示</button>
-          <div id="kioskQrGroup" class="kiosk-qr-box" style="display:none;">QRコード（ダミー）</div>
-        </div>
       </div>
       <p style="margin-top:16px; font-size:12px; color:#666;">QRを読み取ると、チェックしたイベント一覧と診断結果のテキストが表示されます。</p>
     `;
@@ -6138,10 +6134,6 @@
         console.warn('追加Gemini診断の取得に失敗しました:', e);
       }
     }
-    let sessions = [];
-    try {
-      sessions = JSON.parse(localStorage.getItem(KIOSK_SESSIONS_KEY) || '[]');
-    } catch (e) {}
     const formatDate = (iso) => {
       try {
         const d = new Date(iso);
@@ -6159,10 +6151,7 @@
           : `<p style="margin:0 0 8px; font-size:16px;">サーバーに蓄積されたチェック内容（全端末・${serverList.length}件）：</p><div style="max-height:320px; overflow-y:auto; border:1px solid #ddd; border-radius:8px; padding:10px 12px; background:#f0f8ff; font-size:14px; line-height:1.6;">${serverList.map((ses, idx) => formatSessionRow(ses, idx, formatDate)).join('')}</div>`;
       }
     } catch (_) {}
-    const localHtml = sessions.length === 0
-      ? '<p style="font-size:14px; color:#666;">この端末（localStorage）にはまだ蓄積されたデータはありません。</p>'
-      : `<p style="margin:0 0 8px; font-size:16px;">この端末に保存されたチェック内容（${sessions.length}件のセッション）：</p><div style="max-height:320px; overflow-y:auto; border:1px solid #ddd; border-radius:8px; padding:10px 12px; background:#fafafa; font-size:14px; line-height:1.6;">${sessions.map((ses, idx) => formatSessionRow(ses, idx, formatDate)).join('')}</div>`;
-    const accumulatedHtml = serverHtml ? `<div style="margin-bottom:16px;">${serverHtml}</div><h4 style="margin:12px 0 8px; font-size:16px;">この端末（localStorage）</h4>${localHtml}` : `<h4 style="margin:0 0 8px; font-size:16px;">蓄積されたチェック内容</h4>${localHtml}`;
+    const accumulatedHtml = serverHtml || '<p style="font-size:14px; color:#666;">サーバー蓄積データを取得できませんでした。</p>';
     const html = `
       <p style="font-size:18px;">${overallDesc.replace(/</g,'&lt;')}</p>
       ${secondPromptHtml}
