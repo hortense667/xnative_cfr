@@ -2131,6 +2131,36 @@
     webPreviewDragBar.textContent = '≡ ドラッグして位置を移動';
     webPreviewFrame = document.createElement('iframe');
     webPreviewFrame.style.cssText = 'width:100%; height:100%; flex:1; min-height:0; border:0;';
+    // 閲覧専用に近づけるため、iframe は強い sandbox 制約で開く
+    // - 新規ウィンドウ/タブ、ダウンロード、フォーム送信などを抑止
+    // - リンク遷移は iframe 内でのみ許可
+    // 見出しメニュー等のページUIが崩れないよう script は許可しつつ、
+    // 新規ウィンドウ・ダウンロード・フォーム送信などは sandbox で引き続き抑止する
+    webPreviewFrame.setAttribute('sandbox', 'allow-scripts');
+    webPreviewFrame.setAttribute('referrerpolicy', 'no-referrer');
+    // 可能な同一オリジンページでは追加で入力系操作を抑止（クロスオリジンは自動的に無視される）
+    webPreviewFrame.addEventListener('load', () => {
+      try {
+        const doc = webPreviewFrame.contentDocument;
+        if (!doc) return;
+        doc.addEventListener('contextmenu', (ev) => ev.preventDefault(), true);
+        doc.addEventListener('keydown', (ev) => {
+          const k = String(ev.key || '').toLowerCase();
+          if (ev.ctrlKey || ev.metaKey || ev.altKey || k === 'f5' || k === 'f12') {
+            ev.preventDefault();
+            ev.stopPropagation();
+          }
+        }, true);
+        const style = doc.createElement('style');
+        style.textContent = `
+          input, textarea, select, button, [contenteditable="true"] {
+            pointer-events: none !important;
+          }
+        `;
+        doc.head && doc.head.appendChild(style);
+      } catch (_) {}
+    });
+    webPreviewEl.addEventListener('contextmenu', (ev) => ev.preventDefault());
     webPreviewEl.appendChild(webPreviewDragBar);
     webPreviewEl.appendChild(webPreviewFrame);
     document.body.appendChild(webPreviewEl);
@@ -2193,10 +2223,24 @@
   function isWebPreviewMobile() {
     return window.matchMedia('(max-width: 768px)').matches;
   }
+  function normalizeWebPreviewUrl(rawUrl) {
+    try {
+      const u = new URL(rawUrl);
+      // Wikipedia はモバイルスキンを使うと、先頭に大きな Contents が出る崩れを避けやすい
+      if (/(\.|^)wikipedia\.org$/i.test(u.hostname)) {
+        if (!u.searchParams.has('useskin')) {
+          u.searchParams.set('useskin', 'minerva');
+        }
+      }
+      return u.toString();
+    } catch (_) {
+      return rawUrl;
+    }
+  }
   function showWebPreview(url, anchor){
     if (!url) return;
     const el = ensureWebPreview();
-    webPreviewFrame.src = url;
+    webPreviewFrame.src = normalizeWebPreviewUrl(url);
     const z = pageZoom || 1;
     if (isWebPreviewMobile()) {
       // スマホ: 幅8割・左に余白・上下1割ずつ短く、外タップで閉じる
@@ -2210,7 +2254,9 @@
       el.style.maxWidth = 'none';
       el.style.borderRadius = '12px';
     } else {
-      const rect = anchor.getBoundingClientRect();
+      const rect = (anchor && typeof anchor.getBoundingClientRect === 'function')
+        ? anchor.getBoundingClientRect()
+        : { right: window.innerWidth * 0.2 };
       let left = (rect.right + 8) / z;
       let top  = (window.innerHeight * 0.1) / z;
       el.style.left = `${left}px`;
@@ -2457,7 +2503,7 @@
 
   function openUrl(url) {
     if (url && url.startsWith('http')) {
-      window.open(url, '_blank');
+      showWebPreview(url, null);
     }
   }
   
@@ -2465,7 +2511,7 @@
     // Wikipediaの年ページのURL形式（「年」なし）
     const wikipediaUrl = `https://ja.wikipedia.org/wiki/${year}年`;
     console.log('Wikipedia URL:', wikipediaUrl); // デバッグ用
-    window.open(wikipediaUrl, '_blank');
+    showWebPreview(wikipediaUrl, null);
   }
 
   function editItem(year, index) {
