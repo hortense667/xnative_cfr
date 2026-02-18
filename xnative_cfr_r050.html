@@ -4902,7 +4902,7 @@
   
   function applyGenreFilter() {
     if (!selectedGenres || selectedGenres.size === 0) {
-      openModalText('ジャンルが選択されていません', '少なくとも1つはジャンルを選択してください。');
+      alert('少なくとも1つはジャンルを選択してください。');
       return;
     }
     closeModal();
