@@ -6071,8 +6071,9 @@
           const genre = s.genre != null ? s.genre : item.genre;
           const url = item.url || '';
           const urlEn = item.url_e || item.url_en || item.URL_en || item.URL_e || item.urlEn || '';
+          const labelEn = item.label_en || '';
           const note = item.note || '';
-          return { year: s.year, label: s.label, genre: genre, url: url, urlEn: urlEn, note: note };
+          return { year: s.year, label: s.label, label_en: labelEn, genre: genre, url: url, urlEn: urlEn, note: note };
         })
       });
       localStorage.setItem(KIOSK_SESSIONS_KEY, JSON.stringify(list));
@@ -6116,7 +6117,16 @@
       owner: githubConfig.owner || '',
       repo: githubConfig.repo || '',
       filePath: githubConfig.filePath || '',
-      selections: kioskState.selections.map(s => ({ year: s.year, label: s.label, genre: s.genre != null ? s.genre : '' })),
+      selections: kioskState.selections.map(s => {
+        const arr = events[s.year] || [];
+        const item = arr.find(it => it.label === s.label) || {};
+        return {
+          year: s.year,
+          label: s.label,
+          label_en: item.label_en || '',
+          genre: s.genre != null ? s.genre : ''
+        };
+      }),
       // 診断実行時点でジャンル選択モーダルで選ばれていたジャンルコードの一覧
       selectedGenres: Array.from(selectedGenres || [])
     };
@@ -6355,7 +6365,22 @@
     const nickText = (ses.nickname != null && ses.nickname !== '') ? (String(ses.nickname).replace(/</g, '&lt;')) : '—';
     const genderText = (ses.gender != null && ses.gender !== '') ? ses.gender : '—';
     const birthYearText = (ses.birthYear != null && ses.birthYear !== '') ? (isEnglishUi() ? (ses.birthYear + '') : (ses.birthYear + '年生')) : '—';
-    const lines = (ses.selections || []).map(s => (isEnglishUi() ? `${s.year}: ${(s.label || '').replace(/</g, '&lt;')}` : `${s.year}年: ${(s.label || '').replace(/</g, '&lt;')}`)).join('<br>');
+    const lines = (ses.selections || []).map(s => {
+      const jaRaw = String(s && s.label ? s.label : '');
+      let enRaw = String((s && (s.label_en || s.enLabel)) ? (s.label_en || s.enLabel) : '');
+      if (!enRaw && s && s.year != null && jaRaw) {
+        const arr = events[s.year] || [];
+        const item = arr.find(it => it.label === jaRaw) || null;
+        if (item && item.label_en) enRaw = String(item.label_en);
+      }
+      const ja = jaRaw.replace(/</g, '&lt;');
+      const en = enRaw.replace(/</g, '&lt;');
+      let labelHtml = ja || en;
+      if (ja && en && ja !== en) {
+        labelHtml = `${ja} <span style="color:#666;">/ ${en}</span>`;
+      }
+      return isEnglishUi() ? `${s.year}: ${labelHtml}` : `${s.year}年: ${labelHtml}`;
+    }).join('<br>');
     return isEnglishUi()
       ? `<div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #eee;"><strong>${idx + 1}. ${formatDate(ses.timestamp)}</strong> Nickname: ${nickText} / Gender: ${genderText} / Birth year: ${birthYearText} (${(ses.selections || []).length} selected)<br><span style="color:#444;">${lines || '(none)'}</span></div>`
       : `<div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #eee;"><strong>${idx + 1}. ${formatDate(ses.timestamp)}</strong> ニックネーム: ${nickText} / 性別: ${genderText} / 生年: ${birthYearText}（選択${(ses.selections || []).length}件）<br><span style="color:#444;">${lines || '（なし）'}</span></div>`;
