@@ -920,7 +920,10 @@
           // プロンプト2が設定されている場合のみ、2回目のAI呼び出し用に診断中スピナーを表示
           try {
             const cfr = getCfrPrompts();
-            const secondHead = (cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '').trim();
+            const secondHead = (isEnglishUi()
+              ? (cfr.secondPromptHead_en || cfr.secondPromptHead || DEFAULT_CFR_PROMPTS_EN.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '')
+              : (cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '')
+            ).trim();
             if (secondHead) {
               const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('AIで追加のおすすめを生成しています。<br>しばらくお待ちください。', 'Generating additional AI recommendations...<br>Please wait.') + '</p></div>';
               openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
@@ -6366,7 +6369,9 @@
 
     // プロンプト2が設定されている場合は、診断結果画面の「次へ」でここに来たタイミングで追加のGemini呼び出しを行う
     const cfr = getCfrPrompts();
-    const secondHead = cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '';
+    const secondHead = isEnglishUi()
+      ? (cfr.secondPromptHead_en || cfr.secondPromptHead || DEFAULT_CFR_PROMPTS_EN.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '')
+      : (cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '');
     if (secondHead && secondHead.trim()) {
       try {
         const secondResult = await fetchGeminiDiagnosis(secondHead);
