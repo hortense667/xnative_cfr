@@ -196,9 +196,9 @@
     display:inline-flex;
     align-items:center;
     gap:10px;
-    font-size:36px;
-    font-weight:700;
-    color:#1f2937;
+    font-size:24px;
+    font-weight:600;
+    color:#334155;
     cursor:pointer;
     line-height:1.1;
   }
@@ -218,8 +218,9 @@
       gap:10px;
     }
     #kioskStartOverlay .kiosk-start-bottom .kiosk-start-en{
-      font-size:14px;
+      font-size:13px;
       gap:8px;
+      color:#475569;
     }
     #kioskStartOverlay .kiosk-start-bottom .kiosk-start-en input{
       transform:scale(1.1);
@@ -710,6 +711,8 @@
     if (typeof probeBlue !== 'undefined' && typeof updateProbeEventsPanel === 'function') {
       updateProbeEventsPanel(probeBlue.eventYear);
     }
+    if (typeof probeBlue !== 'undefined' && probeBlue && typeof probeBlue.redraw === 'function') probeBlue.redraw();
+    if (typeof probeRed !== 'undefined' && probeRed && typeof probeRed.redraw === 'function') probeRed.redraw();
     if (typeof renderEvents === 'function') renderEvents();
   }
   function applyUiLanguage() {
@@ -4788,18 +4791,18 @@
       bh.setAttribute('cx',HANDLE_X);bh.setAttribute('cy',yB);
       // HTML要素の年齢表示を更新（青プローブのみ、線の右側に表示）。横スクロールに追従させる
       if (ageTextElement) {
-        ageTextElement.textContent = `${age}歳`;
+        ageTextElement.textContent = isEnglishUi() ? `${age} yrs` : `${age}歳`;
         const leftPx = ix + 10;
         ageTextElement.style.left = (vp ? `${leftPx - vp.scrollLeft}px` : `${leftPx}px`);
         ageTextElement.style.display = 'block';
       }
       updateAgeDisplayPosition();
       
-      eventYearText.textContent = `${state.eventYear}年`;
+      eventYearText.textContent = isEnglishUi() ? `${state.eventYear}` : `${state.eventYear}年`;
       eventYearText.setAttribute('x', ORIGIN_X+8);
       eventYearText.setAttribute('y', yE-6);
       const yAtAxis = yE - age*PX_PER_YEAR; const by = Math.round((yAtAxis - ORIGIN_Y)/PX_PER_YEAR) + YEAR_MIN;
-      birthYearText.textContent = `${by}年生`;
+      birthYearText.textContent = isEnglishUi() ? `${by} born` : `${by}年生`;
       birthYearText.style.fill = '#000'; // 生年表示を黒色に
       birthYearText.setAttribute('x', ORIGIN_X+8);
       birthYearText.setAttribute('y', yAtAxis-6);
@@ -4846,7 +4849,7 @@
           if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
         }
         if(color==='blue' && el===bh && birthYearOverlayEl && window.matchMedia('(max-width: 768px)').matches){
-          birthYearOverlayEl.textContent = state.birthYear + '年';
+          birthYearOverlayEl.textContent = isEnglishUi() ? (state.birthYear + '') : (state.birthYear + '年');
           birthYearOverlayEl.style.display = 'block';
         }
       }
@@ -4865,7 +4868,7 @@
         redraw();
         if(color==='blue' && el===eh && window.updateProbeEventsPanel){ window.updateProbeEventsPanel(state.eventYear); }
         if(color==='blue' && el===bh && birthYearOverlayEl && birthYearOverlayEl.style.display !== 'none'){
-          birthYearOverlayEl.textContent = state.birthYear + '年';
+          birthYearOverlayEl.textContent = isEnglishUi() ? (state.birthYear + '') : (state.birthYear + '年');
         }
         // ドラッグ中は〇が表示域から出そうになったらスクロールして追従（0.1秒で約1年分のスピード）
         if(vp){
@@ -5677,7 +5680,7 @@
             const genderInput = [...overlay.querySelectorAll('input[name="kioskGender"]')].find(r => r.checked);
             const gender = genderInput ? genderInput.value : '';
             if (!gender) {
-              alert(t('性別を選んでください。', 'Please choose a gender option.'));
+              alert(t('性別を選択してください。', 'Please select a gender option.'));
               return;
             }
             wizard.gender = gender;
@@ -5819,25 +5822,37 @@
     const sortedGenres = Object.keys(genreCount).sort((a,b)=>(genreCount[b]-genreCount[a]));
 
     let report = '';
-    report += `あなたは全部で${total}個のコンテンツを選びました。その中で特に多かったのは、`;
+    report += isEnglishUi()
+      ? `You selected ${total} items in total. The strongest concentration appears in `
+      : `あなたは全部で${total}個のコンテンツを選びました。その中で特に多かったのは、`;
     if (sortedDecades.length) {
       const topDecade = sortedDecades.reduce((a,b)=> decadeCount[a] >= decadeCount[b] ? a : b);
-      report += `${topDecade}年代（${decadeCount[topDecade]}件）です。`;
+      report += isEnglishUi()
+        ? `${topDecade}s (${decadeCount[topDecade]} items).`
+        : `${topDecade}年代（${decadeCount[topDecade]}件）です。`;
     } else {
-      report += '特定の年代に偏りは見られませんでした。';
+      report += isEnglishUi()
+        ? 'no strong decade bias.'
+        : '特定の年代に偏りは見られませんでした。';
     }
     report += '\n\n';
     if (sortedGenres.length) {
       const lines = sortedGenres.slice(0,3).map(code => {
-        const label = (GENRE_LABELS && GENRE_LABELS[code]) ? GENRE_LABELS[code] : code;
-        return `${label}（${genreCount[code]}件）`;
+        const label = getGenreLabel(code);
+        return isEnglishUi() ? `${label} (${genreCount[code]})` : `${label}（${genreCount[code]}件）`;
       });
-      report += `ジャンル別では、${lines.join('、')} などへの関心が強く表れています。`;
+      report += isEnglishUi()
+        ? `By genre, your interests are strongest in ${lines.join(', ')}.`
+        : `ジャンル別では、${lines.join('、')} などへの関心が強く表れています。`;
     } else {
-      report += 'ジャンルの偏りはあまり見られませんでした。';
+      report += isEnglishUi()
+        ? 'No strong genre bias was observed.'
+        : 'ジャンルの偏りはあまり見られませんでした。';
     }
     report += '\n\n';
-    report += 'これらから推測すると、あなたは自分の成長期に触れた作品やサービスを通じて、時代の変化を前向きに楽しむタイプであり、テクノロジーや物語世界に対する想像力が豊かな人格が形成されていると考えられます。（この診断文は現在ダミーであり、将来は生成AIから約1000文字のレポートを取得する予定です。）';
+    report += isEnglishUi()
+      ? 'These patterns suggest you positively enjoy shifts across eras through works and services encountered during your formative years, with strong curiosity for technology and narrative worlds. (This is currently dummy text; later it will be replaced by a longer AI-generated report.)'
+      : 'これらから推測すると、あなたは自分の成長期に触れた作品やサービスを通じて、時代の変化を前向きに楽しむタイプであり、テクノロジーや物語世界に対する想像力が豊かな人格が形成されていると考えられます。（この診断文は現在ダミーであり、将来は生成AIから約1000文字のレポートを取得する予定です。）';
 
     // みんなの集計（ローカルストレージに蓄積）
     const key = 'xnative_kiosk_aggregate_v1';
@@ -5864,8 +5879,8 @@
       return `
         <div style="margin:4px 0; font-size:12px;">
           <div style="display:flex; justify-content:space-between;">
-            <span>${d}年代</span>
-            <span>全体:${gVal} / あなた:${uVal}</span>
+            <span>${isEnglishUi() ? `${d}s` : `${d}年代`}</span>
+            <span>${isEnglishUi() ? `All:${gVal} / You:${uVal}` : `全体:${gVal} / あなた:${uVal}`}</span>
           </div>
           <div style="position:relative; height:10px; background:#e0e7ff; border-radius:5px; overflow:hidden;">
             <div style="position:absolute; left:0; top:0; bottom:0; width:${width}px; background:#a5b4fc;"></div>
@@ -5876,9 +5891,9 @@
     }).join('');
 
     const aggregateHtml = `
-      <p>これまでにこの端末で回答した人数: <strong>${agg.count}人</strong></p>
-      <p>年代ごとの選択傾向（全体とあなたの比較）:</p>
-      <div style="max-width:300px;">${decadeBars || '<p>今回が最初の回答です。</p>'}</div>
+      <p>${isEnglishUi() ? 'Responses on this device so far: ' : 'これまでにこの端末で回答した人数: '}<strong>${agg.count}${isEnglishUi() ? '' : '人'}</strong></p>
+      <p>${isEnglishUi() ? 'Selection trend by decade (all vs you):' : '年代ごとの選択傾向（全体とあなたの比較）:'}</p>
+      <div style="max-width:300px;">${decadeBars || (isEnglishUi() ? '<p>This is the first response.</p>' : '<p>今回が最初の回答です。</p>')}</div>
     `;
 
     return { report, aggregateHtml };
