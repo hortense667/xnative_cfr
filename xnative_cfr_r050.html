@@ -6401,7 +6401,12 @@
       const res = await fetch('/api/diagnostic-results');
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        const serverList = (data && data.results && Array.isArray(data.results)) ? data.results : [];
+        const serverListRaw = (data && data.results && Array.isArray(data.results)) ? data.results : [];
+        const serverList = serverListRaw.slice().sort((a, b) => {
+          const ta = new Date(a && a.timestamp ? a.timestamp : 0).getTime();
+          const tb = new Date(b && b.timestamp ? b.timestamp : 0).getTime();
+          return tb - ta;
+        });
         serverHtml = serverList.length === 0
           ? '<p style="font-size:14px; color:#666;">' + t('サーバーにはまだ蓄積されたデータはありません。', 'No data has been accumulated on the server yet.') + '</p>'
           : `<p style="margin:0 0 8px; font-size:16px;">${isEnglishUi() ? `Accumulated checks on server (all devices, ${serverList.length} records):` : `サーバーに蓄積されたチェック内容（全端末・${serverList.length}件）：`}</p><div style="max-height:320px; overflow-y:auto; border:1px solid #ddd; border-radius:8px; padding:10px 12px; background:#f0f8ff; font-size:14px; line-height:1.6;">${serverList.map((ses, idx) => formatSessionRow(ses, idx, formatDate)).join('')}</div>`;
