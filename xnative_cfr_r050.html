@@ -185,6 +185,46 @@
   #kioskStartOverlay button:hover{
     background:var(--diag-accent-hover);
   }
+  #kioskStartOverlay .kiosk-start-bottom{
+    margin-top:18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  #kioskStartOverlay .kiosk-start-bottom .kiosk-start-en{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    font-size:36px;
+    font-weight:700;
+    color:#1f2937;
+    cursor:pointer;
+    line-height:1.1;
+  }
+  #kioskStartOverlay .kiosk-start-bottom .kiosk-start-en input{
+    transform:scale(1.25);
+    margin:0;
+  }
+  #kioskStartOverlay .kiosk-start-bottom .actions{
+    margin-top:0;
+    text-align:right;
+    flex-shrink:0;
+  }
+  @media (max-width: 768px) {
+    #kioskStartOverlay .kiosk-start-bottom{
+      margin-top:14px;
+      align-items:flex-end;
+      gap:10px;
+    }
+    #kioskStartOverlay .kiosk-start-bottom .kiosk-start-en{
+      font-size:14px;
+      gap:8px;
+    }
+    #kioskStartOverlay .kiosk-start-bottom .kiosk-start-en input{
+      transform:scale(1.1);
+    }
+  }
   #kioskHint{
     position:fixed;
     right:12px;
@@ -626,9 +666,9 @@
   const nextBtn=document.getElementById('nextBtn');
   const loadCsvBtn=null;
   const settingsBtn=document.getElementById('settingsBtn');
+  const initialUrlParams = new URLSearchParams(window.location.search);
   (function(){
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('editmode') === 'ON' && settingsBtn) settingsBtn.style.display = '';
+    if (initialUrlParams.get('editmode') === 'ON' && settingsBtn) settingsBtn.style.display = '';
   })();
   const helpBtn=document.getElementById('helpBtn');
   const fileInput=document.getElementById('fileInput');
@@ -638,6 +678,68 @@
   const modalContent=document.getElementById('modalContent');
   const modalFooter=document.getElementById('modalFooter');
   const modalClose=document.getElementById('modalClose');
+
+  const initialLangParamRaw = (
+    initialUrlParams.get('lang') ||
+    initialUrlParams.get('locale') ||
+    initialUrlParams.get('language') ||
+    ''
+  ).toLowerCase();
+  const initialEnglishFlag = (
+    initialLangParamRaw === 'en' ||
+    initialLangParamRaw === 'english' ||
+    initialUrlParams.get('english') === '1' ||
+    initialUrlParams.get('english') === 'true'
+  );
+  let defaultUiLanguage = initialEnglishFlag ? 'en' : 'ja';
+  let uiLanguage = defaultUiLanguage;
+  function isEnglishUi() { return uiLanguage === 'en'; }
+  function t(ja, en) { return isEnglishUi() ? en : ja; }
+  function getPrimaryLabel(item) {
+    const ja = item && item.label ? String(item.label) : '';
+    const en = item && item.label_en ? String(item.label_en) : '';
+    return isEnglishUi() ? (en || ja) : (ja || en);
+  }
+  function setUiLanguage(lang, options) {
+    const next = (lang === 'en') ? 'en' : 'ja';
+    uiLanguage = next;
+    if (options && options.asDefault) defaultUiLanguage = next;
+    applyUiLanguage();
+    if (typeof updateKioskHint === 'function') updateKioskHint();
+    if (typeof updateKioskStepOverlay === 'function') updateKioskStepOverlay();
+    if (typeof probeBlue !== 'undefined' && typeof updateProbeEventsPanel === 'function') {
+      updateProbeEventsPanel(probeBlue.eventYear);
+    }
+    if (typeof renderEvents === 'function') renderEvents();
+  }
+  function applyUiLanguage() {
+    document.documentElement.lang = isEnglishUi() ? 'en' : 'ja';
+    const headerTitle = document.querySelector('header strong');
+    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.0';
+    const impLabel = selImp && selImp.parentElement;
+    if (impLabel) impLabel.childNodes[0].nodeValue = t('重要度', 'Importance');
+    if (selImp && selImp.options && selImp.options.length > 0) selImp.options[0].text = t('すべて', 'All');
+    const eraBtnEl = document.getElementById('eraBtn');
+    if (eraBtnEl) eraBtnEl.textContent = t('時代区分', 'Eras');
+    if (searchBox) searchBox.placeholder = t('ラベルを検索', 'Search labels');
+    if (searchBtn) searchBtn.textContent = t('検索', 'Search');
+    if (prevBtn) prevBtn.textContent = t('前', 'Prev');
+    if (nextBtn) nextBtn.textContent = t('次', 'Next');
+    if (helpBtn) {
+      helpBtn.textContent = t('ヘルプ', 'Help');
+      helpBtn.title = t('ヘルプ', 'Help');
+    }
+    const menuZoomIn = customContextMenu && customContextMenu.querySelector('button[data-action="zoom-in"]');
+    const menuZoomOut = customContextMenu && customContextMenu.querySelector('button[data-action="zoom-out"]');
+    const menuRestart = customContextMenu && customContextMenu.querySelector('button[data-action="restart"]');
+    if (menuZoomIn) menuZoomIn.textContent = t('画面拡大＋', 'Zoom In +');
+    if (menuZoomOut) menuZoomOut.textContent = t('画面縮小ー', 'Zoom Out -');
+    if (menuRestart) menuRestart.textContent = t('最初からやり直す', 'Restart');
+    const editHint = document.querySelector('.editAreaHint');
+    if (editHint) editHint.textContent = t('クリックで編集。1950s～2050sまで上下にスクロール可能。', 'Click to edit. Scroll vertically from the 1950s to the 2050s.');
+    updateGenreFilterButtonText && updateGenreFilterButtonText();
+  }
+  window.setUiLanguage = setUiLanguage;
 
   const YEAR_MIN=1945, YEAR_MAX=2059, AGE_MAX=100;
   const PX_PER_YEAR=22, PX_PER_AGE=25;
@@ -771,7 +873,7 @@
         modalFooter.style.display = 'none';
       } else {
         modalFooter.style.display = 'flex';
-        modalClose.textContent = footerMode === 'next' ? '次へ' : '閉じる';
+        modalClose.textContent = footerMode === 'next' ? t('次へ', 'Next') : t('閉じる', 'Close');
         modalClose.classList.toggle('btn-primary', footerMode === 'next');
       }
     }
@@ -789,6 +891,9 @@
       modalBox.scrollTop = 0;
       requestAnimationFrame(() => { modalBox.scrollTop = 0; });
     }
+    if (modalFooter) modalFooter.style.display = 'flex';
+    modalClose.textContent = t('閉じる', 'Close');
+    modalClose.classList.remove('btn-primary');
     modalClose.focus();
   }
   function closeModal(){
@@ -798,7 +903,7 @@
     modal.style.display='none';
     modal.classList.remove('kioskGenreMobile');
     if (modalFooter) { modalFooter.style.display = 'flex'; }
-    modalClose.textContent = '閉じる';
+    modalClose.textContent = t('閉じる', 'Close');
     modalClose.classList.remove('btn-primary');
     if (window.kioskMode && typeof window.updateKioskStepOverlay === 'function') {
       window.updateKioskStepOverlay();
@@ -814,8 +919,8 @@
             const cfr = getCfrPrompts();
             const secondHead = (cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '').trim();
             if (secondHead) {
-              const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>AIで追加のおすすめを生成しています。<br>しばらくお待ちください。</p></div>';
-              openModal('診断中', loadingHtml, { footer: 'none' });
+              const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('AIで追加のおすすめを生成しています。<br>しばらくお待ちください。', 'Generating additional AI recommendations...<br>Please wait.') + '</p></div>';
+              openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
             }
           } catch (_) {}
           showKioskOverallResult();
@@ -883,6 +988,19 @@
     'EVT':'イベント','FMT':'フォーマット','SPW':'スポーツ','RDE':'テーマパーク',
     'FOO':'食','UNC':'その他'
   };
+  const GENRE_LABELS_EN = {
+    'ANI':'Anime','MAN':'Manga','GAM':'Games','TVP':'TV Programs',
+    'MOV':'Movies','NET':'Internet','HAR':'Hardware','PHE':'Phenomena/Trends',
+    'SOF':'Software','TOY':'Toys','FAS':'Fashion','BOO':'Books',
+    'MAG':'Magazines','NOV':'Novels','MUS':'Music','IDL':'Idols','RDO':'Radio',
+    'EVT':'Events','FMT':'Formats','SPW':'Sports','RDE':'Theme Parks',
+    'FOO':'Food','UNC':'Others'
+  };
+  function getGenreLabel(code) {
+    const c = String(code || '').toUpperCase();
+    if (isEnglishUi()) return GENRE_LABELS_EN[c] || GENRE_LABELS[c] || c;
+    return GENRE_LABELS[c] || c;
+  }
   let GENRE_SET=new Set(GENRES);
   function setGenresFromRemote(genresDef){
     try{
@@ -1377,6 +1495,18 @@
     usageTitle: '使いかた映像（ダミー）',
     usageDescription: 'ここでは「HARC の紹介」と「Xnative Timeline の紹介」の映像が流れます（ダミー画面）。しばらくご覧いただいたあと、下の「スタート」ボタンで最初の画面に戻ります。'
   };
+  const DEFAULT_CFR_PROMPTS_EN = {
+    temperature: 0.9,
+    topTitle: 'Xnative/Timeline Media Stack Chronology Diagnosis',
+    topDescription: 'Choose the content you loved and were influenced by (manga, anime, games, books, music, films, etc.), the hardware/software you used deeply and passionately (instruments, cameras, computers, websites, etc.), and the lifestyle/culture that became part of you (food, events, etc.) to diagnose your native sensibility.',
+    eventChecklistDescription: '',
+    geminiPromptHead: '[Role] You are a witty cultural commentator who knows pop-culture history deeply.\n[Task] Based on the survey data below, analyze the person\'s sensibility and address them directly in English.\nIdentify when they encountered each topic from birth year and gender context, include social/technical background of each era, avoid bullet lists/headings, and keep it within 300 characters.\nFinish with one line: "You are a ___ native."\n\n[Data]\n\n',
+    overallTitle: 'Overall Result',
+    overallDescription: 'This screen shows a dummy overall result. In production, this area can show trends and aggregates across multiple participants.',
+    secondPromptHead: '',
+    usageTitle: 'How To Use (Demo)',
+    usageDescription: 'This screen plays introduction videos for HARC and Xnative Timeline (dummy). After watching, press the Start button to return to the beginning.'
+  };
   let cfrPromptsConfig = null;   // cfr_prompts.json 全体
   let activeCfrPrompts = null;   // 現在の年表ファイルに対応する設定
 
@@ -1420,6 +1550,14 @@
 
   function getCfrPrompts() {
     return activeCfrPrompts || DEFAULT_CFR_PROMPTS;
+  }
+  function getLocalizedCfrPrompt(key) {
+    const cfr = getCfrPrompts();
+    if (isEnglishUi()) {
+      const enKey = key + '_en';
+      return cfr[enKey] || DEFAULT_CFR_PROMPTS_EN[key] || cfr[key] || DEFAULT_CFR_PROMPTS[key] || '';
+    }
+    return cfr[key] || DEFAULT_CFR_PROMPTS[key] || '';
   }
 
   async function ensureCfrPromptsLoaded() {
@@ -2040,16 +2178,16 @@
           <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:18px; flex-wrap:wrap;">
             <input type="checkbox" data-year="${y}" data-index="${idx}" style="margin-right:8px; transform:scale(1.2); flex-shrink:0;" ${checkedAttr}>
             <strong style="flex-shrink:0;">${item.label}</strong>
-            ${hasJpUrl ? `<span class="probe-web-icon" data-web-url="${jpUrl}" title="関連ページを表示" style="cursor:pointer; flex-shrink:0;">🌐</span>` : ''}
+            ${hasJpUrl ? `<span class="probe-web-icon" data-web-url="${jpUrl}" title="${t('関連ページを表示', 'Open related page')}" style="cursor:pointer; flex-shrink:0;">🌐</span>` : ''}
             <span style="display:inline; font-size:18px;">${labelEn ? `<span style="color:#444;">${labelEn}</span>` : ''}${(labelEn && hasEnUrl) ? ' ' : ''}${hasEnUrl ? `<span class="probe-web-icon" data-web-url="${enUrl}" title="English page" style="cursor:pointer;">🌐</span>` : ''}</span>
           </label>
         </li>
       `;
     }).join('');
-    const cfr = getCfrPrompts();
-    const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
+    const desc = getLocalizedCfrPrompt('eventChecklistDescription');
+    const panelTitle = isEnglishUi() ? `Events in ${y}` : `${y}年のイベント`;
     probeEventsPanel.innerHTML = `
-      <h4>${y}年のイベント</h4>
+      <h4>${panelTitle}</h4>
       <p style="margin:2px 0 4px; font-size:18px; color:#666;">${(desc || '').replace(/</g,'&lt;')}</p>
       <ul>${listHtml}</ul>
     `;
@@ -2940,7 +3078,7 @@
     const years = Object.keys(events).map(Number).sort((a,b)=>a-b);
     for(const y of years){
       const ypx=yFromBirthYear(y);
-      const labels=(events[y]||[]).filter(passesFilter).map(it=>it.label).filter(Boolean);
+      const labels=(events[y]||[]).filter(passesFilter).map(it=>getPrimaryLabel(it)).filter(Boolean);
       if(labels.length===0){ continue; }
       const yearPart = String(y).slice(2);
       const labelsPart = labels.join('／');
@@ -3018,7 +3156,8 @@
         // ジャンルフィルタ
         if (selectedGenres.size === 0) continue;
         if (!itemHasSelectedGenre(item)) continue;
-        const labelMatch = item.label && item.label.toLowerCase().includes(q.toLowerCase());
+        const searchTarget = [item.label, item.label_en].filter(Boolean).join(' ').toLowerCase();
+        const labelMatch = searchTarget.includes(q.toLowerCase());
         if (labelMatch) {
           searchResults.push({ year: parseInt(year), item });
           console.log('マッチした項目:', { year, item, labelMatch });
@@ -4872,12 +5011,10 @@
   
   // ジャンル選択モーダル関連の関数
   function showGenreFilterModal() {
-    const genreLabels = GENRE_LABELS;
-    
     let genreButtonsHtml = '';
     for (const genre of GENRES) {
       const isSelected = selectedGenres.has(genre);
-      const label = (GENRE_LABELS && GENRE_LABELS[genre]) ? GENRE_LABELS[genre] : (genreLabels[genre] || genre);
+      const label = getGenreLabel(genre);
       genreButtonsHtml += `
         <button class="genre-btn ${isSelected ? 'selected' : ''}" 
                 data-genre="${genre}" 
@@ -4890,21 +5027,21 @@
     
     const modalContent = `
       <div style="margin-bottom: 16px;">
-        <button onclick="selectAllGenres()" style="margin-right: 8px; padding: 6px 12px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight:600;">すべてを選択</button>
-        <button onclick="deselectAllGenres()" style="padding: 6px 12px; background: #475569; color: white; border: none; border-radius: 8px; cursor: pointer;">すべてを解除</button>
+        <button onclick="selectAllGenres()" style="margin-right: 8px; padding: 6px 12px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight:600;">${t('すべてを選択', 'Select all')}</button>
+        <button onclick="deselectAllGenres()" style="padding: 6px 12px; background: #475569; color: white; border: none; border-radius: 8px; cursor: pointer;">${t('すべてを解除', 'Clear all')}</button>
       </div>
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px;">
         ${genreButtonsHtml}
       </div>
       <div style="text-align: right;">
-        <button onclick="applyGenreFilter()" style="padding: 8px 16px; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight:600;">適用</button>
+        <button onclick="applyGenreFilter()" style="padding: 8px 16px; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight:600;">${t('適用', 'Apply')}</button>
       </div>
     `;
     
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
     const opts = { footer: 'none' };
     if (window.kioskMode && isMobile) opts.positionBelowKioskOnMobile = true;
-    openModal('ジャンル選択', modalContent, opts);
+    openModal(t('ジャンル選択', 'Genre Selection'), modalContent, opts);
   }
   
   function toggleGenre(genre) {
@@ -4948,7 +5085,7 @@
   
   function applyGenreFilter() {
     if (!selectedGenres || selectedGenres.size === 0) {
-      alert('少なくとも1つはジャンルを選択してください。');
+      alert(t('少なくとも1つはジャンルを選択してください。', 'Please select at least one genre.'));
       return;
     }
     closeModal();
@@ -5008,24 +5145,23 @@
   // ジャンル一覧を件数付きで生成する関数
   function generateGenreListWithCounts() {
     const counts = getGenreCounts();
-    const genreLabels = GENRE_LABELS;
-    
     return GENRES.map(genre => {
       const count = counts[genre] || 0;
-      const label = (GENRE_LABELS && GENRE_LABELS[genre]) ? GENRE_LABELS[genre] : (genreLabels[genre] || genre);
-      return `<li><strong>${genre}:</strong> ${label}（${count}）</li>`;
+      const label = getGenreLabel(genre);
+      return `<li><strong>${genre}:</strong> ${isEnglishUi() ? `${label} (${count})` : `${label}（${count}）`}</li>`;
     }).join('');
   }
   
   function updateGenreFilterButtonText() {
     if (selectedGenres.size === 0) {
-      genreFilterBtn.textContent = 'ジャンル選択';
+      genreFilterBtn.textContent = t('ジャンル選択', 'Genres');
     } else if (selectedGenres.size === GENRES.length) {
-      genreFilterBtn.textContent = 'すべてのジャンル';
+      genreFilterBtn.textContent = t('すべてのジャンル', 'All Genres');
     } else {
-      genreFilterBtn.textContent = `${selectedGenres.size}個のジャンル`;
+      genreFilterBtn.textContent = isEnglishUi() ? `${selectedGenres.size} genres` : `${selectedGenres.size}個のジャンル`;
     }
   }
+  applyUiLanguage();
   
   // ジャンルフィルタボタンのイベントリスナー
   genreFilterBtn.addEventListener('click', showGenreFilterModal);
@@ -5062,8 +5198,8 @@
       <div class="step3-actions" id="kioskStep3Actions" style="display:none;">
         <button type="button" id="kioskFinishBtn" style="display:none;"></button>
         <span class="kiosk-year-controls" id="kioskYearControls" style="display:none;">
-          <button type="button" id="kioskYearUpBtn" aria-label="年を1つ進める">▼年＋</button>
-          <button type="button" id="kioskYearDownBtn" aria-label="年を1つ戻す">▲年－</button>
+          <button type="button" id="kioskYearUpBtn" aria-label="Move to next year">▼Year +</button>
+          <button type="button" id="kioskYearDownBtn" aria-label="Move to previous year">▲Year -</button>
         </span>
       </div>
     `;
@@ -5094,9 +5230,12 @@
     }
     let text = '';
     if (kioskState.step === 1) {
-      text = '１～数個のジャンルを選んでください。';
+      text = t('１～数個のジャンルを選んでください。', 'Please select one or more genres.');
     } else if (kioskState.step === 2 && !kioskState.eventYearMoved) {
-      text = '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます';
+      text = t(
+        '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます',
+        'Drag the upper circle (left side of the blue diagonal line) to your birth year. You can scroll upward to go back in time.'
+      );
       // 上の〇がメッセージの少し下に見える位置にスクロール（メッセージ top 72px + 高さ約40px + 10px）
       if (typeof probeBlue !== 'undefined' && vp) {
         try {
@@ -5108,7 +5247,10 @@
         } catch (_) {}
       }
     } else if (kioskState.step === 3 && kioskState.showLowerOverlay) {
-      text = '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。';
+      text = t(
+        '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。',
+        'Move the lower circle (left side of the blue horizontal line). Your age for that year is shown above the blue vertical line. You can move to years before age 0.'
+      );
     }
     if (text) {
       el.textContent = text;
@@ -5127,12 +5269,22 @@
     const nextBtn = box.querySelector('#kioskNextBtn');
     const finishBtn = box.querySelector('#kioskFinishBtn');
     const yearControls = box.querySelector('#kioskYearControls');
+    const yearUpBtn = box.querySelector('#kioskYearUpBtn');
+    const yearDownBtn = box.querySelector('#kioskYearDownBtn');
     const step3Actions = box.querySelector('#kioskStep3Actions');
 
     titleEl.style.display = '';
     bodyEl.style.display = '';
     countEl.style.display = '';
     if (yearControls) yearControls.style.display = 'none';
+    if (yearUpBtn) {
+      yearUpBtn.textContent = t('▼年＋', '▼Year +');
+      yearUpBtn.setAttribute('aria-label', t('年を1つ進める', 'Move to next year'));
+    }
+    if (yearDownBtn) {
+      yearDownBtn.textContent = t('▲年－', '▲Year -');
+      yearDownBtn.setAttribute('aria-label', t('年を1つ戻す', 'Move to previous year'));
+    }
     if (step3Actions) step3Actions.style.display = 'none';
     box.classList.remove('kiosk-hint-step3-compact');
     box.classList.remove('kiosk-hint-step3-pc');
@@ -5142,15 +5294,21 @@
     if (kioskState.step3StartedOperating) box.removeAttribute('data-step3-touch-listener');
 
     const count = kioskState.selections.length;
-    countEl.textContent = `チェックされた数: ${count} / 10`;
+    countEl.textContent = isEnglishUi() ? `Checked: ${count} / 10` : `チェックされた数: ${count} / 10`;
 
     if (kioskState.step === 1) {
-      titleEl.textContent = 'ステップ1：ジャンルを選びましょう';
-      bodyEl.textContent = '関心のあるジャンルをいくつか選んでください。「適用」を押すと次へ進みます。表示したいジャンルは画面上の「ジャンル選択」メニューからいつでも変更できます。';
+      titleEl.textContent = t('ステップ1：ジャンルを選びましょう', 'Step 1: Choose your genres');
+      bodyEl.textContent = t(
+        '関心のあるジャンルをいくつか選んでください。「適用」を押すと次へ進みます。表示したいジャンルは画面上の「ジャンル選択」メニューからいつでも変更できます。',
+        'Select the genres that interest you. Press "Apply" to continue. You can change visible genres anytime from the "Genres" menu.'
+      );
       nextBtn.style.display = 'none';
     } else if (kioskState.step === 2) {
-      titleEl.textContent = 'ステップ2：生まれた年をセット';
-      bodyEl.textContent = '青い斜め線の左上の〇を上下にドラッグして自分の生まれ年に合わせてください。';
+      titleEl.textContent = t('ステップ2：生まれた年をセット', 'Step 2: Set your birth year');
+      bodyEl.textContent = t(
+        '青い斜め線の左上の〇を上下にドラッグして自分の生まれ年に合わせてください。',
+        'Drag the circle at the upper-left end of the blue diagonal line up/down to your birth year.'
+      );
       nextBtn.style.display = 'none';
       finishBtn.style.display = 'none';
     } else if (kioskState.step === 3) {
@@ -5166,7 +5324,7 @@
         nextBtn.style.display = 'none';
         if (step3Actions) step3Actions.style.display = 'flex';
         finishBtn.style.display = 'inline-block';
-        finishBtn.textContent = '診断';
+        finishBtn.textContent = t('診断', 'Diagnose');
         finishBtn.disabled = count < 10;
         if (yearControls) yearControls.style.display = 'flex';
         if (typeof window.scrollProbeEventYearIntoView === 'function') {
@@ -5176,15 +5334,14 @@
         titleEl.style.display = '';
         bodyEl.style.display = '';
         box.classList.remove('kiosk-hint-step3-compact');
-        titleEl.textContent = 'ステップ3：チェックボックで選択';
-        const cfr = getCfrPrompts();
-        const desc = cfr.eventChecklistDescription || DEFAULT_CFR_PROMPTS.eventChecklistDescription;
-        bodyEl.textContent = desc + ' 10個以上チェックすると「診断」ボタンが押せるようになります。';
-        countEl.textContent = 'チェックされた数: ' + count + ' / 10';
+        titleEl.textContent = t('ステップ3：チェックボックで選択', 'Step 3: Select events with checkboxes');
+        const desc = getLocalizedCfrPrompt('eventChecklistDescription');
+        bodyEl.textContent = desc + (isEnglishUi() ? ' You can press "Diagnose" after checking 10 or more items.' : ' 10個以上チェックすると「診断」ボタンが押せるようになります。');
+        countEl.textContent = isEnglishUi() ? ('Checked: ' + count + ' / 10') : ('チェックされた数: ' + count + ' / 10');
         nextBtn.style.display = 'none';
         if (step3Actions) step3Actions.style.display = 'flex';
         finishBtn.style.display = 'inline-block';
-        finishBtn.textContent = '診断';
+        finishBtn.textContent = t('診断', 'Diagnose');
         finishBtn.disabled = count < 10;
         if (!isMobile) {
           box.classList.add('kiosk-hint-step3-pc');
@@ -5202,8 +5359,8 @@
         }
       }
     } else if (kioskState.step === 4) {
-      titleEl.textContent = 'ありがとうございました';
-      bodyEl.textContent = 'お疲れさまでした。m(_ _)m ';
+      titleEl.textContent = t('ありがとうございました', 'Thank you');
+      bodyEl.textContent = t('お疲れさまでした。m(_ _)m ', 'Session complete.');
       nextBtn.style.display = 'none';
       finishBtn.style.display = 'none';
     } else {
@@ -5405,7 +5562,7 @@
       }
 
       const actionBaseCss = 'padding:8px 14px; border-radius:10px; cursor:pointer; line-height:1.2; font-weight:600;';
-      const spaceBtn = mkBtn('空白', () => pushChar(' '), actionBaseCss + 'border:1px solid #8a8a8a; background:#e0e0e0; color:#111; font-size:16px; font-weight:500; min-width:88px;');
+      const spaceBtn = mkBtn(t('空白', 'Space'), () => pushChar(' '), actionBaseCss + 'border:1px solid #8a8a8a; background:#e0e0e0; color:#111; font-size:16px; font-weight:500; min-width:88px;');
       const clearBtn = mkBtn('Clear', clearAll, actionBaseCss + 'border:1px solid #c45b5b; background:#fff; color:#7a1b1b; font-size:20px; font-weight:500; min-width:88px;');
       const backBtn = mkBtn('←', backspaceOne, actionBaseCss + 'border:1px solid #c45b5b; background:#fff; color:#7a1b1b; font-size:24px; font-weight:800; min-width:76px;');
       actionRow.appendChild(spaceBtn);
@@ -5434,19 +5591,32 @@
 
     const renderStep = () => {
       if (wizard.step === 1) {
-        const cfr = getCfrPrompts();
-        const topTitle = cfr.topTitle || DEFAULT_CFR_PROMPTS.topTitle;
-        const topDesc  = cfr.topDescription || DEFAULT_CFR_PROMPTS.topDescription;
+        const topTitle = getLocalizedCfrPrompt('topTitle');
+        const topDesc  = getLocalizedCfrPrompt('topDescription');
+        const checked = isEnglishUi() ? 'checked' : '';
         overlay.innerHTML = `
           <div class="inner">
             <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px;">${escapeHtmlText(topTitle)}</h2>
             <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
             <p style="margin-top:24px; font-size:12px; color:#888; text-align:left;">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
-            <div class="actions">
-              <button type="button" id="kioskStep1NextBtn">次へ</button>
+            <div class="kiosk-start-bottom">
+              <label class="kiosk-start-en">
+                <input type="checkbox" id="kioskEnglishToggle" ${checked}>
+                <span>English version</span>
+              </label>
+              <div class="actions">
+                <button type="button" id="kioskStep1NextBtn">${t('次へ', 'Next')}</button>
+              </div>
             </div>
           </div>
         `;
+        const enToggle = overlay.querySelector('#kioskEnglishToggle');
+        if (enToggle) {
+          enToggle.addEventListener('change', () => {
+            setUiLanguage(enToggle.checked ? 'en' : 'ja');
+            renderStep();
+          });
+        }
         const nextBtn = overlay.querySelector('#kioskStep1NextBtn');
         if (nextBtn) {
           nextBtn.addEventListener('click', () => {
@@ -5461,30 +5631,30 @@
         overlay.innerHTML = `
           <div class="inner">
             <div style="margin:12px 0; padding:10px 12px; border-radius:8px; background:#f8fafc; border:1px solid #e0e7ff; font-size:13px;">
-              <div style="margin-bottom:6px; font-size:18px;">あなたの属性とニックネームを教えてください</div>
+              <div style="margin-bottom:6px; font-size:18px;">${t('あなたの属性とニックネームを教えてください', 'Tell us your profile and nickname')}</div>
               <div style="display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; font-size:18px;">
                 <div>
-                  <span>性別:</span>
-                  <label style="margin-left:4px;"><input type="radio" name="kioskGender" value="男"> 男</label>
-                  <label style="margin-left:4px;"><input type="radio" name="kioskGender" value="女"> 女</label>
-                  <label style="margin-left:4px;"><input type="radio" name="kioskGender" value="答えない"> 答えない</label>
+                  <span>${t('性別:', 'Gender:')}</span>
+                  <label style="margin-left:4px;"><input type="radio" name="kioskGender" value="男"> ${t('男', 'Male')}</label>
+                  <label style="margin-left:4px;"><input type="radio" name="kioskGender" value="女"> ${t('女', 'Female')}</label>
+                  <label style="margin-left:4px;"><input type="radio" name="kioskGender" value="答えない"> ${t('答えない', 'Prefer not to say')}</label>
                 </div>
               </div>
               <div style="margin-top:8px;">
-                <div style="margin-bottom:6px; font-size:18px;">ニックネーム（最大16文字）:</div>
-                <input type="text" id="kioskNicknameInput" placeholder="Guest" style="width:100%; max-width:520px; font-size:18px; padding:8px 10px; border-radius:8px; border:1px solid #ccc;" aria-label="ニックネーム（クリック入力）">
-                <div style="margin-bottom:6px; font-size:14px;">※ニックネームはみんなのチェックリスト画面などで表示されます:</div>
+                <div style="margin-bottom:6px; font-size:18px;">${t('ニックネーム（最大16文字）:', 'Nickname (max 16 chars):')}</div>
+                <input type="text" id="kioskNicknameInput" placeholder="Guest" style="width:100%; max-width:520px; font-size:18px; padding:8px 10px; border-radius:8px; border:1px solid #ccc;" aria-label="${t('ニックネーム（クリック入力）', 'Nickname (tap/click to input)')}">
+                <div style="margin-bottom:6px; font-size:14px;">${t('※ニックネームはみんなのチェックリスト画面などで表示されます:', 'The nickname may appear on checklist/result screens.')}</div>
                 <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;" id="kioskPadModes"></div>
                 <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;" id="kioskPadSubModes"></div>
                 <div id="kioskPadGrid" style="margin-top:8px; display:grid; grid-template-columns:repeat(10, minmax(0, 1fr)); gap:6px;"></div>
               </div>
             </div>
             <div style="margin-top:6px; font-size:18px; color:#666;">
-              ※入力した内容や選択内容は診断結果の表示や集計に使わせていただきます。
+              ${t('※入力した内容や選択内容は診断結果の表示や集計に使わせていただきます。', 'Your inputs and selections are used to show and aggregate diagnosis results.')}
             </div>
 
             <div class="actions">
-              <button type="button" id="kioskStep2NextBtn">次へ</button>
+              <button type="button" id="kioskStep2NextBtn">${t('次へ', 'Next')}</button>
             </div>
           </div>
         `;
@@ -5507,7 +5677,7 @@
             const genderInput = [...overlay.querySelectorAll('input[name="kioskGender"]')].find(r => r.checked);
             const gender = genderInput ? genderInput.value : '';
             if (!gender) {
-              alert('性別を選んでください。');
+              alert(t('性別を選んでください。', 'Please choose a gender option.'));
               return;
             }
             wizard.gender = gender;
@@ -5522,16 +5692,16 @@
       overlay.innerHTML = `
         <div class="inner">
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※該当する項目の選択はチェックボックスで行ってください。
+            ${t('※該当する項目の選択はチェックボックスで行ってください。', 'Use checkboxes to select matching items.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※画面は、左右・上下にスクロール、拡大・縮小表示できます。解像度によっては、青い〇のあるレーンを画面の左寄りに持ってくるとより使いやすくなります。
+            ${t('※画面は、左右・上下にスクロール、拡大・縮小表示できます。解像度によっては、青い〇のあるレーンを画面の左寄りに持ってくるとより使いやすくなります。', 'You can scroll horizontally/vertically and zoom in/out. Depending on resolution, it can be easier to keep the blue-circle lane near the left side.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ※地球マーク<span style="pointer-events:none;">🌐</span>はWikipediaなどのページを表示します。リンクをたどって同じ画面内で閲覧できますが、新しいウィンドウを開く操作や右クリックメニューなどは使えません。
+            ${t('※地球マーク', 'The globe icon')}<span style="pointer-events:none;">🌐</span>${t('はWikipediaなどのページを表示します。リンクをたどって同じ画面内で閲覧できますが、新しいウィンドウを開く操作や右クリックメニューなどは使えません。', ' opens pages like Wikipedia. You can follow links in the same view, but opening a new window/tab and context-menu actions are disabled.')}
           </div>
           <div class="actions">
-            <button type="button" id="kioskStartBtn">診断スタート</button>
+            <button type="button" id="kioskStartBtn">${t('診断スタート', 'Start Diagnosis')}</button>
           </div>
         </div>
       `;
@@ -5559,7 +5729,12 @@
     if (!window.kioskMode || kioskState.step !== 3) return;
     const list = (events[year] || []).filter(passesFilter);
     if (!list.length) {
-      openModalText('イベントがありません', `${year}年には現在、選択できるイベントが登録されていません。別の年をお試しください。`);
+      openModalText(
+        t('イベントがありません', 'No events'),
+        isEnglishUi()
+          ? `No selectable events are registered for ${year}. Please try another year.`
+          : `${year}年には現在、選択できるイベントが登録されていません。別の年をお試しください。`
+      );
       return;
     }
     const itemsHtml = list.map((it, idx) => {
@@ -5569,32 +5744,32 @@
       return `
         <label style="display:block; margin:4px 0; cursor:pointer; font-size:20px;">
           <input type="checkbox" name="kioskItem" value="${key}" data-idx="${idx}" ${checkedAttr} style="margin-right:6px;">
-          <strong>${it.label}</strong>
+          <strong>${escapeHtmlText(getPrimaryLabel(it))}</strong>
           ${it.genre ? `<span style="color:#666; font-size:17px;">[${Array.isArray(it.genre)?it.genre.join('・'):it.genre}]</span>` : ''}
         </label>
       `;
     }).join('');
 
     const html = `
-      <p><strong>${year}年</strong> のイベントの中から選んでください。</p>
+      <p>${isEnglishUi() ? `Select from events in <strong>${year}</strong>.` : `<strong>${year}年</strong> のイベントの中から選んでください。`}</p>
       <div style="max-height:320px; overflow-y:auto; margin-top:8px;">
         ${itemsHtml}
       </div>
-      <p style="margin-top:8px; font-size:17px; color:#666;">※すでに選んだものにはチェックが入っています。</p>
+      <p style="margin-top:8px; font-size:17px; color:#666;">${t('※すでに選んだものにはチェックが入っています。', 'Already-selected items are checked.')}</p>
       <div style="text-align:right; margin-top:12px;">
-        <button type="button" id="kioskChecklistOk" style="padding:6px 12px; border-radius:8px; border:none; background:#0d9488; color:#fff; cursor:pointer; font-weight:600;">決定</button>
+        <button type="button" id="kioskChecklistOk" style="padding:6px 12px; border-radius:8px; border:none; background:#0d9488; color:#fff; cursor:pointer; font-weight:600;">${t('決定', 'OK')}</button>
       </div>
     `;
-    openModal('イベント選択', html);
+    openModal(t('イベント選択', 'Event Selection'), html);
     const okBtn = document.getElementById('kioskChecklistOk');
     okBtn.addEventListener('click', () => {
       const checks = [...document.querySelectorAll('input[name="kioskItem"]:checked')];
       if (!checks.length) {
-        openModalText('選択が必要です', '少なくとも1つは選んでください。');
+        openModalText(t('選択が必要です', 'Selection required'), t('少なくとも1つは選んでください。', 'Please select at least one item.'));
         return;
       }
       if (checks.length > 3) {
-        openModalText('選びすぎです', '1～3個の範囲で選んでください。');
+        openModalText(t('選びすぎです', 'Too many selected'), t('1～3個の範囲で選んでください。', 'Please select between 1 and 3 items.'));
         return;
       }
       checks.forEach(chk => {
@@ -5713,10 +5888,17 @@
     const birthYear = (typeof probeBlue !== 'undefined' && probeBlue.birthYear != null) ? probeBlue.birthYear : '';
     const gender = kioskState.gender || '';
     const nickname = normalizeKioskNickname(kioskState.nickname || '');
-    const lines = kioskState.selections.map(s => `${s.year}年: ${s.label}`).join('\n');
+    const lines = kioskState.selections.map(s => {
+      const source = (events[s.year] || []).find(it => it.label === s.label) || { label: s.label, label_en: '' };
+      const label = getPrimaryLabel(source) || s.label;
+      return isEnglishUi() ? `${s.year}: ${label}` : `${s.year}年: ${label}`;
+    }).join('\n');
     const cfr = getCfrPrompts();
-    const head = headOverride || cfr.geminiPromptHead || DEFAULT_CFR_PROMPTS.geminiPromptHead;
-    return head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`;
+    const localizedDefaultHead = getLocalizedCfrPrompt('geminiPromptHead');
+    const head = headOverride || (isEnglishUi() ? (cfr.geminiPromptHead_en || localizedDefaultHead) : (cfr.geminiPromptHead || localizedDefaultHead));
+    return isEnglishUi()
+      ? (head + `Nickname: ${nickname}\nGender: ${gender}\nBirth year: ${birthYear}\n\nSelected content (year: event):\n${lines}`)
+      : (head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`);
   }
   const GEMINI_MODEL = 'gemini-2.5-flash-lite';
   // ローカル開発時（localhost）にブラウザから直接Gemini APIを呼ぶヘルパー
@@ -5927,7 +6109,9 @@
     if (geminiResult.ok) {
       report = geminiResult.text;
     } else {
-      report = '【診断の取得に失敗しました】\n\n' + (geminiResult.error || '不明なエラー') + '\n\n※上記の理由でAI診断を取得できなかったため、以下はダミーの診断文です。\n\n' + dummyReport;
+      report = isEnglishUi()
+        ? ('[Failed to get AI diagnosis]\n\n' + (geminiResult.error || 'Unknown error') + '\n\nBecause AI diagnosis could not be retrieved, the dummy diagnosis text is shown below.\n\n' + dummyReport)
+        : ('【診断の取得に失敗しました】\n\n' + (geminiResult.error || '不明なエラー') + '\n\n※上記の理由でAI診断を取得できなかったため、以下はダミーの診断文です。\n\n' + dummyReport);
     }
     kioskState.step = 4;
     updateKioskHint();
@@ -5938,25 +6122,24 @@
       lastProbeEventYear = null;
     }
     const nickname = normalizeKioskNickname(kioskState.nickname || '');
-    const cfr = getCfrPrompts();
-    const topTitle = cfr.topTitle || DEFAULT_CFR_PROMPTS.topTitle;
+    const topTitle = getLocalizedCfrPrompt('topTitle');
     const html = `
-      <h4>あなたの${escapeHtmlText(topTitle)}の結果です</h4>
-      <p style="margin:8px 0 10px; font-size:14px;">ニックネーム: <strong>${escapeHtmlText(nickname)}</strong></p>
+      <h4>${isEnglishUi() ? `Your ${escapeHtmlText(topTitle)} Result` : `あなたの${escapeHtmlText(topTitle)}の結果です`}</h4>
+      <p style="margin:8px 0 10px; font-size:14px;">${t('ニックネーム', 'Nickname')}: <strong>${escapeHtmlText(nickname)}</strong></p>
       <p style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${report.replace(/</g,'&lt;')}</p>
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
-        <h4>簡易グラフィック（みんなとの比較）</h4>
+        <h4>${t('簡易グラフィック（みんなとの比較）', 'Simple Graphic (comparison with others)')}</h4>
         ${aggregateHtml}
       </div>
       <div style="margin-top:16px; display:flex; flex-wrap:wrap; gap:16px;">
         <div>
-          <button type="button" id="kioskQrPersonalBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">個人レポートのQRを表示</button>
+          <button type="button" id="kioskQrPersonalBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('個人レポートのQRを表示', 'Show QR for personal report')}</button>
         </div>
       </div>
-      <p style="margin-top:16px; font-size:12px; color:#666;">QRを読み取ると、チェックしたイベント一覧と診断結果のテキストが表示されます。</p>
+      <p style="margin-top:16px; font-size:12px; color:#666;">${t('QRを読み取ると、チェックしたイベント一覧と診断結果のテキストが表示されます。', 'Scanning the QR shows the checked event list and diagnosis text.')}</p>
     `;
     kioskModalPhase = 'diag';
-    openModal('診断結果', html, { footer: 'next' });
+    openModal(t('診断結果', 'Diagnosis Result'), html, { footer: 'next' });
     const pBtn = document.getElementById('kioskQrPersonalBtn');
     const gBtn = document.getElementById('kioskQrGroupBtn');
     const gBox = document.getElementById('kioskQrGroup');
@@ -5965,12 +6148,16 @@
         const selectedListText = (kioskState.selections || [])
           .slice()
           .sort((a, b) => a.year === b.year ? a.label.localeCompare(b.label) : a.year - b.year)
-          .map(s => `${s.year}年: ${s.label}`)
+          .map(s => {
+            const source = (events[s.year] || []).find(it => it.label === s.label) || { label: s.label, label_en: '' };
+            const label = getPrimaryLabel(source) || s.label;
+            return isEnglishUi() ? `${s.year}: ${label}` : `${s.year}年: ${label}`;
+          })
           .join('\n');
         const fullReportText =
-          '【ニックネーム】\n' + nickname +
-          '\n\n【チェックした項目】\n' + (selectedListText || '（なし）') +
-          '\n\n【診断結果】\n' + report;
+          (isEnglishUi() ? '[Nickname]\n' : '【ニックネーム】\n') + nickname +
+          (isEnglishUi() ? '\n\n[Checked items]\n' : '\n\n【チェックした項目】\n') + (selectedListText || (isEnglishUi() ? '(none)' : '（なし）')) +
+          (isEnglishUi() ? '\n\n[Diagnosis Result]\n' : '\n\n【診断結果】\n') + report;
         const isTooBigError = (err) => {
           const s = String((err && err.message) ? err.message : (err || '')).toLowerCase();
           return s.includes('too big') || s.includes('too long') || s.includes('code length overflow') || s.includes('input too long');
@@ -5991,7 +6178,7 @@
         if (overlay) overlay.remove();
         overlay = document.createElement('div');
         overlay.id = 'kioskQrPersonalOverlay';
-        overlay.innerHTML = '<div class="kiosk-qr-img" style="color:#fff;font-size:18px;">QR生成中…</div><button type="button" class="kiosk-qr-close">閉じる</button>';
+        overlay.innerHTML = '<div class="kiosk-qr-img" style="color:#fff;font-size:18px;">' + t('QR生成中…', 'Generating QR...') + '</div><button type="button" class="kiosk-qr-close">' + t('閉じる', 'Close') + '</button>';
         overlay.querySelector('.kiosk-qr-close').addEventListener('click', () => overlay.remove());
         document.body.appendChild(overlay);
         const showQrOverlay = (dataUrl) => {
@@ -5999,33 +6186,33 @@
           wrap.innerHTML = '';
           const img = document.createElement('img');
           img.src = dataUrl;
-          img.alt = '個人レポートQR';
+          img.alt = t('個人レポートQR', 'Personal report QR');
           wrap.appendChild(img);
         };
         const showError = (msg) => {
           const wrap = overlay.querySelector('.kiosk-qr-img');
           wrap.style.color = '#f88';
-          wrap.textContent = msg || 'QRの生成に失敗しました';
+          wrap.textContent = msg || t('QRの生成に失敗しました', 'Failed to generate QR');
         };
         const runGenerate = () => {
           const qrSize = Math.min(520, Math.min(window.innerWidth, window.innerHeight) - 80);
           try {
             const Q = window.QRCode || window.qrcode || (typeof QRCode !== 'undefined' ? QRCode : null);
             if (!Q) {
-              showError('QRライブラリが読み込めません');
+              showError(t('QRライブラリが読み込めません', 'QR library could not be loaded'));
               return;
             }
             const canvas = document.createElement('canvas');
             const opts = { width: qrSize, margin: 2, errorCorrectionLevel: 'L' };
             const attempt = (idx) => {
               if (idx >= candidateTexts.length) {
-                showError('QRに入りきらないため生成できませんでした');
+                showError(t('QRに入りきらないため生成できませんでした', 'Could not generate QR because content is too long'));
                 return;
               }
               const text = candidateTexts[idx];
               const onTooBigOrFail = (err) => {
                 if (isTooBigError(err)) return attempt(idx + 1);
-                showError('生成エラー');
+                showError(t('生成エラー', 'Generation error'));
                 console.error(err);
               };
               if (typeof Q.toCanvas === 'function') {
@@ -6033,7 +6220,7 @@
                   if (err) return onTooBigOrFail(err);
                   try {
                     showQrOverlay(canvas.toDataURL('image/png'));
-                  } catch (e) { showError('画像の作成に失敗'); console.error(e); }
+                  } catch (e) { showError(t('画像の作成に失敗', 'Failed to create image')); console.error(e); }
                 });
                 return;
               }
@@ -6051,12 +6238,12 @@
                 }
                 return;
               }
-              showError('QR APIが見つかりません');
+              showError(t('QR APIが見つかりません', 'QR API not found'));
             };
             attempt(0);
             return;
           } catch (e) {
-            showError('QRの生成に失敗しました');
+            showError(t('QRの生成に失敗しました', 'Failed to generate QR'));
             console.error(e);
           }
         };
@@ -6073,7 +6260,7 @@
           s2.src = 'https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js';
           s2.crossOrigin = 'anonymous';
           s2.onload = runGenerate;
-          s2.onerror = () => showError('QRライブラリの読み込みに失敗しました');
+          s2.onerror = () => showError(t('QRライブラリの読み込みに失敗しました', 'Failed to load QR library'));
           document.head.appendChild(s2);
         };
         document.head.appendChild(script);
@@ -6090,7 +6277,7 @@
     if (!window.kioskMode) return;
     const list = kioskState.selections.slice();
     if (!list.length) {
-      openModalText('選択がありません', 'まだコンテンツが選択されていません。');
+      openModalText(t('選択がありません', 'No selections'), t('まだコンテンツが選択されていません。', 'No content has been selected yet.'));
       return;
     }
     const itemsHtml = list
@@ -6104,12 +6291,13 @@
         const hasJpUrl = !!jpUrl;
         const hasEnUrl = !!enUrl;
         const labelEn = it.label_en || '';
+        const displayLabel = getPrimaryLabel(it) || s.label;
         return `
           <li>
             <span style="font-size:18px; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <span style="min-width:3em; color:#666; flex-shrink:0;">${year}年</span>
-              <strong style="flex-shrink:0;">${s.label}</strong>
-              ${hasJpUrl ? `<span class="probe-web-icon" data-web-url="${jpUrl}" title="関連ページを表示" style="cursor:pointer; flex-shrink:0;">🌐</span>` : ''}
+              <span style="min-width:3em; color:#666; flex-shrink:0;">${isEnglishUi() ? year : (year + '年')}</span>
+              <strong style="flex-shrink:0;">${escapeHtmlText(displayLabel)}</strong>
+              ${hasJpUrl ? `<span class="probe-web-icon" data-web-url="${jpUrl}" title="${t('関連ページを表示', 'Open related page')}" style="cursor:pointer; flex-shrink:0;">🌐</span>` : ''}
               <span style="display:inline; font-size:18px;">${labelEn ? `<span style="color:#444;">${labelEn}</span>` : ''}${(labelEn && hasEnUrl) ? ' ' : ''}${hasEnUrl ? `<span class="probe-web-icon" data-web-url="${enUrl}" title="English page" style="cursor:pointer;">🌐</span>` : ''}</span>
             </span>
           </li>
@@ -6117,17 +6305,17 @@
       })
       .join('');
     const html = `
-      <p style="font-size:20px;">これまでにチェックした項目の一覧です。OKなら「終了して診断」を選んでください。</p>
+      <p style="font-size:20px;">${t('これまでにチェックした項目の一覧です。OKなら「終了して診断」を選んでください。', 'This is the list of items you have checked. If OK, choose "Finish and Diagnose".')}</p>
       <ul style="max-height:300px; overflow-y:auto; padding-left:18px; font-size:18px; margin-top:8px;">
         ${itemsHtml}
       </ul>
       <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
-        <button type="button" id="kioskBackToCheckBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">チェックに戻る</button>
-        <button type="button" id="kioskGoResultBtn" style="padding:6px 12px; border-radius:8px; border:none; background:#0d9488; color:#fff; cursor:pointer; font-weight:600;">終了して診断する</button>
+        <button type="button" id="kioskBackToCheckBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('チェックに戻る', 'Back to checklist')}</button>
+        <button type="button" id="kioskGoResultBtn" style="padding:6px 12px; border-radius:8px; border:none; background:#0d9488; color:#fff; cursor:pointer; font-weight:600;">${t('終了して診断する', 'Finish and Diagnose')}</button>
       </div>
     `;
     kioskModalPhase = null;
-    openModal('選択内容の確認', html, { footer: 'none' });
+    openModal(t('選択内容の確認', 'Review selections'), html, { footer: 'none' });
     const backBtn = document.getElementById('kioskBackToCheckBtn');
     const goBtn = document.getElementById('kioskGoResultBtn');
     if (backBtn) {
@@ -6138,8 +6326,8 @@
     if (goBtn) {
       goBtn.addEventListener('click', () => {
         closeModal();
-        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>AIで診断を生成しています。<br>しばらくお待ちください。</p></div>';
-        openModal('診断中', loadingHtml, { footer: 'none' });
+        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('AIで診断を生成しています。<br>しばらくお待ちください。', 'Generating AI diagnosis...<br>Please wait.') + '</p></div>';
+        openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
         showKioskResult();
       });
     }
@@ -6148,19 +6336,21 @@
   const formatSessionRow = (ses, idx, formatDate) => {
     const nickText = (ses.nickname != null && ses.nickname !== '') ? (String(ses.nickname).replace(/</g, '&lt;')) : '—';
     const genderText = (ses.gender != null && ses.gender !== '') ? ses.gender : '—';
-    const birthYearText = (ses.birthYear != null && ses.birthYear !== '') ? (ses.birthYear + '年生') : '—';
-    const lines = (ses.selections || []).map(s => `${s.year}年: ${(s.label || '').replace(/</g, '&lt;')}`).join('<br>');
-    return `<div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #eee;"><strong>${idx + 1}. ${formatDate(ses.timestamp)}</strong> ニックネーム: ${nickText} / 性別: ${genderText} / 生年: ${birthYearText}（選択${(ses.selections || []).length}件）<br><span style="color:#444;">${lines || '（なし）'}</span></div>`;
+    const birthYearText = (ses.birthYear != null && ses.birthYear !== '') ? (isEnglishUi() ? (ses.birthYear + '') : (ses.birthYear + '年生')) : '—';
+    const lines = (ses.selections || []).map(s => (isEnglishUi() ? `${s.year}: ${(s.label || '').replace(/</g, '&lt;')}` : `${s.year}年: ${(s.label || '').replace(/</g, '&lt;')}`)).join('<br>');
+    return isEnglishUi()
+      ? `<div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #eee;"><strong>${idx + 1}. ${formatDate(ses.timestamp)}</strong> Nickname: ${nickText} / Gender: ${genderText} / Birth year: ${birthYearText} (${(ses.selections || []).length} selected)<br><span style="color:#444;">${lines || '(none)'}</span></div>`
+      : `<div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #eee;"><strong>${idx + 1}. ${formatDate(ses.timestamp)}</strong> ニックネーム: ${nickText} / 性別: ${genderText} / 生年: ${birthYearText}（選択${(ses.selections || []).length}件）<br><span style="color:#444;">${lines || '（なし）'}</span></div>`;
   };
 
   async function showKioskOverallResult() {
     if (!window.kioskMode) return;
-    const cfr = getCfrPrompts();
-    const overallTitle = cfr.overallTitle || DEFAULT_CFR_PROMPTS.overallTitle;
-    const overallDesc  = cfr.overallDescription || DEFAULT_CFR_PROMPTS.overallDescription;
+    const overallTitle = getLocalizedCfrPrompt('overallTitle');
+    const overallDesc  = getLocalizedCfrPrompt('overallDescription');
     let secondPromptHtml = '';
 
     // プロンプト2が設定されている場合は、診断結果画面の「次へ」でここに来たタイミングで追加のGemini呼び出しを行う
+    const cfr = getCfrPrompts();
     const secondHead = cfr.secondPromptHead || DEFAULT_CFR_PROMPTS.secondPromptHead || '';
     if (secondHead && secondHead.trim()) {
       try {
@@ -6168,12 +6358,12 @@
         if (secondResult && secondResult.ok && secondResult.text) {
           secondPromptHtml = `
       <div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">
-        <h4 style="margin:0 0 8px; font-size:16px;">追加のおすすめコンテンツ</h4>
+        <h4 style="margin:0 0 8px; font-size:16px;">${t('追加のおすすめコンテンツ', 'Additional recommended content')}</h4>
         <p style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${secondResult.text.replace(/</g,'&lt;')}</p>
       </div>`;
         } else if (secondResult && !secondResult.ok && secondResult.error) {
           secondPromptHtml = `
-      <p style="margin-top:12px; font-size:12px; color:#b91c1c;">※ 追加診断の取得に失敗しました: ${secondResult.error.replace(/</g,'&lt;')}</p>`;
+      <p style="margin-top:12px; font-size:12px; color:#b91c1c;">${t('※ 追加診断の取得に失敗しました: ', '* Failed to fetch additional diagnosis: ')}${secondResult.error.replace(/</g,'&lt;')}</p>`;
         }
       } catch (e) {
         // 追加診断が失敗しても全体画面の表示自体は続行
@@ -6193,25 +6383,25 @@
         const data = await res.json().catch(() => ({}));
         const serverList = (data && data.results && Array.isArray(data.results)) ? data.results : [];
         serverHtml = serverList.length === 0
-          ? '<p style="font-size:14px; color:#666;">サーバーにはまだ蓄積されたデータはありません。</p>'
-          : `<p style="margin:0 0 8px; font-size:16px;">サーバーに蓄積されたチェック内容（全端末・${serverList.length}件）：</p><div style="max-height:320px; overflow-y:auto; border:1px solid #ddd; border-radius:8px; padding:10px 12px; background:#f0f8ff; font-size:14px; line-height:1.6;">${serverList.map((ses, idx) => formatSessionRow(ses, idx, formatDate)).join('')}</div>`;
+          ? '<p style="font-size:14px; color:#666;">' + t('サーバーにはまだ蓄積されたデータはありません。', 'No data has been accumulated on the server yet.') + '</p>'
+          : `<p style="margin:0 0 8px; font-size:16px;">${isEnglishUi() ? `Accumulated checks on server (all devices, ${serverList.length} records):` : `サーバーに蓄積されたチェック内容（全端末・${serverList.length}件）：`}</p><div style="max-height:320px; overflow-y:auto; border:1px solid #ddd; border-radius:8px; padding:10px 12px; background:#f0f8ff; font-size:14px; line-height:1.6;">${serverList.map((ses, idx) => formatSessionRow(ses, idx, formatDate)).join('')}</div>`;
       }
     } catch (_) {}
-    const accumulatedHtml = serverHtml || '<p style="font-size:14px; color:#666;">サーバー蓄積データを取得できませんでした。</p>';
+    const accumulatedHtml = serverHtml || ('<p style="font-size:14px; color:#666;">' + t('サーバー蓄積データを取得できませんでした。', 'Failed to fetch server-accumulated data.') + '</p>');
     const html = `
       <p style="font-size:18px;">${overallDesc.replace(/</g,'&lt;')}</p>
       ${secondPromptHtml}
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
-        <h4 style="margin:0 0 8px; font-size:16px;">蓄積されたチェック内容</h4>
+        <h4 style="margin:0 0 8px; font-size:16px;">${t('蓄積されたチェック内容', 'Accumulated checked data')}</h4>
         ${accumulatedHtml}
       </div>
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
-        <p style="margin:0 0 6px; font-size:18px;">Xnative Timeline に興味のある方はこちら：</p>
+        <p style="margin:0 0 6px; font-size:18px;">${t('Xnative Timeline に興味のある方はこちら：', 'Interested in Xnative Timeline?')}</p>
         <button type="button" id="kioskXnativeBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #ccc; background:#f5f5f5; cursor:pointer; font-size:18px;">
-          Xnative Timeline の年表一覧を表示
+          ${t('Xnative Timeline の年表一覧を表示', 'Show Xnative Timeline list')}
         </button>
         <div id="kioskXnativeFrameWrap" style="margin-top:10px; width:100%; height:260px; display:none;">
-          <iframe src="https://nativemap2.pages.dev/" title="Xnative Timeline 一覧"
+          <iframe src="https://nativemap2.pages.dev/" title="${t('Xnative Timeline 一覧', 'Xnative Timeline list')}"
                   style="width:100%; height:100%; border:1px solid #ccc; border-radius:8px; background:#fff;"></iframe>
         </div>
       </div>
@@ -6230,18 +6420,17 @@
   let kioskUsageMouseHandler = null;
   function showKioskUsageScreen() {
     if (!window.kioskMode) return;
-    const cfr = getCfrPrompts();
-    const desc = cfr.usageDescription || DEFAULT_CFR_PROMPTS.usageDescription;
+    const desc = getLocalizedCfrPrompt('usageDescription');
     const html = `
       <div style="height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:14px; color:#666; gap:16px;">
         <div>${(desc || '').replace(/</g,'&lt;').replace(/\\n/g,'<br>')}</div>
         <button type="button" id="kioskUsageStartBtn" style="padding:8px 16px; border-radius:10px; border:1px solid #ccc; background:#007bff; color:#fff; cursor:pointer;">
-          スタート
+          ${t('スタート', 'Start')}
         </button>
       </div>
     `;
     kioskModalPhase = 'usage';
-    const usageTitle = cfr.usageTitle || DEFAULT_CFR_PROMPTS.usageTitle;
+    const usageTitle = getLocalizedCfrPrompt('usageTitle');
     openModal(usageTitle, html, { footer: 'none' });
     const startBtn = document.getElementById('kioskUsageStartBtn');
     if (startBtn) {
@@ -6252,6 +6441,7 @@
   }
 
   function resetKioskToStart() {
+    setUiLanguage(defaultUiLanguage);
     // 状態リセット
     kioskState.step = 0;
     kioskState.selections = [];
@@ -6333,7 +6523,7 @@
 
   // ヘルプ（画面展開に沿った構成）
   document.getElementById('helpBtn').addEventListener('click', ()=>{
-    const helpHtml = `
+    const helpHtmlJa = `
       <h2>概要</h2>
       <p>自分が生まれて何歳の頃に何に出会ったかをチェックしていくことで、AIによる分析を行うシステムです。年表データごとにAIの分析方法が異なっています。何年のときに自分は何歳だったか分かるようになっていて、Wikipediaなどの関連ページも容易に見ることができます。当時の状況を思い浮かべたり確認しながらチェックしていき、楽しみながら自分の人生を俯瞰しながらチェックしていってください。自分の生まれる前の事柄もあるので年を示すプローブの〇は、生年よりも前に動かすこともできます。項目がバランスよくチェックされたか確認したら「診断」へ進んでください。生年と性別、チェック項目を集計、他の人たちのチェック内容との比較や分析も行います（現時点では未実装）。それにより、たとえば日本のコンテンツ消費者（広い意味でのオタク）を64分類するといったことを目指しています。</p>
       <h2>1. 画面の流れ（診断モード）</h2>
@@ -6374,7 +6564,40 @@
       </ul>
       <div class="credit">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</div>
     `;
-    openModal('ヘルプ - ネイティブマップ', helpHtml);
+    const helpHtmlEn = `
+      <h2>Overview</h2>
+      <p>This system lets you check what you encountered at each age since birth, then runs AI-based analysis. You can verify your age in each year, review related pages such as Wikipedia, and select items while recalling your context at the time. The upper circle can be moved before your birth year as well. After checking items with a good balance, proceed to diagnosis.</p>
+      <h2>1. Flow (Diagnosis Mode)</h2>
+      <ol>
+        <li><strong>Start screen</strong> -> Read title/description and press <strong>Next</strong>.</li>
+        <li><strong>Profile input</strong> -> Enter gender and nickname, then press <strong>Next</strong>.</li>
+        <li><strong>Start diagnosis</strong> -> Press <strong>Start Diagnosis</strong>.</li>
+        <li><strong>Step 1: Genres</strong> -> Choose genres and press <strong>Apply</strong>.</li>
+        <li><strong>Step 2: Birth year</strong> -> Drag the <strong>upper blue circle</strong> to your birth year.</li>
+        <li><strong>Step 3: Event selection</strong> -> Move the <strong>lower blue circle</strong>, then check 10+ items.</li>
+        <li><strong>Diagnosis</strong> -> Press <strong>Diagnose</strong> to run AI diagnosis.</li>
+      </ol>
+      <h2>2. Basic Operations</h2>
+      <ul>
+        <li><strong>Scroll:</strong> mouse wheel / trackpad / keyboard. On mobile, use touch gestures.</li>
+        <li><strong>Search:</strong> enter a label and press <strong>Search</strong>. Use <strong>Prev/Next</strong> to move among hits.</li>
+        <li><strong>Filtering:</strong> use the <strong>Genres</strong> menu.</li>
+        <li><strong>Year controls (mobile):</strong> use <strong>▼Year +</strong> and <strong>▲Year -</strong>.</li>
+      </ul>
+      <h2>3. Checklist and Web Preview</h2>
+      <ul>
+        <li><strong>Checkboxes:</strong> check/uncheck items used for diagnosis.</li>
+        <li><strong>Globe icon 🌐:</strong> on PC, hover to preview pages. On mobile, tap to open a centered web view and tap outside to close.</li>
+      </ul>
+      <h2>4. Diagnosis and Genres</h2>
+      <p>After checking 10 or more items, the <strong>Diagnose</strong> button becomes available.</p>
+      <h5>Genres (${getTotalItemCount()} total items)</h5>
+      <ul>
+        ${generateGenreListWithCounts()}
+      </ul>
+      <div class="credit">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</div>
+    `;
+    openModal(t('ヘルプ - ネイティブマップ', 'Help - Xnative/Timeline'), isEnglishUi() ? helpHtmlEn : helpHtmlJa);
   });
 
   // ===== スモークテスト =====
