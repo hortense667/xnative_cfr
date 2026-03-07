@@ -718,7 +718,7 @@
   function applyUiLanguage() {
     document.documentElement.lang = isEnglishUi() ? 'en' : 'ja';
     const headerTitle = document.querySelector('header strong');
-    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.0';
+    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.0h';
     const impLabel = selImp && selImp.parentElement;
     if (impLabel) impLabel.childNodes[0].nodeValue = t('重要度', 'Importance');
     if (selImp && selImp.options && selImp.options.length > 0) selImp.options[0].text = t('すべて', 'All');
@@ -1557,7 +1557,28 @@
   function getCfrPrompts() {
     return activeCfrPrompts || DEFAULT_CFR_PROMPTS;
   }
+  function getLocalizedTopTitleLines() {
+    const cfr = getCfrPrompts();
+    const en = isEnglishUi();
+    const defaults = en ? DEFAULT_CFR_PROMPTS_EN : DEFAULT_CFR_PROMPTS;
+    const localizedTopTitle = en
+      ? (cfr.topTitle_en || defaults.topTitle || cfr.topTitle || DEFAULT_CFR_PROMPTS.topTitle || '')
+      : (cfr.topTitle || defaults.topTitle || '');
+    return String(localizedTopTitle)
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  }
+  function getLocalizedTopTitleText() {
+    const lines = getLocalizedTopTitleLines();
+    if (lines.length) return lines.join(' ');
+    return isEnglishUi() ? DEFAULT_CFR_PROMPTS_EN.topTitle : DEFAULT_CFR_PROMPTS.topTitle;
+  }
   function getLocalizedCfrPrompt(key) {
+    if (key === 'topTitle') {
+      return getLocalizedTopTitleText();
+    }
     const cfr = getCfrPrompts();
     if (isEnglishUi()) {
       const enKey = key + '_en';
@@ -5597,12 +5618,14 @@
 
     const renderStep = () => {
       if (wizard.step === 1) {
-        const topTitle = getLocalizedCfrPrompt('topTitle');
+        const topTitleLines = getLocalizedTopTitleLines();
         const topDesc  = getLocalizedCfrPrompt('topDescription');
         const checked = isEnglishUi() ? 'checked' : '';
         overlay.innerHTML = `
           <div class="inner">
-            <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px;">${escapeHtmlText(topTitle)}</h2>
+            <h2 style="font-size:24px; line-height:1.4; margin-bottom:10px; text-align:center;">
+              ${topTitleLines.map(line => `<span style="display:block;">${escapeHtmlText(line)}</span>`).join('')}
+            </h2>
             <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
             <p style="margin-top:24px; font-size:12px; color:#888; text-align:left;">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
             <div class="kiosk-start-bottom">
