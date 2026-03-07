@@ -1564,7 +1564,12 @@
     const localizedTopTitle = en
       ? (cfr.topTitle_en || defaults.topTitle || cfr.topTitle || DEFAULT_CFR_PROMPTS.topTitle || '')
       : (cfr.topTitle || defaults.topTitle || '');
-    return String(localizedTopTitle)
+    const normalizedTopTitle = String(localizedTopTitle)
+      // cfr_prompts.json で "\\n" と書かれていても改行として扱う
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\n');
+    return normalizedTopTitle
       .split(/\r?\n/)
       .map(s => s.trim())
       .filter(Boolean)
