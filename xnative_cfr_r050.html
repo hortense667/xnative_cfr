@@ -616,7 +616,6 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <!-- 既定の年表JSON（初回ロード時のみ使用）。以降は localStorage を優先。-->
   <script id="events-json" type="application/json">{
@@ -5947,44 +5946,11 @@
       : (head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`);
   }
   const GEMINI_MODEL = 'gemini-2.5-flash-lite';
-  // ローカル開発時（localhost）にブラウザから直接Gemini APIを呼ぶヘルパー
   function getTemperature() {
     const cfr = getCfrPrompts();
     const t = cfr.temperature ?? DEFAULT_CFR_PROMPTS.temperature ?? 0.9;
     const n = Number(t);
     return (Number.isNaN(n) || n < 0 || n > 2) ? 0.9 : n;
-  }
-
-  async function callGeminiDirect(apiKey, prompt) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const temp = getTemperature();
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 2048, temperature: temp }
-        })
-      });
-      let data = null;
-      try {
-        const raw = await res.text();
-        if (raw) data = JSON.parse(raw);
-      } catch (_) {}
-      if (!res.ok) {
-        let errMsg = `HTTP ${res.status}`;
-        if (data && data.error && data.error.message) errMsg += ': ' + data.error.message;
-        else if (data && data.error) errMsg += ': ' + JSON.stringify(data.error);
-        return { ok: false, error: errMsg };
-      }
-      const text = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : null;
-      if (text && text.trim()) return { ok: true, text: text.trim() };
-      return { ok: false, error: 'APIは応答しましたが、診断テキストが含まれていませんでした。' };
-    } catch (e) {
-      const msg = (e && e.message) ? e.message : String(e);
-      return { ok: false, error: '通信エラー: ' + msg };
-    }
   }
 
   // Cloudflare / Netlify などのサーバ側で環境変数を使って呼び出す場合のバックエンド経由呼び出し
@@ -6056,30 +6022,14 @@
       return await callOpenAiViaBackend(prompt);
     }
 
-    const apiKey = (typeof window !== 'undefined' && window.GEMINI_API_KEY) ? String(window.GEMINI_API_KEY).trim() : '';
-    const isLocalhost =
-      typeof location !== 'undefined' &&
-      (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-
-    // 1) ローカル開発: localhost かつ window.GEMINI_API_KEY がある場合は従来どおりブラウザから直接呼ぶ
-    if (isLocalhost && apiKey) {
-      return await callGeminiDirect(apiKey, prompt);
-    }
-
-    // 2) 本番など: Cloudflare / Netlify のサーバレス関数経由で呼ぶ
+    // Gemini は常にバックエンド経由で呼び出す（APIキーをクライアントに露出させない）
     const backendResult = await callGeminiViaBackend(prompt);
     if (backendResult.ok) return backendResult;
 
-    // 3) バックエンドが未設定だが、どうしてもフロントから直接呼びたい場合のフォールバック（キーは露出します）
-    if (!isLocalhost && apiKey) {
-      console.warn('バックエンドが見つからないため、フロントエンドから直接Gemini APIを呼び出します（APIキーはクライアントに露出します）。');
-      return await callGeminiDirect(apiKey, prompt);
-    }
-
-    // 4) どちらも使えない場合
+    // バックエンド経由に失敗した場合
     return {
       ok: false,
-      error: backendResult.error || 'Gemini APIの呼び出し方法が構成されていません。（環境変数付きバックエンドか、ローカル用config.jsを設定してください）'
+      error: backendResult.error || 'Gemini API のバックエンド呼び出しに失敗しました。サーバー設定を確認してください。'
     };
   }
 
