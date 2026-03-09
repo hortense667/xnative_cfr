@@ -22,7 +22,7 @@ const RATE_LIMIT_WINDOW_MS = toPositiveInt(process.env.RATE_LIMIT_WINDOW_MS, 60 
 const RATE_LIMIT_GET_RESULTS_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_GET_RESULTS_PER_MIN, 60);
 const RATE_LIMIT_POST_RESULT_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_RESULT_PER_MIN, 30);
 const RATE_LIMIT_POST_AI_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_AI_PER_MIN, 10);
-const MAX_PROMPT_CHARS = toPositiveInt(process.env.MAX_PROMPT_CHARS, 12000);
+const MAX_PROMPT_CHARS = toPositiveInt(process.env.MAX_PROMPT_CHARS, 20000);
 
 const rateLimitBuckets = new Map();
 

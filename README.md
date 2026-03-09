@@ -66,6 +66,8 @@
 - **診断API:** フロントは `cfr_prompts.json` の `aiProvider` に応じて `/api/gemini-diagnosis` または `/api/openai-diagnosis` を呼ぶ。サーバーは失敗時に他方へフォールバック可能。
 - **蓄積:** 診断完了時に `POST /api/diagnostic-result` で生年・性別・ニックネーム・チェックしたイベント（年・イベント名・ジャンル等）を送信。`GET /api/diagnostic-results` で一覧取得可能。
 - **デプロイ:** Railway 向け手順は `RAILWAY_DEPLOY.md`、Fly.io は `FLY_DEPLOY.md` を参照。APIキーは環境変数のみ。蓄積の永続化は Volume + `DATA_DIR` を推奨。
+- **アクセス制限:** 予期しないアクセスや過負荷を抑えるため、APIには回数制限・入力サイズ制限を設けています。条件によっては `429`（Too Many Requests）や `413`（Payload Too Large）を返すことがあります。
+- **`MAX_PROMPT_CHARS` の調整:** `MAX_PROMPT_CHARS` は、読み込むデータ量に応じて調整が必要です。現状は「チェックリスト約1000件」を想定し、`20000` を目安に設定しています。
 
 ---
 
