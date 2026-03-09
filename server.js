@@ -23,6 +23,7 @@ const RATE_LIMIT_GET_RESULTS_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_GET_
 const RATE_LIMIT_POST_RESULT_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_RESULT_PER_MIN, 30);
 const RATE_LIMIT_POST_AI_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_AI_PER_MIN, 10);
 const MAX_PROMPT_CHARS = toPositiveInt(process.env.MAX_PROMPT_CHARS, 20000);
+const BACKUP_RETENTION_DAYS = toPositiveInt(process.env.BACKUP_RETENTION_DAYS, 31);
 
 const rateLimitBuckets = new Map();
 
@@ -98,6 +99,7 @@ function validatePromptField(prompt) {
 // 蓄積データの保存先（Railway で永続化する場合は Volume を DATA_DIR にマウント推奨）
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DIAGNOSTIC_RESULTS_FILE = path.join(DATA_DIR, 'diagnostic-results.json');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 
 function sleep(ms) {
@@ -108,6 +110,53 @@ function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
+  if (!fs.existsSync(BACKUP_DIR)) {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  }
+}
+
+function getDateStamp() {
+  const now = new Date();
+  const yyyy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function deleteExpiredBackups() {
+  try {
+    const entries = fs.readdirSync(BACKUP_DIR, { withFileTypes: true });
+    const now = Date.now();
+    const maxAgeMs = BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!/^diagnostic-results-\d{4}-\d{2}-\d{2}\.json$/.test(entry.name)) continue;
+      const fullPath = path.join(BACKUP_DIR, entry.name);
+      try {
+        const stat = fs.statSync(fullPath);
+        if ((now - stat.mtimeMs) > maxAgeMs) {
+          fs.unlinkSync(fullPath);
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+
+function ensureDailyBackup() {
+  ensureDataDir();
+  const dateStamp = getDateStamp();
+  const backupPath = path.join(BACKUP_DIR, `diagnostic-results-${dateStamp}.json`);
+  if (fs.existsSync(backupPath)) return;
+  try {
+    if (fs.existsSync(DIAGNOSTIC_RESULTS_FILE)) {
+      fs.copyFileSync(DIAGNOSTIC_RESULTS_FILE, backupPath);
+    } else {
+      fs.writeFileSync(backupPath, '[]', 'utf8');
+    }
+  } catch (e) {
+    console.warn('Daily backup creation failed:', e && e.message ? e.message : String(e));
+  }
+  deleteExpiredBackups();
 }
 
 function readDiagnosticResults() {
@@ -123,6 +172,7 @@ function readDiagnosticResults() {
 
 function writeDiagnosticResults(list) {
   ensureDataDir();
+  ensureDailyBackup();
   fs.writeFileSync(DIAGNOSTIC_RESULTS_FILE, JSON.stringify(list, null, 2), 'utf8');
 }
 

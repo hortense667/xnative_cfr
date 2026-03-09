@@ -105,4 +105,6 @@ API キーをコードや HTML に含めず、Railway の環境変数だけで�
 
 - **蓄積データの保存先:** デフォルトではプロジェクト内の `data/diagnostic-results.json` に追記されます。
 - **永続化について:** Railway の通常デプロイでは再デプロイ時にファイルが消えます。**蓄積を永続させたい場合**は、Railway の **Volume** を追加し、マウントパス（例: `/data`）を設定したうえで、環境変数 **`DATA_DIR`** にそのパス（例: `DATA_DIR=/data`）を設定してください。すると `data/diagnostic-results.json` の代わりに `/data/diagnostic-results.json` に保存され、再デプロイ後も残ります。
+- **日次バックアップ:** 保存時に `DATA_DIR/backups/diagnostic-results-YYYY-MM-DD.json` を自動作成します（1日1ファイル）。
+- **バックアップ保持期間:** 環境変数 `BACKUP_RETENTION_DAYS` で保持日数を調整できます（未設定時は31日）。
 - **蓄積一覧の取得:** `GET /api/diagnostic-results` で全件取得できます。キオスクモードの「総合結果」画面では、サーバーに蓄積されたデータと、この端末の localStorage の両方を表示します。

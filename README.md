@@ -77,6 +77,8 @@
   - **アプリ内:** キオスクモードで診断を完了し、「総合結果」画面まで進むと、「サーバーに蓄積されたチェック内容（全端末・N件）」として表示されます。
   - **API:** ブラウザや curl で `GET https://あなたのドメイン/api/diagnostic-results` を開くと、JSON で全件取得できます（例: `https://xnative-cfr.fly.dev/api/diagnostic-results`）。
   - **サーバー上のファイル:** ローカルは `data/diagnostic-results.json`。Railway で Volume をマウントしている場合はそのパス（例: `/data/diagnostic-results.json`）、Fly.io で Volume をマウントしている場合も同様に `DATA_DIR` 配下（例: `/data/diagnostic-results.json`）。
+  - **日次バックアップ:** 保存時に `DATA_DIR/backups/diagnostic-results-YYYY-MM-DD.json` を自動作成します（1日1ファイル）。
+- **保持期間:** バックアップ保持日数は `BACKUP_RETENTION_DAYS` で設定できます（未設定時は31日）。保持期間を超えたバックアップは自動で削除されます。
 - **削除するには:** サーバー上のファイルを空にする。Fly.io なら `fly ssh console` で入り、`echo '[]' > /data/diagnostic-results.json` で上書きする。
 
 ---

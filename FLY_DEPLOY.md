@@ -162,7 +162,10 @@ Dockerfile に従ってビルドが走り、Fly 上にデプロイされます�
    fly deploy
    ```
 
-これで、診断結果は `/data/diagnostic-results.json` に保存され、再デプロイ後も残ります。
+これで、診断結果は `/data/diagnostic-results.json` に保存され、再デプロイ後も残ります。  
+また、保存時に `/data/backups/diagnostic-results-YYYY-MM-DD.json` が自動作成されます（1日1ファイル）。
+
+必要に応じて、バックアップ保持日数を `BACKUP_RETENTION_DAYS`（未設定時31日）で設定してください。
 
 ---
 
