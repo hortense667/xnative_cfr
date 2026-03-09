@@ -9,6 +9,91 @@ const path = require('path');
 const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.set('trust proxy', 1);
+
+function toPositiveInt(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.floor(n);
+}
+
+const API_JSON_LIMIT = process.env.API_JSON_LIMIT || '64kb';
+const RATE_LIMIT_WINDOW_MS = toPositiveInt(process.env.RATE_LIMIT_WINDOW_MS, 60 * 1000);
+const RATE_LIMIT_GET_RESULTS_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_GET_RESULTS_PER_MIN, 60);
+const RATE_LIMIT_POST_RESULT_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_RESULT_PER_MIN, 30);
+const RATE_LIMIT_POST_AI_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_AI_PER_MIN, 10);
+const MAX_PROMPT_CHARS = toPositiveInt(process.env.MAX_PROMPT_CHARS, 12000);
+
+const rateLimitBuckets = new Map();
+
+function getRateLimitFor(req) {
+  if (req.method === 'GET' && req.path === '/api/diagnostic-results') {
+    return RATE_LIMIT_GET_RESULTS_PER_MIN;
+  }
+  if (req.method === 'POST' && req.path === '/api/diagnostic-result') {
+    return RATE_LIMIT_POST_RESULT_PER_MIN;
+  }
+  if (
+    req.method === 'POST' &&
+    (req.path === '/api/gemini-diagnosis' || req.path === '/api/openai-diagnosis')
+  ) {
+    return RATE_LIMIT_POST_AI_PER_MIN;
+  }
+  return 120; // /api/* のその他は緩めのデフォルト
+}
+
+function apiRateLimit(req, res, next) {
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+  const key = `${ip}:${req.method}:${req.path}`;
+  const now = Date.now();
+  const limit = getRateLimitFor(req);
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || now >= bucket.resetAt) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+  } else {
+    bucket.count += 1;
+    rateLimitBuckets.set(key, bucket);
+  }
+
+  const current = rateLimitBuckets.get(key);
+  const remaining = Math.max(0, limit - current.count);
+  const retryAfterSec = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+
+  res.setHeader('X-RateLimit-Limit', String(limit));
+  res.setHeader('X-RateLimit-Remaining', String(remaining));
+  res.setHeader('X-RateLimit-Reset', String(Math.ceil(current.resetAt / 1000)));
+
+  if (current.count > limit) {
+    res.setHeader('Retry-After', String(retryAfterSec));
+    return res.status(429).json({
+      ok: false,
+      error: `アクセスが集中しています。しばらく待って再試行してください。（${retryAfterSec}秒後）`
+    });
+  }
+
+  // 期限切れバケットを定期掃除（メモリ肥大化防止）
+  if (rateLimitBuckets.size > 5000) {
+    for (const [k, v] of rateLimitBuckets.entries()) {
+      if (now >= v.resetAt) rateLimitBuckets.delete(k);
+    }
+  }
+  return next();
+}
+
+function validatePromptField(prompt) {
+  if (typeof prompt !== 'string') {
+    return 'prompt が必要です。';
+  }
+  const trimmed = prompt.trim();
+  if (!trimmed) {
+    return 'prompt が空です。';
+  }
+  if (trimmed.length > MAX_PROMPT_CHARS) {
+    return `prompt が長すぎます。最大 ${MAX_PROMPT_CHARS} 文字です。`;
+  }
+  return null;
+}
 
 // 蓄積データの保存先（Railway で永続化する場合は Volume を DATA_DIR にマウント推奨）
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -43,7 +128,8 @@ function writeDiagnosticResults(list) {
 
 // 静的ファイル（カレントディレクトリ）を配信
 app.use(express.static(path.join(__dirname)));
-app.use(express.json());
+app.use(express.json({ limit: API_JSON_LIMIT }));
+app.use('/api', apiRateLimit);
 
 // ルートはメインHTMLへ
 app.get('/', (req, res) => {
@@ -187,8 +273,9 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
   }
 
   const { prompt, model, temperature } = req.body || {};
-  if (!prompt || typeof prompt !== 'string') {
-    return res.status(400).json({ ok: false, error: 'prompt が必要です。' });
+  const promptError = validatePromptField(prompt);
+  if (promptError) {
+    return res.status(400).json({ ok: false, error: promptError });
   }
   const temp = clampTemperature(temperature);
 
@@ -224,8 +311,9 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
 // OpenAI 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/openai-diagnosis', async (req, res) => {
   const { prompt, temperature } = req.body || {};
-  if (!prompt || typeof prompt !== 'string') {
-    return res.status(400).json({ ok: false, error: 'prompt が必要です。' });
+  const promptError = validatePromptField(prompt);
+  if (promptError) {
+    return res.status(400).json({ ok: false, error: promptError });
   }
   const temp = clampTemperature(temperature);
   try {
@@ -313,6 +401,17 @@ app.get('/api/diagnostic-results', (req, res) => {
     const msg = (e && e.message) ? e.message : String(e);
     return res.status(500).json({ ok: false, error: msg });
   }
+});
+
+// JSONサイズ上限超過などをAPI向けに分かりやすく返す
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({
+      ok: false,
+      error: `リクエストサイズが大きすぎます。上限は ${API_JSON_LIMIT} です。`
+    });
+  }
+  return next(err);
 });
 
 app.listen(PORT, () => {
