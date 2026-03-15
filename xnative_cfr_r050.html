@@ -1497,8 +1497,8 @@
     overallTitle: '総合結果',
     overallDescription: 'ここに「総合結果（ダミー）」を表示します。実際の実装では、複数人分の傾向や集計結果などを表示する予定です。',
     secondPromptHead: '',
-    usageTitle: '使いかた映像（ダミー）',
-    usageDescription: 'ここでは「HARC の紹介」と「Xnative Timeline の紹介」の映像が流れます（ダミー画面）。しばらくご覧いただいたあと、下の「スタート」ボタンで最初の画面に戻ります。'
+    usageTitle: '最終画面（仮）',
+    usageDescription: 'ここでは「HARC の紹介」と「Xnative Timeline の紹介」の映像が流れる予定です。下の「スタート」ボタンで最初の画面に戻ります。'
   };
   const DEFAULT_CFR_PROMPTS_EN = {
     temperature: 0.9,
@@ -1510,7 +1510,7 @@
     overallDescription: 'This screen shows a dummy overall result. In production, this area can show trends and aggregates across multiple participants.',
     secondPromptHead: '',
     usageTitle: 'How To Use (Demo)',
-    usageDescription: 'This screen plays introduction videos for HARC and Xnative Timeline (dummy). After watching, press the Start button to return to the beginning.'
+    usageDescription: 'This screen plays introduction videos for HARC and Xnative Timeline. Press the Start button to return to the beginning.'
   };
   let cfrPromptsConfig = null;   // cfr_prompts.json 全体
   let activeCfrPrompts = null;   // 現在の年表ファイルに対応する設定
@@ -6134,7 +6134,7 @@
       <p style="margin:8px 0 10px; font-size:14px;">${t('ニックネーム', 'Nickname')}: <strong>${escapeHtmlText(nickname)}</strong></p>
       <p style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${report.replace(/</g,'&lt;')}</p>
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
-        <h4>${t('簡易グラフィック（みんなとの比較）', 'Simple Graphic (comparison with others)')}</h4>
+        <h4>${t('テスト用のダミーの情報です', 'Dummy information for testing')}</h4>
         ${aggregateHtml}
       </div>
       <div style="margin-top:16px; display:flex; flex-wrap:wrap; gap:16px;">
@@ -6424,13 +6424,16 @@
         ${accumulatedHtml}
       </div>
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
-        <p style="margin:0 0 6px; font-size:18px;">${t('Xnative Timeline に興味のある方はこちら：', 'Interested in Xnative Timeline?')}</p>
+        <h4 style="margin:0 0 8px; font-size:16px;">${t('Xnative Timeline について：', 'About Xnative Timeline?')}</h4>
+        <p style="margin:0 0 6px; font-size:18px;">${t('本診断テストのベースとなったXnative Timeline は汎用の年表ソフトウェアで各年ごとの項目内容の編集・更新などを柔軟に行うことができます。各種年表データも同時に整備しており詳しい内容は開発者に問い合わせください。', 'The Xnative Timeline is a general-purpose timeline software that allows flexible editing and updating of content for each year. Various timeline data is also being prepared, so please contact the developer for more information.')}</p>
+        /* 当面リンク集は表示しない
         <button type="button" id="kioskXnativeBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #ccc; background:#f5f5f5; cursor:pointer; font-size:18px;">
           ${t('Xnative Timeline の年表一覧を表示', 'Show Xnative Timeline list')}
         </button>
         <div id="kioskXnativeFrameWrap" style="margin-top:10px; width:100%; height:260px; display:none;">
           <iframe src="https://nativemap2.pages.dev/" title="${t('Xnative Timeline 一覧', 'Xnative Timeline list')}"
                   style="width:100%; height:100%; border:1px solid #ccc; border-radius:8px; background:#fff;"></iframe>
+                  */
         </div>
       </div>
     `;
