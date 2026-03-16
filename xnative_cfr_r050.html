@@ -549,7 +549,7 @@
 </head>
 <body>
   <header>
-    <strong style="font-size: 1.5em;">Xnative/Timeline 1.1h</strong>
+    <strong style="font-size: 1.5em;">Xnative/Timeline 1.1o</strong>
     <div id="repoInfo" style="font-size: 12px; color: #666; margin-left: 12px; display: none;">
       <span id="repoInfoText"></span>
     </div>
@@ -667,6 +667,14 @@
   const loadCsvBtn=null;
   const settingsBtn=document.getElementById('settingsBtn');
   const initialUrlParams = new URLSearchParams(window.location.search);
+  function isTruthyUrlParam(value) {
+    if (value == null) return false;
+    const normalized = String(value).trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'on' || normalized === 'yes';
+  }
+  // URLで与える kiosk スイッチ（従来の kioskMode とは別管理）
+  const kioskSwitchFromUrl = isTruthyUrlParam(initialUrlParams.get('kiosk'));
+  window.kioskSwitchFromUrl = kioskSwitchFromUrl;
   (function(){
     if (initialUrlParams.get('editmode') === 'ON' && settingsBtn) settingsBtn.style.display = '';
   })();
@@ -856,6 +864,7 @@
     const prevFocus = document.activeElement;
     modalTitle.textContent = title;
     modalContent.innerHTML = html;
+    attachDiagnosisCopyButton(title);
     modal.setAttribute('aria-hidden','false');
     modal.style.display = 'flex';
     modal.dataset.prevFocusId = prevFocus && prevFocus.id ? prevFocus.id : '';
@@ -897,6 +906,101 @@
     modalClose.textContent = t('閉じる', 'Close');
     modalClose.classList.remove('btn-primary');
     modalClose.focus();
+  }
+  function isDiagnosisResultModalTitle(title) {
+    const s = String(title || '').toLowerCase();
+    return s.includes('診断結果') || s.includes('diagnosis result');
+  }
+  async function copyTextWithFallback(text) {
+    const content = String(text || '');
+    if (!content) return false;
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(content);
+        return true;
+      }
+    } catch (_) {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = content;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return !!ok;
+    } catch (_) {
+      return false;
+    }
+  }
+  function attachDiagnosisCopyButton(title) {
+    const oldWrap = document.getElementById('diagnosisCopyBtnWrap');
+    if (oldWrap) oldWrap.remove();
+    if (window.kioskSwitchFromUrl) return;
+    if (!isDiagnosisResultModalTitle(title)) return;
+    const sourceEl = modalContent.querySelector('[data-diagnosis-report]') || modalContent;
+    const wrap = document.createElement('div');
+    wrap.id = 'diagnosisCopyBtnWrap';
+    wrap.style.display = 'flex';
+    wrap.style.justifyContent = 'flex-end';
+    wrap.style.marginBottom = '8px';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'diagnosisCopyBtn';
+    btn.textContent = '診断結果をコピー';
+    btn.title = t('診断結果をコピー', 'Copy diagnosis result');
+    btn.setAttribute('aria-label', t('診断結果をコピー', 'Copy diagnosis result'));
+    btn.style.padding = '6px 12px';
+    btn.style.border = '1px solid #d1d5db';
+    btn.style.borderRadius = '8px';
+    btn.style.background = '#fff';
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', async () => {
+      const diagnosisText = (sourceEl && sourceEl.innerText) ? sourceEl.innerText.trim() : '';
+      const nickname = normalizeKioskNickname((window.kioskState && window.kioskState.nickname) || '') || 'Guest';
+      const executedAtRaw = window.lastDiagnosisExecutedAt || new Date().toISOString();
+      const executedAt = (() => {
+        try {
+          return new Date(executedAtRaw).toLocaleString('ja-JP', { hour12: false });
+        } catch (_) {
+          return String(executedAtRaw);
+        }
+      })();
+      const selectedItems = (window.kioskState && Array.isArray(window.kioskState.selections) ? window.kioskState.selections : [])
+        .slice()
+        .sort((a, b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year)
+        .map(s => {
+          const source = (events[s.year] || []).find(it => it.label === s.label) || { label: s.label, label_en: '' };
+          const label = getPrimaryLabel(source) || s.label || '';
+          return `${s.year}年: ${label}`;
+        });
+      const selectedItemsText = selectedItems.length
+        ? (`（${selectedItems.length}件）\n` + selectedItems.join('\n'))
+        : '（0件）';
+      const text = [
+        '【ニックネーム】',
+        nickname,
+        '',
+        '【実施日時】',
+        executedAt,
+        '',
+        '【項目選択状況】',
+        selectedItemsText,
+        '',
+        '【診断結果】',
+        diagnosisText
+      ].join('\n');
+      const ok = await copyTextWithFallback(text);
+      const originalText = '診断結果をコピー';
+      btn.textContent = ok ? 'コピーしました' : 'コピー失敗';
+      setTimeout(() => { btn.textContent = originalText; }, 1200);
+    });
+    wrap.appendChild(btn);
+    modalContent.insertBefore(wrap, modalContent.firstChild);
   }
   function closeModal(){
     const id = modal.dataset.prevFocusId;
@@ -5758,12 +5862,14 @@
             ${t('※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（10個以上）。次画面の生年をセットしたあとに動かす〇マーカーは生年以前へも動かせます。', 'Check items you liked and were influenced by, even if not in real time (at least 10 items). The 〇 marker in the next screen can be moved anywhere, including before birth year.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ${t('※地球マーク', 'The globe icon')}<span style="pointer-events:none;">🌐</span>${t('はWikipediaなどのページを表示します。リンクをクリックして情報をたどっていくこともできます。必要に応じて内容を確認したり楽しみながらチェックしてください。', ' opens pages like Wikipedia. You can follow links to explore information. Check items while enjoying the content as needed.')}
+            ${t('※地球マーク', 'The globe icon')}<span style="pointer-events:none;">🌐</span>${t('はWikipediaなどのページを表示します。内容を確認したり楽しみながらチェックしてください。', ' opens pages like Wikipedia. You can follow links to explore information. Check items while enjoying the content as needed.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ${t('※項目チェックの最中には「ヘルプ」や「検索」も有効にお使いください。', 'During item checking, please use "Help" and "Search" as well.')}
           </div>
-
+          <div style="margin-top:6px; font-size:18px; color:#666;">
+            ${t('※項目が多すぎると感じた場合は途中でも「ジャンル」を絞ることができます。', 'If you feel that the number of items is too many, you can narrow down the "genre" at any time from the buttons on the screen.')}
+          </div>
           <div class="actions">
             <button type="button" id="kioskStartBtn">${t('診断スタート', 'Start Diagnosis')}</button>
           </div>
@@ -6159,11 +6265,12 @@
       lastProbeEventYear = null;
     }
     const nickname = normalizeKioskNickname(kioskState.nickname || '');
+    window.lastDiagnosisExecutedAt = new Date().toISOString();
     const topTitle = getLocalizedCfrPrompt('topTitle');
     const html = `
       <h4>${isEnglishUi() ? `Your ${escapeHtmlText(topTitle)} Result` : `あなたの${escapeHtmlText(topTitle)}の結果です`}</h4>
       <p style="margin:8px 0 10px; font-size:14px;">${t('ニックネーム', 'Nickname')}: <strong>${escapeHtmlText(nickname)}</strong></p>
-      <p style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${report.replace(/</g,'&lt;')}</p>
+      <p data-diagnosis-report="1" style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${report.replace(/</g,'&lt;')}</p>
       <div style="margin-top:16px; border-top:1px solid #eee; padding-top:12px;">
         <h4>${t('テスト用のダミーの情報です', 'Dummy information for testing')}</h4>
         ${aggregateHtml}
@@ -6173,7 +6280,7 @@
           <button type="button" id="kioskQrPersonalBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('個人レポートのQRを表示', 'Show QR for personal report')}</button>
         </div>
       </div>
-      <p style="margin-top:16px; font-size:12px; color:#666;">${t('QRを読み取ると、チェックしたイベント一覧と診断結果のテキストが表示されます。', 'Scanning the QR shows the checked event list and diagnosis text.')}</p>
+      <p style="margin-top:16px; font-size:12px; color:#666;">${t('QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます（ただし項目が多数の場合は途中までとなります）。', 'Scanning the QR shows the checked item list and diagnosis text (however, if the number of items is large, it will be displayed up to a certain point).')}</p>
     `;
     kioskModalPhase = 'diag';
     openModal(t('診断結果', 'Diagnosis Result'), html, { footer: 'next' });
@@ -6182,35 +6289,70 @@
     const gBox = document.getElementById('kioskQrGroup');
     if (pBtn) {
       pBtn.addEventListener('click', () => {
-        const selectedListText = (kioskState.selections || [])
+        const selectedLines = (kioskState.selections || [])
           .slice()
           .sort((a, b) => a.year === b.year ? a.label.localeCompare(b.label) : a.year - b.year)
           .map(s => {
             const source = (events[s.year] || []).find(it => it.label === s.label) || { label: s.label, label_en: '' };
             const label = getPrimaryLabel(source) || s.label;
             return isEnglishUi() ? `${s.year}: ${label}` : `${s.year}年: ${label}`;
-          })
-          .join('\n');
-        const fullReportText =
-          (isEnglishUi() ? '[Nickname]\n' : '【ニックネーム】\n') + nickname +
-          (isEnglishUi() ? '\n\n[Checked items]\n' : '\n\n【チェックした項目】\n') + (selectedListText || (isEnglishUi() ? '(none)' : '（なし）')) +
-          (isEnglishUi() ? '\n\n[Diagnosis Result]\n' : '\n\n【診断結果】\n') + report;
-        const isTooBigError = (err) => {
-          const s = String((err && err.message) ? err.message : (err || '')).toLowerCase();
-          return s.includes('too big') || s.includes('too long') || s.includes('code length overflow') || s.includes('input too long');
-        };
-        const trimToBytes = (text, maxBytes) => {
-          const bytes = new TextEncoder().encode(text);
-          if (bytes.length <= maxBytes) return text;
+          });
+        const textEncoder = new TextEncoder();
+        const utf8Len = (s) => textEncoder.encode(String(s || '')).length;
+        const clampUtf8 = (text, maxBytes) => {
+          const src = String(text || '');
+          if (maxBytes <= 0) return '';
+          const bytes = textEncoder.encode(src);
+          if (bytes.length <= maxBytes) return src;
           let i = maxBytes;
           while (i > 0 && (bytes[i - 1] & 0xC0) === 0x80) i--;
-          return new TextDecoder('utf-8').decode(bytes.slice(0, i)) + '\n［文字数制限のため末尾を省略］';
+          return new TextDecoder('utf-8').decode(bytes.slice(0, i));
         };
-        const candidateTexts = (() => {
-          const limits = [Infinity, 2800, 2600, 2400, 2200, 2000, 1800, 1600, 1400, 1200, 1000, 800];
-          const arr = limits.map(l => (l === Infinity ? fullReportText : trimToBytes(fullReportText, l)));
-          return arr.filter((t, i) => i === 0 || t !== arr[i - 1]);
-        })();
+        const MAX_QR_BYTES = 2800;
+        const omitNote = isEnglishUi()
+          ? '(Omitted below because it does not fit in the QR code)'
+          : '（以下QRコードに入らないため省略しました）';
+        const titleNickname = isEnglishUi() ? '[Nickname]\n' : '【ニックネーム】\n';
+        const titleDiagnosis = isEnglishUi() ? '\n\n[Diagnosis Result]\n' : '\n\n【診断結果】\n';
+        const titleChecked = isEnglishUi() ? '\n\n[Checked items]\n' : '\n\n【チェックした項目】\n';
+        const diagnosisSection = titleDiagnosis + report;
+        const buildCheckedBodyWithin = (limitBytes) => {
+          if (limitBytes <= 0) return '';
+          if (!selectedLines.length) return isEnglishUi() ? '(none)' : '（なし）';
+          const head = isEnglishUi() ? `(${selectedLines.length} items)` : `（${selectedLines.length}件）`;
+          const withAll = head + '\n' + selectedLines.join('\n');
+          if (utf8Len(withAll) <= limitBytes) return withAll;
+          const minWithOmit = head + '\n' + omitNote;
+          if (utf8Len(minWithOmit) > limitBytes) return clampUtf8(omitNote, limitBytes);
+          const acc = [];
+          for (const line of selectedLines) {
+            const next = head + '\n' + acc.concat(line).join('\n') + '\n' + omitNote;
+            if (utf8Len(next) <= limitBytes) acc.push(line);
+            else break;
+          }
+          let result = head + (acc.length ? '\n' + acc.join('\n') : '') + '\n' + omitNote;
+          while (utf8Len(result) > limitBytes && acc.length) {
+            acc.pop();
+            result = head + (acc.length ? '\n' + acc.join('\n') : '') + '\n' + omitNote;
+          }
+          if (utf8Len(result) > limitBytes) return clampUtf8(omitNote, limitBytes);
+          return result;
+        };
+        // 診断結果を先に確保し、可変の「チェックした項目」は最後に詰める。
+        const fixedPrefix = titleNickname + nickname + diagnosisSection + titleChecked;
+        if (utf8Len(fixedPrefix) > MAX_QR_BYTES) {
+          openModalText(
+            t('QR生成エラー', 'QR Generation Error'),
+            t(
+              '診断結果本文が長すぎるため、QRコードに収まりませんでした。項目選択状況を省略しても入りきりません。',
+              'The diagnosis text is too long for a QR code. It does not fit even if checked items are omitted.'
+            )
+          );
+          return;
+        }
+        const availableForChecked = MAX_QR_BYTES - utf8Len(fixedPrefix);
+        const checkedBody = buildCheckedBodyWithin(Math.max(0, availableForChecked));
+        const qrText = clampUtf8(fixedPrefix + checkedBody, MAX_QR_BYTES);
         let overlay = document.getElementById('kioskQrPersonalOverlay');
         if (overlay) overlay.remove();
         overlay = document.createElement('div');
@@ -6241,43 +6383,38 @@
             }
             const canvas = document.createElement('canvas');
             const opts = { width: qrSize, margin: 2, errorCorrectionLevel: 'L' };
-            const attempt = (idx) => {
-              if (idx >= candidateTexts.length) {
-                showError(t('QRに入りきらないため生成できませんでした', 'Could not generate QR because content is too long'));
-                return;
-              }
-              const text = candidateTexts[idx];
-              const onTooBigOrFail = (err) => {
-                if (isTooBigError(err)) return attempt(idx + 1);
-                showError(t('生成エラー', 'Generation error'));
-                console.error(err);
-              };
-              if (typeof Q.toCanvas === 'function') {
-                Q.toCanvas(canvas, text, opts, (err) => {
-                  if (err) return onTooBigOrFail(err);
-                  try {
-                    showQrOverlay(canvas.toDataURL('image/png'));
-                  } catch (e) { showError(t('画像の作成に失敗', 'Failed to create image')); console.error(e); }
-                });
-                return;
-              }
-              if (typeof Q.toDataURL === 'function') {
-                const cb = (err, dataUrl) => {
-                  if (err) return onTooBigOrFail(err);
-                  showQrOverlay(dataUrl);
-                };
-                try {
-                  const p = Q.toDataURL(text, opts);
-                  if (p && typeof p.then === 'function') p.then(showQrOverlay).catch(onTooBigOrFail);
-                  else Q.toDataURL(text, opts, cb);
-                } catch (e1) {
-                  try { Q.toDataURL(text, { width: qrSize }, cb); } catch (e2) { onTooBigOrFail(e2); }
+            if (typeof Q.toCanvas === 'function') {
+              Q.toCanvas(canvas, qrText, opts, (err) => {
+                if (err) {
+                  showError(t('QRの生成に失敗しました', 'Failed to generate QR'));
+                  console.error(err);
+                  return;
                 }
-                return;
+                try {
+                  showQrOverlay(canvas.toDataURL('image/png'));
+                } catch (e) { showError(t('画像の作成に失敗', 'Failed to create image')); console.error(e); }
+              });
+              return;
+            }
+            if (typeof Q.toDataURL === 'function') {
+              const cb = (err, dataUrl) => {
+                if (err) {
+                  showError(t('QRの生成に失敗しました', 'Failed to generate QR'));
+                  console.error(err);
+                  return;
+                }
+                showQrOverlay(dataUrl);
+              };
+              try {
+                const p = Q.toDataURL(qrText, opts);
+                if (p && typeof p.then === 'function') p.then(showQrOverlay).catch((err) => { showError(t('QRの生成に失敗しました', 'Failed to generate QR')); console.error(err); });
+                else Q.toDataURL(qrText, opts, cb);
+              } catch (e1) {
+                try { Q.toDataURL(qrText, { width: qrSize }, cb); } catch (e2) { showError(t('QRの生成に失敗しました', 'Failed to generate QR')); console.error(e2); }
               }
-              showError(t('QR APIが見つかりません', 'QR API not found'));
-            };
-            attempt(0);
+              return;
+            }
+            showError(t('QR APIが見つかりません', 'QR API not found'));
             return;
           } catch (e) {
             showError(t('QRの生成に失敗しました', 'Failed to generate QR'));
