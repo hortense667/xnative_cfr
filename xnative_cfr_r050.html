@@ -2282,6 +2282,7 @@
   let webPreviewOverlay = null;
   let webPreviewFrame = null;
   let webPreviewHideTimer = null;
+  let webPreviewShowTimer = null; // ホバーから表示までのディレイ用
   function ensureWebPreview(){
     if (webPreviewEl) return webPreviewEl;
     webPreviewOverlay = document.createElement('div');
@@ -2406,10 +2407,19 @@
       return rawUrl;
     }
   }
-  function showWebPreview(url, anchor){
+  function preloadWebPreview(url) {
     if (!url) return;
     const el = ensureWebPreview();
-    webPreviewFrame.src = normalizeWebPreviewUrl(url);
+    const normalized = normalizeWebPreviewUrl(url);
+    if (webPreviewFrame && webPreviewFrame.src !== normalized) {
+      webPreviewFrame.src = normalized;
+    }
+    return el;
+  }
+
+  function showWebPreview(url, anchor){
+    if (!url) return;
+    const el = preloadWebPreview(url);
     const z = pageZoom || 1;
     if (isWebPreviewMobile()) {
       // スマホ: 幅8割・左に余白・上下1割ずつ短く、外タップで閉じる
@@ -2438,6 +2448,10 @@
     el.style.display = 'flex';
   }
   function hideWebPreview(){
+    if (webPreviewShowTimer) {
+      clearTimeout(webPreviewShowTimer);
+      webPreviewShowTimer = null;
+    }
     if (webPreviewOverlay) webPreviewOverlay.style.display = 'none';
     if (webPreviewEl) {
       webPreviewEl.style.display = 'none';
@@ -2460,13 +2474,26 @@
         clearTimeout(webPreviewHideTimer);
         webPreviewHideTimer = null;
       }
-      showWebPreview(url, target);
+      if (webPreviewShowTimer) {
+        clearTimeout(webPreviewShowTimer);
+        webPreviewShowTimer = null;
+      }
+      // 先に読み込みだけ開始し、1秒後に表示
+      preloadWebPreview(url);
+      webPreviewShowTimer = setTimeout(() => {
+        showWebPreview(url, target);
+        webPreviewShowTimer = null;
+      }, 1000);
     }
   });
   document.addEventListener('mouseout', (e) => {
     if (isWebPreviewMobile()) return;
     const target = e.target;
     if (target && target.classList && target.classList.contains('probe-web-icon')) {
+      if (webPreviewShowTimer) {
+        clearTimeout(webPreviewShowTimer);
+        webPreviewShowTimer = null;
+      }
       if (webPreviewHideTimer) clearTimeout(webPreviewHideTimer);
       webPreviewHideTimer = setTimeout(() => {
         hideWebPreview();
