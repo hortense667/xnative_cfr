@@ -5279,7 +5279,7 @@
       }
     } else if (kioskState.step === 3 && kioskState.showLowerOverlay) {
       text = t(
-        '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へや動かせます。',
+        '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へも動かせます。',
         'Move the lower circle (left side of the blue horizontal line). Your age for that year is shown above the blue vertical line. You can move to years before age 0.'
       );
     }
@@ -5727,8 +5727,8 @@
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ${t('※該当する項目の選択はチェックボックスで行ってください。', 'Use checkboxes to select matching items.')}
           </div>
-          <div style="margin-top:6px; font-size:18px; color:#666;">
-            ${t('※画面は、左右・上下にスクロール、拡大・縮小表示できます。解像度によっては、青い〇のあるレーンを画面の左寄りに持ってくるとより使いやすくなります。', 'You can scroll horizontally/vertically and zoom in/out. Depending on resolution, it can be easier to keep the blue-circle lane near the left side.')}
+          <div style="margin-top:6px; font-size:18px; color:red; font-weight:bold;">
+            ${t('※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（10個以上）。次画面の生年をセットしたあとに動かす〇マーカーは生年以前へも動かせます。', 'Check items you liked and were influenced by, even if not in real time (at least 10 items). The 〇 marker in the next screen can be moved anywhere, including before birth year.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ${t('※地球マーク', 'The globe icon')}<span style="pointer-events:none;">🌐</span>${t('はWikipediaなどのページを表示します。リンクをクリックして情報をたどっていくこともできます。必要に応じて内容を確認したり楽しみながらチェックしてください。', ' opens pages like Wikipedia. You can follow links to explore information. Check items while enjoying the content as needed.')}
