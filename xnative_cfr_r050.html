@@ -725,7 +725,7 @@
   function applyUiLanguage() {
     document.documentElement.lang = isEnglishUi() ? 'en' : 'ja';
     const headerTitle = document.querySelector('header strong');
-    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.1h';
+    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.1o';
     const impLabel = selImp && selImp.parentElement;
     if (impLabel) impLabel.childNodes[0].nodeValue = t('重要度', 'Importance');
     if (selImp && selImp.options && selImp.options.length > 0) selImp.options[0].text = t('すべて', 'All');
