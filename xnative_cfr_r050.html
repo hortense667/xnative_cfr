@@ -1594,6 +1594,8 @@
   // ===== CFR プロンプト設定 =====
   const DEFAULT_CFR_PROMPTS = {
     temperature: 0.9,
+    initialBirthYear: 1990,
+    initialEventYear: 2010,
     topTitle: 'Xnative/Timeline メディアスタック・クロノロジー診断テスト',
     topDescription: 'あなたが特に好きだった、影響を受けたコンテンツ（マンガ・アニメ・ゲーム、本、音楽、映画など）、愛するほど使い込んだ、衝撃を受けたハードウェアやソフトウェア（楽器、カメラ、コンピューター、ウェブサイトなど）、体に染み込んだライスタイルや文化（食、イベントなど）を選んでいくことで、あなたの「ネイティブ」な感性を診断します。',
     eventChecklistDescription: '',
@@ -1606,6 +1608,8 @@
   };
   const DEFAULT_CFR_PROMPTS_EN = {
     temperature: 0.9,
+    initialBirthYear: 1990,
+    initialEventYear: 2010,
     topTitle: 'Xnative/Timeline Media Stack Chronology Diagnosis',
     topDescription: 'Choose the content you loved and were influenced by (manga, anime, games, books, music, films, etc.), the hardware/software you used deeply and passionately (instruments, cameras, computers, websites, etc.), and the lifestyle/culture that became part of you (food, events, etc.) to diagnose your native sensibility.',
     eventChecklistDescription: '',
@@ -1693,6 +1697,19 @@
       return cfr[enKey] || DEFAULT_CFR_PROMPTS_EN[key] || cfr[key] || DEFAULT_CFR_PROMPTS[key] || '';
     }
     return cfr[key] || DEFAULT_CFR_PROMPTS[key] || '';
+  }
+  function getConfiguredInitialProbeYears() {
+    const cfr = getCfrPrompts();
+    const toYear = (v, fallback) => {
+      const n = parseInt(v, 10);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(YEAR_MIN, Math.min(YEAR_MAX, n));
+    };
+    const fallbackBirth = DEFAULT_CFR_PROMPTS.initialBirthYear ?? 1990;
+    const fallbackEvent = DEFAULT_CFR_PROMPTS.initialEventYear ?? 2010;
+    const birthYear = toYear(cfr.initialBirthYear, fallbackBirth);
+    const eventYear = toYear(cfr.initialEventYear, fallbackEvent);
+    return { birthYear, eventYear };
   }
 
   async function ensureCfrPromptsLoaded() {
@@ -4898,8 +4915,11 @@
   // ===== プローブ =====
   function makeProbe(color){
     const g=document.getElementById('probe-'+color);
-    // 青プローブの初期位置: 生年1990（上の〇）、イベント年2010（下の〇）
-    const state={eventYear:color==='blue'?2010:1999,birthYear:color==='blue'?1990:1964};
+    const initialBlue = getConfiguredInitialProbeYears();
+    const state={
+      eventYear:color==='blue'?initialBlue.eventYear:1999,
+      birthYear:color==='blue'?initialBlue.birthYear:1964
+    };
     const stroke=(color==='red'?'#ff3333':'#4da3ff');
     const eventLine=lineEl(ORIGIN_X,0,ORIGIN_X,0); eventLine.style.stroke=stroke; eventLine.style.strokeWidth=3; // 水平（交点まで）
     const vLine=lineEl(0,0,0,ORIGIN_Y);           vLine.style.stroke=stroke; vLine.style.strokeWidth=3; vLine.setAttribute('pointer-events','stroke'); vLine.style.touchAction='none';
@@ -5095,6 +5115,17 @@
     dragByYear(eh,'eventYear'); dragByYear(bh,'birthYear'); dragByYear(vLine,'birthYear');
 
     state.redraw=redraw; redraw(); return state;
+  }
+  function applyConfiguredBlueProbeYears() {
+    try {
+      const initialBlue = getConfiguredInitialProbeYears();
+      probeBlue.birthYear = initialBlue.birthYear;
+      probeBlue.eventYear = initialBlue.eventYear;
+      probeBlue.redraw();
+      if (typeof window.updateProbeEventsPanel === 'function') {
+        window.updateProbeEventsPanel(probeBlue.eventYear);
+      }
+    } catch (_) {}
   }
 
   const probeBlue=makeProbe('blue');
@@ -6672,6 +6703,7 @@
     // 最初のオーバーレイを再表示（必要なら CFR プロンプト設定を読み込んでから）
     try {
       ensureCfrPromptsLoaded().then(() => {
+        applyConfiguredBlueProbeYears();
         openKioskStartOverlay();
       });
     } catch (_) {
@@ -6685,6 +6717,7 @@
     try {
       await ensureCfrPromptsLoaded();
     } catch (_) {}
+    applyConfiguredBlueProbeYears();
     openKioskStartOverlay();
     const hintBox = ensureKioskHint();
     const nextBtn = hintBox.querySelector('#kioskNextBtn');
