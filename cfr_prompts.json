@@ -1,7 +1,7 @@
 {
   "byTestId": {
     "zutest01": {
-      "filePath": "timeline_popculture_02-zutest01.json",
+      "filePath": "timeline_popculture_02-zutest02.json",
       "aiProvider": "gemini",
       "temperature": 1.2,
       "initialBirthYear": 2000,
