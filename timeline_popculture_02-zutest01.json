@@ -1,37 +1,5 @@
 {
-  "metadata": {
-    "title": {
-      "ja": "ポップカルチャー年表 0.2 zut01",
-      "en": "POP Culture Timeline 0.2"
-    },
-    "description": {
-      "ja": "この年表は日本におけるポップカルチャー分野の主な製品や出来事を示します。現状、試験公開中であり内容を精査している段階です。",
-      "en": "This timeline shows major products and events in the field of pop culture in Japan. Currently, it is in a trial release stage and the content is being reviewed."
-    },
-    "initialCreator": "Satoshi Endo",
-    "contributors": [
-      "Satoshi Endo",
-      "Hortense Endo"
-    ],
-    "contact": {
-      "administrator": {
-        "name": "Satoshi Endo",
-        "email": "zzz@65536.net",
-        "x": "https://x.com/hortense667",
-        "organization": "ZEN University"
-      }
-    },
-    "createdAt": "2025-10-01",
-    "version": "0.2",
-    "language": [
-      "ja",
-      "en"
-    ],
-    "copyright": "© 2025 Satoshi Endo",
-    "license": "CC BY 4.0",
-    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
-    "notes": "This work is licensed under CC BY 4.0. You may reuse, modify, and redistribute this data in any media or format. When doing so, please credit the original author (Satoshi Endo), provide a link to the license, and indicate if any changes were made. Please do not create separate versions; keep the original author credit intact."
-  },
+  "metadata": {},
   "events": {
     "1945": [
       {
@@ -4275,20 +4243,6 @@
     ],
     "1982": [
       {
-        "label": "ColecoVision",
-        "label_en": "ColecoVision",
-        "startYear": 1982,
-        "genre": [
-          "GAM",
-          "HAR"
-        ],
-        "imp": 3,
-        "url": "https://ja.wikipedia.org/wiki/ColecoVision",
-        "url_en": "https://en.wikipedia.org/wiki/ColecoVision",
-        "note": "アーケード移植で人気の据置機。",
-        "note_en": "Home console noted for arcade ports."
-      },
-      {
         "label": "コンパクトディスク",
         "label_en": "Compact Disc",
         "startYear": 1982,
@@ -4591,6 +4545,21 @@
         "url_en": "https://en.wikipedia.org/wiki/Fujitsu_FM-7",
         "note": "教育・ホビー向け国産PC。",
         "note_en": "Japanese 8-bit computer for hobby/education."
+      },
+      {
+        "label": "ColecoVision",
+        "startYear": "1982",
+        "genre": [
+          "GAM",
+          "HAR",
+          "TOY"
+        ],
+        "imp": 3,
+        "url": "https://ja.wikipedia.org/wiki/ColecoVision",
+        "note": "アーケード移植で人気の据置機。",
+        "label_en": "ColecoVision",
+        "url_en": "https://en.wikipedia.org/wiki/ColecoVision",
+        "note_en": "Home console noted for arcade ports."
       }
     ],
     "1983": [
@@ -4686,21 +4655,6 @@
         "note_en": "Iconic post-apocalyptic action series."
       },
       {
-        "label": "ファミコンブーム",
-        "label_en": "Famicom boom",
-        "startYear": 1983,
-        "genre": [
-          "GAM",
-          "PHE",
-          "JAPAN"
-        ],
-        "imp": 5,
-        "url": "https://ja.wikipedia.org/wiki/ファミリーコンピュータ",
-        "url_en": "https://en.wikipedia.org/wiki/Nintendo_Entertainment_System",
-        "note": "家庭用ゲームの大衆化を牽引。",
-        "note_en": "Home video games go mass-market."
-      },
-      {
         "label": "山下達郎「クリスマス・イブ」",
         "label_en": "Tatsuro Yamashita “Christmas Eve”",
         "startYear": 1983,
@@ -4781,6 +4735,23 @@
         "url_en": "https://en.wikipedia.org/wiki/MSX",
         "note": "統一仕様を目指した8ビット規格。",
         "note_en": "8-bit home computer standard initiative."
+      },
+      {
+        "label": "ファミコン",
+        "startYear": "1983",
+        "genre": [
+          "GAM",
+          "HAR",
+          "PHE",
+          "TOY",
+          "JAPAN"
+        ],
+        "imp": 5,
+        "url": "https://ja.wikipedia.org/wiki/ファミリーコンピュータ",
+        "note": "家庭用ゲームの大衆化を牽引。",
+        "label_en": "Famicom",
+        "url_en": "https://en.wikipedia.org/wiki/Nintendo_Entertainment_System",
+        "note_en": "Home video games go mass-market."
       }
     ],
     "1984": [
@@ -12725,17 +12696,16 @@
       },
       {
         "label": "氷菓",
-        "label_en": "Hyouka",
-        "startYear": 2012,
-        "endYear": 2012,
+        "startYear": "2012",
+        "endYear": "2012",
         "genre": [
           "ANI",
           "JAPAN"
         ],
         "imp": 4,
-        "url": "https://ja.wikipedia.org/wiki/氷菓",
-        "url_en": "https://en.wikipedia.org/wiki/Hyouka",
+        "url": "https://ja.wikipedia.org/wiki/%E6%B0%B7%E8%8F%93_(%E5%B0%8F%E8%AA%AC)#%E3%83%86%E3%83%AC%E3%83%93%E3%82%A2%E3%83%8B%E3%83%A1",
         "note": "省エネ男子の学園ミステリ。",
+        "label_en": "Hyouka",
         "note_en": "School mystery with “energy-saving” sleuth."
       },
       {
@@ -14613,155 +14583,44 @@
   ],
   "genres": [
     {
-      "code": "ANI",
-      "label": "アニメ",
-      "label_en": "Animation",
+      "code": "MAN",
+      "label": "マンガ",
       "conjunction": false
     },
     {
-      "code": "MAN",
-      "label": "マンガ",
-      "label_en": "Manga",
+      "code": "ANI",
+      "label": "アニメ",
       "conjunction": false
     },
     {
       "code": "GAM",
       "label": "ゲーム",
-      "label_en": "Games",
       "conjunction": false
     },
-    {
-      "code": "NET",
-      "label": "インターネット",
-      "label_en": "Internet",
-      "conjunction": false
-    },
-    {
-      "code": "HAR",
-      "label": "ハードウェア",
-      "label_en": "Hardware",
-      "conjunction": false
-    },
-    {
-      "code": "SOF",
-      "label": "ソフトウェア",
-      "label_en": "Software",
-      "conjunction": false
-    } /* ,                                     ここコメントアウト
     {
       "code": "TVP",
       "label": "テレビ番組",
-      "label_en": "TV Shows",
       "conjunction": false
     },
     {
       "code": "MOV",
       "label": "映画",
-      "label_en": "Film",
       "conjunction": false
     },
     {
-      "code": "PHE",
-      "label": "現象・流行",
-      "label_en": "Phenomena & Trends",
+      "code": "NET",
+      "label": "インターネット",
       "conjunction": false
     },
     {
-      "code": "TOY",
-      "label": "おもちゃ",
-      "label_en": "Toys",
+      "code": "HAR",
+      "label": "ハードウェア",
       "conjunction": false
     },
     {
-      "code": "FAS",
-      "label": "ファッション",
-      "label_en": "Fashion",
+      "code": "SOF",
+      "label": "ソフトウェア",
       "conjunction": false
-    },
-    {
-      "code": "BOO",
-      "label": "書籍",
-      "label_en": "Books",
-      "conjunction": false
-    },
-    {
-      "code": "MAG",
-      "label": "雑誌",
-      "label_en": "Magazines",
-      "conjunction": false
-    },
-    {
-      "code": "NOV",
-      "label": "小説",
-      "label_en": "Novels",
-      "conjunction": false
-    },
-    {
-      "code": "MUS",
-      "label": "音楽",
-      "label_en": "Music",
-      "conjunction": false
-    },
-    {
-      "code": "IDL",
-      "label": "アイドル",
-      "label_en": "Idols",
-      "conjunction": false
-    },
-    {
-      "code": "RDO",
-      "label": "ラジオ",
-      "label_en": "Radio",
-      "conjunction": false
-    },
-    {
-      "code": "EVT",
-      "label": "イベント",
-      "label_en": "Events",
-      "conjunction": false
-    },
-    {
-      "code": "FMT",
-      "label": "フォーマット",
-      "label_en": "Formats",
-      "conjunction": false
-    },
-    {
-      "code": "SPW",
-      "label": "スポーツ",
-      "label_en": "Sports",
-      "conjunction": false
-    },
-    {
-      "code": "RDE",
-      "label": "乗り物",
-      "label_en": "Vehicles",
-      "conjunction": false
-    },
-    {
-      "code": "FOO",
-      "label": "食",
-      "label_en": "Food",
-      "conjunction": false
-    },
-    {
-      "code": "UNC",
-      "label": "その他",
-      "label_en": "Other",
-      "conjunction": false
-    },
-    {
-      "code": "JAPAN",
-      "label": "日本",
-      "label_en": "Japan",
-      "conjunction": true
-    },
-    {
-      "code": "WORK",
-      "label": "作業用（仮）",
-      "label_en": "For Work",
-      "conjunction": true
     }
-    */
   ]
 }
