@@ -6344,44 +6344,65 @@
     const cfr = getCfrPrompts();
     const provider = ((cfr.aiProvider || DEFAULT_CFR_PROMPTS.aiProvider || 'gemini') + '').toLowerCase();
 
-    // 実際の呼び出し関数（Gemini / OpenAI 切り替え）
-    const callOnce = async () => {
-      // OpenAI が指定されている場合は常にサーバ経由で OpenAI を呼び出す
-      if (provider === 'openai') {
-        return await callOpenAiViaBackend(prompt);
+    // 共通のリトライヘルパー（指定プロバイダを maxAttempts 回まで試行）
+    const retryProvider = async (which, maxAttempts) => {
+      let lastError = '';
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const result = which === 'gemini'
+          ? await callGeminiViaBackend(prompt)
+          : await callOpenAiViaBackend(prompt);
+        const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
+        if (hasText) return result;
+
+        const isEmptyOk = !!(result && result.ok && (!result.text || !String(result.text).trim()));
+        if (isEmptyOk) {
+          lastError = isEnglishUi()
+            ? `Empty response from ${which} backend.`
+            : `${which.toUpperCase()} バックエンドの応答が空でした。`;
+        } else if (result && result.error) {
+          lastError = result.error;
+        } else if (result && !result.ok) {
+          lastError = isEnglishUi()
+            ? `Failed to call ${which} backend.`
+            : `${which.toUpperCase()} バックエンドの呼び出しに失敗しました。`;
+        } else {
+          lastError = isEnglishUi()
+            ? `Unexpected ${which} backend response format.`
+            : `${which.toUpperCase()} バックエンドの応答形式が想定外です。`;
+        }
       }
-      // Gemini は常にバックエンド経由で呼び出す（APIキーをクライアントに露出させない）
-      return await callGeminiViaBackend(prompt);
+      return { ok: false, error: lastError || (isEnglishUi() ? 'Unknown error' : '不明なエラー') };
     };
 
-    // 1回目
-    let result = await callOnce();
-    const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
-    if (hasText) return result;
+    // aiprovider に応じて優先プロバイダとフォールバックプロバイダを切り替える
+    const primary = (provider === 'openai') ? 'openai' : 'gemini';
+    const secondary = (primary === 'gemini') ? 'openai' : 'gemini';
 
-    // 「ok:true だが本文空」や一時的な失敗の場合は 1 回だけリトライ
-    const shouldRetryEmpty = !!(result && result.ok && (!result.text || !String(result.text).trim()));
-    if (!result.ok || shouldRetryEmpty) {
-      const retryResult = await callOnce();
-      const retryHasText = !!(retryResult && retryResult.ok && typeof retryResult.text === 'string' && retryResult.text.trim());
-      if (retryHasText) return retryResult;
-      // リトライ後も失敗 or 空の場合は、エラー情報をまとめて返す
-      const mergedError =
-        (retryResult && retryResult.error) ||
-        (result && result.error) ||
-        (shouldRetryEmpty
-          ? (isEnglishUi() ? 'Empty response from AI backend.' : 'AIバックエンドの応答が空でした。')
-          : (isEnglishUi() ? 'Failed to call AI backend.' : 'AIバックエンドの呼び出しに失敗しました。'));
-      return { ok: false, error: mergedError };
+    // 優先プロバイダ: 最大3回
+    const primaryResult = await retryProvider(primary, 3);
+    if (primaryResult && primaryResult.ok && typeof primaryResult.text === 'string' && primaryResult.text.trim()) {
+      return primaryResult;
     }
 
-    // ここに来るのは「ok:true だが text が存在しない/文字列でない」などの想定外ケース
-    return {
-      ok: false,
-      error: isEnglishUi()
-        ? 'Unexpected AI backend response format.'
-        : 'AIバックエンドの応答形式が想定外です。'
-    };
+    // フォールバックプロバイダ: 最大4回
+    const secondaryResult = await retryProvider(secondary, 4);
+    if (secondaryResult && secondaryResult.ok && typeof secondaryResult.text === 'string' && secondaryResult.text.trim()) {
+      return secondaryResult;
+    }
+
+    // どちらも失敗した場合は、両方のエラー情報をまとめて返す
+    const combinedError = (() => {
+      const pErr = primaryResult && primaryResult.error ? String(primaryResult.error) : '';
+      const sErr = secondaryResult && secondaryResult.error ? String(secondaryResult.error) : '';
+      if (pErr && sErr) {
+        return isEnglishUi()
+          ? `Primary ${primary} and fallback ${secondary} both failed. Primary: ${pErr} / Fallback: ${sErr}`
+          : `優先${primary.toUpperCase()}とフォールバック${secondary.toUpperCase()}の両方が失敗しました。優先: ${pErr} / フォールバック: ${sErr}`;
+      }
+      return pErr || sErr || (isEnglishUi() ? 'Unknown error' : '不明なエラー');
+    })();
+
+    return { ok: false, error: combinedError };
   }
 
   const KIOSK_SESSIONS_KEY = 'xnative_kiosk_sessions_v1';
