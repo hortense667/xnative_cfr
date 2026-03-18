@@ -14696,16 +14696,6 @@
       "code": "UNC",
       "label": "その他",
       "conjunction": false
-    },
-    {
-      "code": "JAPAN",
-      "label": "日本",
-      "conjunction": true
-    },
-    {
-      "code": "WORK",
-      "label": "作業用（仮）",
-      "conjunction": false
     }
   ]
 }
