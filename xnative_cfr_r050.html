@@ -5652,7 +5652,7 @@
           restartBtn.style.display = 'inline-block';
           // step3Actions に戻して「診断」の右に置く
           step3Actions.insertBefore(restartBtn, yearControls);
-          restartBtn.style.marginTop = '0';
+          restartBtn.style.marginTop = '';
         }
         if (yearControls) yearControls.style.display = 'flex';
         if (typeof window.scrollProbeEventYearIntoView === 'function') {
@@ -5675,7 +5675,7 @@
           restartBtn.style.display = 'inline-block';
           // 「診断」の右に配置（年ボタン群の前）
           step3Actions.insertBefore(restartBtn, yearControls);
-          restartBtn.style.marginTop = '0';
+          restartBtn.style.marginTop = '';
         }
         if (!isMobile) {
           box.classList.add('kiosk-hint-step3-pc');
