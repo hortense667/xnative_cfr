@@ -6420,12 +6420,17 @@
     const { report: dummyReport, aggregateHtml } = buildKioskReportAndAggregate();
     let report = dummyReport;
     const geminiResult = await fetchGeminiDiagnosis();
-    if (geminiResult.ok) {
+    const hasGeminiText = !!(geminiResult && geminiResult.ok && typeof geminiResult.text === 'string' && geminiResult.text.trim());
+    if (hasGeminiText) {
       report = geminiResult.text;
     } else {
+      const emptyReason = (geminiResult && geminiResult.ok)
+        ? (isEnglishUi() ? 'Empty response from AI backend.' : 'AIバックエンドの応答が空でした。')
+        : null;
+      const errMsg = (geminiResult && geminiResult.error) ? geminiResult.error : (emptyReason || (isEnglishUi() ? 'Unknown error' : '不明なエラー'));
       report = isEnglishUi()
-        ? ('[Failed to get AI diagnosis]\n\n' + (geminiResult.error || 'Unknown error') + '\n\nBecause AI diagnosis could not be retrieved, the dummy diagnosis text is shown below.\n\n' + dummyReport)
-        : ('【診断の取得に失敗しました】\n\n' + (geminiResult.error || '不明なエラー') + '\n\n※上記の理由でAI診断を取得できなかったため、以下はダミーの診断文です。\n\n' + dummyReport);
+        ? ('[Failed to get AI diagnosis]\n\n' + errMsg + '\n\nBecause AI diagnosis could not be retrieved, the dummy diagnosis text is shown below.\n\n' + dummyReport)
+        : ('【診断の取得に失敗しました】\n\n' + errMsg + '\n\n※上記の理由でAI診断を取得できなかったため、以下はダミーの診断文です。\n\n' + dummyReport);
     }
     kioskState.step = 4;
     updateKioskHint();
