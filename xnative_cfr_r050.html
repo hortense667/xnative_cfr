@@ -6189,7 +6189,7 @@
     report += '\n\n';
     report += isEnglishUi()
       ? 'These patterns suggest you positively enjoy shifts across eras through works and services encountered during your formative years, with strong curiosity for technology and narrative worlds. (This is currently dummy text; later it will be replaced by a longer AI-generated report.)'
-      : 'これらから推測すると、あなたは自分の成長期に触れた作品やサービスを通じて、時代の変化を前向きに楽しむタイプであり、テクノロジーや物語世界に対する想像力が豊かな人格が形成されていると考えられます。（この診断文は現在ダミーであり、将来は生成AIから約1000文字のレポートを取得する予定です。）';
+      : 'これらから推測すると、あなたは自分の成長期に触れた作品やサービスを通じて、時代の変化を前向きに楽しむタイプであり、テクノロジーや物語世界に対する想像力が豊かな人格が形成されていると考えられます。（この診断文はシステム上の理由でAIによる診断ができなかったために表示されるダミーです。）';
 
     // みんなの集計（ローカルストレージに蓄積）
     const key = 'xnative_kiosk_aggregate_v1';
@@ -6324,19 +6324,43 @@
     const cfr = getCfrPrompts();
     const provider = ((cfr.aiProvider || DEFAULT_CFR_PROMPTS.aiProvider || 'gemini') + '').toLowerCase();
 
-    // OpenAI が指定されている場合は常にサーバ経由で OpenAI を呼び出す
-    if (provider === 'openai') {
-      return await callOpenAiViaBackend(prompt);
+    // 実際の呼び出し関数（Gemini / OpenAI 切り替え）
+    const callOnce = async () => {
+      // OpenAI が指定されている場合は常にサーバ経由で OpenAI を呼び出す
+      if (provider === 'openai') {
+        return await callOpenAiViaBackend(prompt);
+      }
+      // Gemini は常にバックエンド経由で呼び出す（APIキーをクライアントに露出させない）
+      return await callGeminiViaBackend(prompt);
+    };
+
+    // 1回目
+    let result = await callOnce();
+    const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
+    if (hasText) return result;
+
+    // 「ok:true だが本文空」や一時的な失敗の場合は 1 回だけリトライ
+    const shouldRetryEmpty = !!(result && result.ok && (!result.text || !String(result.text).trim()));
+    if (!result.ok || shouldRetryEmpty) {
+      const retryResult = await callOnce();
+      const retryHasText = !!(retryResult && retryResult.ok && typeof retryResult.text === 'string' && retryResult.text.trim());
+      if (retryHasText) return retryResult;
+      // リトライ後も失敗 or 空の場合は、エラー情報をまとめて返す
+      const mergedError =
+        (retryResult && retryResult.error) ||
+        (result && result.error) ||
+        (shouldRetryEmpty
+          ? (isEnglishUi() ? 'Empty response from AI backend.' : 'AIバックエンドの応答が空でした。')
+          : (isEnglishUi() ? 'Failed to call AI backend.' : 'AIバックエンドの呼び出しに失敗しました。'));
+      return { ok: false, error: mergedError };
     }
 
-    // Gemini は常にバックエンド経由で呼び出す（APIキーをクライアントに露出させない）
-    const backendResult = await callGeminiViaBackend(prompt);
-    if (backendResult.ok) return backendResult;
-
-    // バックエンド経由に失敗した場合
+    // ここに来るのは「ok:true だが text が存在しない/文字列でない」などの想定外ケース
     return {
       ok: false,
-      error: backendResult.error || 'Gemini API のバックエンド呼び出しに失敗しました。サーバー設定を確認してください。'
+      error: isEnglishUi()
+        ? 'Unexpected AI backend response format.'
+        : 'AIバックエンドの応答形式が想定外です。'
     };
   }
 
