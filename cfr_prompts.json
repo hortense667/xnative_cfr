@@ -27,7 +27,7 @@
     },
     "zutest02": {
       "filePath": "timeline_popculture_02.json",
-      "aiProvider": "gemini",
+      "aiProvider": "openai",
       "temperature": 1.2,
       "initialBirthYear": 2000,
       "initialEventYear": 2006,
