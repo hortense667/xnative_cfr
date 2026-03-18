@@ -271,8 +271,9 @@
     flex-wrap: nowrap;
   }
   #kioskHint.kiosk-hint-step3-compact #kioskFinishBtn { order: 1; }
-  #kioskHint.kiosk-hint-step3-compact .count { order: 2; margin-top: 0; font-size: 16px; color: #fff; }
-  #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls { order: 3; display: flex !important; align-items: center; gap: 6px; }
+  #kioskHint.kiosk-hint-step3-compact #kioskRestartBtn { order: 2; }
+  #kioskHint.kiosk-hint-step3-compact .count { order: 3; margin-top: 0; font-size: 16px; color: #fff; }
+  #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls { order: 4; display: flex !important; align-items: center; gap: 6px; }
   #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls button { padding: 6px 10px; font-size: 14px; }
   /* ステップ3: 診断ボタンと▼年+▲年－を1行に（PCでは右寄せ） */
   #kioskHint .step3-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; width: 100%; flex-wrap: wrap; }
@@ -4963,7 +4964,18 @@
         pageZoom = Math.max(0.5, pageZoom - 0.1);
         applyPageZoom();
       }else if(action === 'restart'){
-        window.location.reload();
+        (async function(){
+          try {
+            const ok = (typeof window.confirmRestartToStart === 'function') ? await window.confirmRestartToStart() : false;
+            if (!ok) return;
+            if (window.kioskMode && typeof window.resetKioskToStart === 'function') {
+              window.resetKioskToStart();
+            } else {
+              window.location.reload();
+            }
+          } catch (_) {}
+        })();
+        hideCustomContextMenu();
         return;
       }
       hideCustomContextMenu();
@@ -5460,6 +5472,7 @@
       <button type="button" id="kioskNextBtn"></button>
       <div class="step3-actions" id="kioskStep3Actions" style="display:none;">
         <button type="button" id="kioskFinishBtn" style="display:none;"></button>
+        <button type="button" id="kioskRestartBtn" style="display:none;"></button>
         <span class="kiosk-year-controls" id="kioskYearControls" style="display:none;">
           <button type="button" id="kioskYearUpBtn" aria-label="Move to next year">▼Year +</button>
           <button type="button" id="kioskYearDownBtn" aria-label="Move to previous year">▲Year -</button>
@@ -5469,6 +5482,30 @@
     document.body.appendChild(box);
     return box;
   }
+
+  function confirmRestartToStart() {
+    return new Promise((resolve) => {
+      const html = `
+        <div style="font-size:16px; line-height:1.5; padding:6px 2px;">
+          ${t('最初からやり直しますか？', 'Restart from the beginning?')}
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px;">
+          <button class="btn" id="kioskRestartCancelBtn">${t('キャンセル', 'Cancel')}</button>
+          <button class="btn btn-primary" id="kioskRestartOkBtn">ON</button>
+        </div>
+      `;
+      openModal(t('確認', 'Confirm'), html, { footer: 'none' });
+      const cancelBtn = document.getElementById('kioskRestartCancelBtn');
+      const okBtn = document.getElementById('kioskRestartOkBtn');
+      const done = (val) => {
+        try { closeModal(); } catch (_) {}
+        resolve(val);
+      };
+      if (cancelBtn) cancelBtn.addEventListener('click', () => done(false));
+      if (okBtn) okBtn.addEventListener('click', () => done(true));
+    });
+  }
+  window.confirmRestartToStart = confirmRestartToStart;
 
   function ensureKioskStepOverlay() {
     let el = document.getElementById('kioskStepOverlay');
@@ -5531,6 +5568,7 @@
     const countEl = box.querySelector('.count');
     const nextBtn = box.querySelector('#kioskNextBtn');
     const finishBtn = box.querySelector('#kioskFinishBtn');
+    const restartBtn = box.querySelector('#kioskRestartBtn');
     const yearControls = box.querySelector('#kioskYearControls');
     const yearUpBtn = box.querySelector('#kioskYearUpBtn');
     const yearDownBtn = box.querySelector('#kioskYearDownBtn');
@@ -5554,10 +5592,19 @@
     document.body.classList.remove('kiosk-step3-compact-hint');
     box.style.display = 'block';
     finishBtn.style.display = 'none';
+    if (restartBtn) restartBtn.style.display = 'none';
     if (kioskState.step3StartedOperating) box.removeAttribute('data-step3-touch-listener');
 
     const count = kioskState.selections.length;
+    // count 表示はステップごとにレイアウトが異なるため、まずプレーンに戻す
+    countEl.style.display = '';
+    countEl.style.gap = '';
+    countEl.style.alignItems = '';
+    countEl.style.justifyContent = '';
+    countEl.style.flexWrap = '';
+    countEl.style.marginTop = '';
     countEl.textContent = isEnglishUi() ? `Checked: ${count} / 10` : `チェックされた数: ${count} / 10`;
+    if (restartBtn) restartBtn.textContent = t('最初に戻る', 'Back to start');
 
     if (kioskState.step === 1) {
       titleEl.textContent = t('ステップ1：ジャンルを選びましょう', 'Step 1: Choose your genres');
@@ -5574,6 +5621,18 @@
       );
       nextBtn.style.display = 'none';
       finishBtn.style.display = 'none';
+      // ステップ2: 「チェックされた数」の右に「最初に戻る」を配置（同じ行）
+      if (restartBtn) {
+        restartBtn.style.display = 'inline-block';
+        countEl.style.display = 'flex';
+        countEl.style.alignItems = 'center';
+        countEl.style.justifyContent = 'space-between';
+        countEl.style.gap = '10px';
+        countEl.style.flexWrap = 'wrap';
+        // countEl にボタンを移動して右側に置く
+        countEl.appendChild(restartBtn);
+        restartBtn.style.marginTop = '0';
+      }
     } else if (kioskState.step === 3) {
       const isMobile = window.matchMedia('(max-width: 768px)').matches;
       const step3Compact = isMobile && kioskState.step3StartedOperating;
@@ -5589,6 +5648,12 @@
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = t('診断', 'Diagnose');
         finishBtn.disabled = count < 10;
+        if (restartBtn && step3Actions) {
+          restartBtn.style.display = 'inline-block';
+          // step3Actions に戻して「診断」の右に置く
+          step3Actions.insertBefore(restartBtn, yearControls);
+          restartBtn.style.marginTop = '0';
+        }
         if (yearControls) yearControls.style.display = 'flex';
         if (typeof window.scrollProbeEventYearIntoView === 'function') {
           setTimeout(function() { window.scrollProbeEventYearIntoView(); }, 100);
@@ -5606,6 +5671,12 @@
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = t('診断', 'Diagnose');
         finishBtn.disabled = count < 10;
+        if (restartBtn && step3Actions) {
+          restartBtn.style.display = 'inline-block';
+          // 「診断」の右に配置（年ボタン群の前）
+          step3Actions.insertBefore(restartBtn, yearControls);
+          restartBtn.style.marginTop = '0';
+        }
         if (!isMobile) {
           box.classList.add('kiosk-hint-step3-pc');
           if (yearControls) yearControls.style.display = 'flex';
@@ -5626,6 +5697,7 @@
       bodyEl.textContent = t('お疲れさまでした。m(_ _)m ', 'Session complete.');
       nextBtn.style.display = 'none';
       finishBtn.style.display = 'none';
+      if (restartBtn) restartBtn.style.display = 'none';
     } else {
       box.style.display = 'none';
     }
@@ -6778,6 +6850,7 @@
       openKioskStartOverlay();
     }
   }
+  window.resetKioskToStart = resetKioskToStart;
 
   (async function setupKioskFlow(){
     if (!window.kioskMode) return;
@@ -6790,6 +6863,7 @@
     const hintBox = ensureKioskHint();
     const nextBtn = hintBox.querySelector('#kioskNextBtn');
     const finishBtn = hintBox.querySelector('#kioskFinishBtn');
+    const restartBtn = hintBox.querySelector('#kioskRestartBtn');
     const yearUpBtn = hintBox.querySelector('#kioskYearUpBtn');
     const yearDownBtn = hintBox.querySelector('#kioskYearDownBtn');
     // 「次へ」はステップ遷移には使わない（常に非表示）
@@ -6799,6 +6873,15 @@
         showKioskSelectionsSummary();
       }
     });
+    if (restartBtn) {
+      restartBtn.addEventListener('click', async () => {
+        try {
+          const ok = (typeof window.confirmRestartToStart === 'function') ? await window.confirmRestartToStart() : false;
+          if (!ok) return;
+          resetKioskToStart();
+        } catch (_) {}
+      });
+    }
     if (yearUpBtn) {
       yearUpBtn.addEventListener('click', () => {
         if (typeof probeBlue === 'undefined') return;
