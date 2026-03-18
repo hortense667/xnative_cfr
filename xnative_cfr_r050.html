@@ -860,6 +860,26 @@
   function textEl(txt,x,y,cls){let t=document.createElementNS('http://www.w3.org/2000/svg','text');t.textContent=txt;t.setAttribute('x',x);t.setAttribute('y',y);if(cls) t.setAttribute('class',cls);return t;}
   function circleEl(cx,cy,r,cls){let c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r',r);if(cls)c.setAttribute('class',cls);return c;}
 
+  // ===== デバイス／ビューポート判定 =====
+  function getDeviceInfo() {
+    const ua = navigator.userAgent || '';
+    const isAndroid = /Android/i.test(ua);
+    const isIos = /iPhone|iPad|iPod/i.test(ua);
+    const width = window.innerWidth || document.documentElement.clientWidth || 0;
+    return { isAndroid, isIos, width };
+  }
+  function isMobileLikeViewport() {
+    const { isAndroid, isIos, width } = getDeviceInfo();
+    const isMobileOs = isAndroid || isIos;
+    // iOS / Android の場合は解像度に関係なくモバイル扱い
+    if (isMobileOs) return true;
+    // PC などその他の OS は従来通り 768px を境にする
+    return width > 0 && width <= 768;
+  }
+  function isDesktopLikeViewport() {
+    return !isMobileLikeViewport();
+  }
+
   // ===== モーダル（共通） =====
   function openModal(title, html, options){
     const prevFocus = document.activeElement;
@@ -869,7 +889,7 @@
     modal.setAttribute('aria-hidden','false');
     modal.style.display = 'flex';
     modal.dataset.prevFocusId = prevFocus && prevFocus.id ? prevFocus.id : '';
-    if (options && options.positionBelowKioskOnMobile && window.kioskMode && window.matchMedia('(max-width: 768px)').matches) {
+    if (options && options.positionBelowKioskOnMobile && window.kioskMode && isMobileLikeViewport()) {
       modal.classList.add('kioskGenreMobile');
     } else {
       modal.classList.remove('kioskGenreMobile');
@@ -1079,7 +1099,7 @@
         probeBlue.eventYear = Math.max(YEAR_MIN, Math.min(YEAR_MAX, year));
         probeBlue.redraw();
         if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
-        if (window.matchMedia('(max-width: 768px)').matches && typeof window.scrollProbeEventYearIntoView === 'function') {
+        if (isMobileLikeViewport() && typeof window.scrollProbeEventYearIntoView === 'function') {
           window.scrollProbeEventYearIntoView();
         }
       }
@@ -2524,7 +2544,7 @@
     webPreviewEl.appendChild(webPreviewFrame);
     document.body.appendChild(webPreviewEl);
     (function setupWebPreviewDrag() {
-      if (!window.matchMedia('(min-width: 769px)').matches) return;
+      if (!isDesktopLikeViewport()) return;
       var dragBar = webPreviewDragBar;
       dragBar.style.display = 'block';
       var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
@@ -2580,7 +2600,7 @@
     return webPreviewEl;
   }
   function isWebPreviewMobile() {
-    return window.matchMedia('(max-width: 768px)').matches;
+    return isMobileLikeViewport();
   }
   function normalizeWebPreviewUrl(rawUrl) {
     try {
@@ -5109,7 +5129,7 @@
           const panel = document.getElementById('probeEventsPanel');
           if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
         }
-        if(color==='blue' && el===bh && birthYearOverlayEl && window.matchMedia('(max-width: 768px)').matches){
+        if(color==='blue' && el===bh && birthYearOverlayEl && isMobileLikeViewport()){
           birthYearOverlayEl.textContent = isEnglishUi() ? (state.birthYear + '') : (state.birthYear + '年');
           birthYearOverlayEl.style.display = 'block';
         }
@@ -5313,7 +5333,7 @@
       </div>
     `;
     
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const isMobile = isMobileLikeViewport();
     const opts = { footer: 'none' };
     if (window.kioskMode && isMobile) opts.positionBelowKioskOnMobile = true;
     openModal(t('ジャンル選択', 'Genre Selection'), modalContent, opts);
@@ -5522,7 +5542,7 @@
       el.style.display = 'none';
       return;
     }
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const isMobile = isMobileLikeViewport();
     const step3Compact = kioskState.step === 3 && isMobile && kioskState.step3StartedOperating;
     if (step3Compact) {
       el.style.display = 'none';
@@ -5634,7 +5654,7 @@
         restartBtn.style.marginTop = '0';
       }
     } else if (kioskState.step === 3) {
-      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      const isMobile = isMobileLikeViewport();
       const step3Compact = isMobile && kioskState.step3StartedOperating;
       if (step3Compact) {
         document.body.classList.add('kiosk-step3-compact-hint');
@@ -6917,7 +6937,7 @@
         if (window.kioskState) { window.kioskState.showLowerOverlay = false; if (typeof window.updateKioskStepOverlay === 'function') window.updateKioskStepOverlay(); }
         probeBlue.eventYear = Math.min(YEAR_MAX, probeBlue.eventYear + 1);
         probeBlue.redraw();
-        if (window.matchMedia('(max-width: 768px)').matches && typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
+        if (isMobileLikeViewport() && typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
         if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
       });
     }
@@ -6927,7 +6947,7 @@
         if (window.kioskState) { window.kioskState.showLowerOverlay = false; if (typeof window.updateKioskStepOverlay === 'function') window.updateKioskStepOverlay(); }
         probeBlue.eventYear = Math.max(YEAR_MIN, probeBlue.eventYear - 1);
         probeBlue.redraw();
-        if (window.matchMedia('(max-width: 768px)').matches && typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
+        if (isMobileLikeViewport() && typeof window.scrollProbeEventYearIntoView === 'function') window.scrollProbeEventYearIntoView();
         if (typeof window.updateProbeEventsPanel === 'function') window.updateProbeEventsPanel(probeBlue.eventYear);
       });
     }
