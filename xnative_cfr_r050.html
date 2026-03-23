@@ -5336,7 +5336,7 @@
     const isMobile = isMobileLikeViewport();
     const opts = { footer: 'none' };
     if (window.kioskMode && isMobile) opts.positionBelowKioskOnMobile = true;
-    openModal(t('ジャンル選択', 'Genre Selection'), modalContent, opts);
+    openModal(t('ジャンル選択（1～4個がおすすめ）', 'Genre Selection (1-4 recommended)'), modalContent, opts);
   }
   
   function toggleGenre(genre) {
