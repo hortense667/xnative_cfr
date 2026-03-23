@@ -5739,10 +5739,13 @@
   function kioskOnGenresApplied() {
     if (!window.kioskMode) return;
     if (kioskState.step < 1) return;
-    kioskState.step = 2;
-    kioskState.eventYearMoved = false;
-    kioskState.showLowerOverlay = false;
-    kioskState.step3StartedOperating = false;
+    // すでにチェック中（step3）以降なら進行を戻さない
+    if (kioskState.step < 3) {
+      kioskState.step = 2;
+      kioskState.eventYearMoved = false;
+      kioskState.showLowerOverlay = false;
+      kioskState.step3StartedOperating = false;
+    }
     updateKioskHint();
   }
   window.kioskOnGenresApplied = kioskOnGenresApplied;
