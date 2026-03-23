@@ -2348,21 +2348,30 @@
   const probeEventsPanel = document.getElementById('probeEventsPanel');
   const probeCheckedKeys = new Set();
   let lastProbeEventYear = null;
+  function makeProbeItemKey(year, sourceIndex) {
+    return `${year}|${sourceIndex}`;
+  }
+  function refreshViewsAfterGenreSelectionChange() {
+    renderEvents();
+    updateGenreFilterButtonText();
+    if (typeof window.updateProbeEventsPanel === 'function' && typeof probeBlue !== 'undefined') {
+      window.updateProbeEventsPanel(probeBlue.eventYear);
+    }
+  }
   if (probeEventsPanel) {
     probeEventsPanel.addEventListener('change', (e)=>{
       const t = e.target;
       if (!t || t.tagName !== 'INPUT') return;
       const year = t.getAttribute('data-year');
-      const idx  = t.getAttribute('data-index');
-      if (!year || idx === null) return;
-      const key = `${year}|${idx}`;
+      const sourceIndex = t.getAttribute('data-source-index');
+      if (!year || sourceIndex === null) return;
+      const key = makeProbeItemKey(year, sourceIndex);
       if (t.checked) {
         probeCheckedKeys.add(key);
         // キオスク用の選択カウントに反映
         if (window.kioskMode && window.kioskState) {
           const yNum = Number(year);
-          const items = (events[yNum] || []).filter(passesFilter);
-          const item = items[Number(idx)];
+          const item = (events[yNum] || [])[Number(sourceIndex)];
           if (item) {
             const exists = window.kioskState.selections.some(s => s.year === yNum && s.label === item.label);
             if (!exists) {
@@ -2379,8 +2388,7 @@
         probeCheckedKeys.delete(key);
         if (window.kioskMode && window.kioskState) {
           const yNum = Number(year);
-          const items = (events[yNum] || []).filter(passesFilter);
-          const item = items[Number(idx)];
+          const item = (events[yNum] || [])[Number(sourceIndex)];
           if (item) {
             const i = window.kioskState.selections.findIndex(s => s.year === yNum && s.label === item.label);
             if (i !== -1) window.kioskState.selections.splice(i,1);
@@ -2398,7 +2406,8 @@
   function updateProbeEventsPanel(year){
     if (!probeEventsPanel) return;
     const y = Math.round(year);
-    const items = (events[y] || []).filter(passesFilter);
+    const allItems = events[y] || [];
+    const items = allItems.filter(passesFilter);
     if (!items.length){
       probeEventsPanel.style.display = 'none';
       probeEventsPanel.innerHTML = '';
@@ -2406,7 +2415,8 @@
       return;
     }
     const listHtml = items.map((item, idx) => {
-      const key = `${y}|${idx}`;
+      const sourceIndex = allItems.indexOf(item);
+      const key = makeProbeItemKey(y, sourceIndex);
       const checkedAttr = probeCheckedKeys.has(key) ? 'checked' : '';
       const jpUrl = item.url || '';
       const enUrl = item.url_e || item.url_en || item.URL_en || item.URL_e || item.urlEn || '';
@@ -2416,7 +2426,7 @@
       return `
         <li>
           <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:18px; flex-wrap:wrap;">
-            <input type="checkbox" data-year="${y}" data-index="${idx}" style="margin-right:8px; transform:scale(1.2); flex-shrink:0;" ${checkedAttr}>
+            <input type="checkbox" data-year="${y}" data-source-index="${sourceIndex}" style="margin-right:8px; transform:scale(1.2); flex-shrink:0;" ${checkedAttr}>
             <strong style="flex-shrink:0;">${item.label}</strong>
             ${hasJpUrl ? `<span class="probe-web-icon" data-web-url="${jpUrl}" title="${t('関連ページを表示', 'Open related page')}" style="cursor:pointer; flex-shrink:0;">🌐</span>` : ''}
             <span style="display:inline; font-size:18px;">${labelEn ? `<span style="color:#444;">${labelEn}</span>` : ''}${(labelEn && hasEnUrl) ? ' ' : ''}${hasEnUrl ? `<span class="probe-web-icon" data-web-url="${enUrl}" title="English page" style="cursor:pointer;">🌐</span>` : ''}</span>
@@ -5353,6 +5363,7 @@
       btn.style.background = isSelected ? '#6366f1' : '#f8fafc';
       btn.style.color = isSelected ? 'white' : '#1e293b';
     }
+    refreshViewsAfterGenreSelectionChange();
   }
   
   function selectAllGenres() {
@@ -5366,6 +5377,7 @@
       btn.style.background = '#6366f1';
       btn.style.color = 'white';
     });
+    refreshViewsAfterGenreSelectionChange();
   }
   
   function deselectAllGenres() {
@@ -5376,6 +5388,7 @@
       btn.style.background = '#f8fafc';
       btn.style.color = '#1e293b';
     });
+    refreshViewsAfterGenreSelectionChange();
   }
   
   function applyGenreFilter() {
@@ -5384,8 +5397,7 @@
       return;
     }
     closeModal();
-    renderEvents();
-    updateGenreFilterButtonText();
+    refreshViewsAfterGenreSelectionChange();
     if (window.kioskMode && typeof window.kioskOnGenresApplied === 'function') {
       window.kioskOnGenresApplied();
     }
