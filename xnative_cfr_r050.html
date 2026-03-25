@@ -7042,23 +7042,47 @@
     ].join('\n');
   }
 
+  function mode2ValueToText(value, fallback='') {
+    if (value == null) return fallback;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+      const joined = value.map(v => mode2ValueToText(v, '')).filter(Boolean).join(' / ');
+      return joined || fallback;
+    }
+    if (typeof value === 'object') {
+      const candidates = [value.text, value.label, value.title, value.name, value.reason, value.description, value.short, value.point, value.summary];
+      for (const c of candidates) {
+        const s = mode2ValueToText(c, '');
+        if (s) return s;
+      }
+      try { return JSON.stringify(value); } catch (_) { return fallback; }
+    }
+    return fallback;
+  }
+
   function normalizeMode2AiResult(parsed, fallbackLocal) {
     const main = parsed && parsed.mainAttribute ? parsed.mainAttribute : {};
     const sub = parsed && parsed.subAttribute ? parsed.subAttribute : {};
     const hidden = parsed && parsed.hiddenAttribute ? parsed.hiddenAttribute : {};
     const selectedSummaries = buildMode2SelectedSummaries();
+    const mainName = mode2ValueToText(main.name, (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入');
+    const subName = mode2ValueToText(sub.name, (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛');
+    const hiddenName = mode2ValueToText(hidden.name, (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集');
     const normTop3 = [
-      { role: '主属性', info: { ja: String(main.name || (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入'), desc: String(main.short || getMode2AttrDescJa(main.name || '世界観没入')) }, reason: String(main.reason || '') },
-      { role: '副属性', info: { ja: String(sub.name || (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛'), desc: String(sub.short || getMode2AttrDescJa(sub.name || '機構偏愛')) }, reason: String(sub.reason || '') },
-      { role: '裏属性', info: { ja: String(hidden.name || (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集'), desc: String(hidden.short || getMode2AttrDescJa(hidden.name || '記録蒐集')) }, reason: String(hidden.reason || '') }
+      { role: '主属性', info: { ja: mainName, desc: mode2ValueToText(main.short, getMode2AttrDescJa(mainName || '世界観没入')) }, reason: mode2ValueToText(main.reason, '') },
+      { role: '副属性', info: { ja: subName, desc: mode2ValueToText(sub.short, getMode2AttrDescJa(subName || '機構偏愛')) }, reason: mode2ValueToText(sub.reason, '') },
+      { role: '裏属性', info: { ja: hiddenName, desc: mode2ValueToText(hidden.short, getMode2AttrDescJa(hiddenName || '記録蒐集')) }, reason: mode2ValueToText(hidden.reason, '') }
     ];
-    const symbol = String(parsed && parsed.emblemCode || fallbackLocal.symbol || '世・機・録');
-    const alias = String(parsed && parsed.epithet || fallbackLocal.alias || '電脳路地裏の観測者');
-    const epithetReason = String(parsed && parsed.epithetReason || '選択された項目の並びと意味づけから組み立てられた異名です。');
-    const summary = String(parsed && parsed.summary || fallbackLocal.summary || '選択の並びと意味づけから、複数の属性が重なって見えました。');
-    const readingPoints = Array.isArray(parsed && parsed.readingPoints) ? parsed.readingPoints.slice(0,3).map(v => String(v || '')) : [];
+    const symbol = mode2ValueToText(parsed && parsed.emblemCode, fallbackLocal.symbol || '世・機・録');
+    const alias = mode2ValueToText(parsed && parsed.epithet, fallbackLocal.alias || '電脳路地裏の観測者');
+    const epithetReason = mode2ValueToText(parsed && parsed.epithetReason, '選択された項目の並びと意味づけから組み立てられた異名です。');
+    const summary = mode2ValueToText(parsed && parsed.summary, fallbackLocal.summary || '選択の並びと意味づけから、複数の属性が重なって見えました。');
+    const readingPoints = Array.isArray(parsed && parsed.readingPoints)
+      ? parsed.readingPoints.slice(0,3).map(v => mode2ValueToText(v, '')).filter(Boolean)
+      : [];
     while (readingPoints.length < 3) readingPoints.push('選択された項目の意味づけから、濃い関心の棚が見えます。');
-    const shareText = String(parsed && parsed.shareText || `私は『${alias}』タイプ。${symbol}。`);
+    const shareText = mode2ValueToText(parsed && parsed.shareText, `私は『${alias}』タイプ。${symbol}。`);
     const resultText = [
       'あなたをつくる3つの感性属性','',
       ...normTop3.flatMap(t => [ `${t.role}｜${t.info.ja}`, t.info.desc, t.reason ? `理由: ${t.reason}` : '', '' ]),
