@@ -251,52 +251,68 @@ async function callGeminiWithRetry(url, prompt, maxRetries = 2, temperature = 0.
   return { ok: false, error: lastError || '未知のエラー' };
 }
 
-async function callOpenAiWithRetry(prompt, maxRetries = 2, temperature = 0.9) {
+async function callOpenAiWithRetry(prompt, maxRetries = 2, temperature = 0.9, options = {}) {
   if (!OPENAI_API_KEY || !OPENAI_API_KEY.trim()) {
-    return { ok: false, error: 'サーバーに OPENAI_API_KEY が設定されていません。Railway の Variables で設定してください。' };
+    return {
+      ok: false,
+      error: 'サーバーに OPENAI_API_KEY が設定されていません。Railway の Variables で設定してください。'
+    };
   }
   const temp = clampTemperature(temperature);
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
+  const model = (options && typeof options.model === 'string' && options.model.trim())
+    ? options.model.trim()
+    : (process.env.OPENAI_MODEL || 'gpt-5.4');
+  const responseFormat = (options && options.responseFormat) ? options.responseFormat : null;
   let lastError = null;
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const body = {
+        model,
+        messages: [
+          { role: 'user', content: prompt }
+        ],
+        temperature: temp,
+        max_tokens: 1400
+      };
+      if (responseFormat) body.response_format = responseFormat;
+
       const resp = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${OPENAI_API_KEY.trim()}`
         },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || 'gpt-4o',
-          messages: [
-            { role: 'user', content: prompt }
-          ],
-          temperature: temp,
-          max_tokens: 1024
-        })
+        body: JSON.stringify(body)
       });
+
       const raw = await resp.text();
       let data = null;
       try {
         if (raw) data = JSON.parse(raw);
       } catch (_) {}
+
       if (!resp.ok) {
         const msg = data?.error?.message || data?.error || `HTTP ${resp.status}`;
         lastError = String(msg);
-        const retriable =
-          resp.status >= 500 ||
-          resp.status === 429;
+        const retriable = resp.status >= 500 || resp.status === 429;
         if (retriable && attempt < maxRetries) {
           await sleep(800 * (attempt + 1));
           continue;
         }
         return { ok: false, error: lastError };
       }
+
       const text = data?.choices?.[0]?.message?.content;
-      if (text && text.trim()) {
-        return { ok: true, text: text.trim() };
+      if (typeof text === 'string' && text.trim()) {
+        return { ok: true, text: text.trim(), model };
       }
-      return { ok: false, error: 'APIは応答しましたが、診断テキストが含まれていませんでした。' };
+
+      return {
+        ok: false,
+        error: 'APIは応答しましたが、診断テキストが含まれていませんでした。'
+      };
     } catch (e) {
       const msg = (e && e.message) ? e.message : String(e);
       lastError = msg;
@@ -307,7 +323,76 @@ async function callOpenAiWithRetry(prompt, maxRetries = 2, temperature = 0.9) {
       return { ok: false, error: '通信エラー: ' + msg };
     }
   }
+
   return { ok: false, error: lastError || '未知のエラー' };
+}
+
+function buildMode2DiagnosisResponseFormat() {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: 'mode2_diagnosis',
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          mainAttribute: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string' },
+              short: { type: 'string' },
+              reason: { type: 'string' }
+            },
+            required: ['name', 'short', 'reason']
+          },
+          subAttribute: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string' },
+              short: { type: 'string' },
+              reason: { type: 'string' }
+            },
+            required: ['name', 'short', 'reason']
+          },
+          hiddenAttribute: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string' },
+              short: { type: 'string' },
+              reason: { type: 'string' }
+            },
+            required: ['name', 'short', 'reason']
+          },
+          emblemCode: { type: 'string' },
+          epithet: { type: 'string' },
+          epithetReason: { type: 'string' },
+          summary: { type: 'string' },
+          readingPoints: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: 3,
+            maxItems: 3
+          },
+          shareText: { type: 'string' }
+        },
+        required: [
+          'mainAttribute',
+          'subAttribute',
+          'hiddenAttribute',
+          'emblemCode',
+          'epithet',
+          'epithetReason',
+          'summary',
+          'readingPoints',
+          'shareText'
+        ]
+      }
+    }
+  };
 }
 
 const APOLOGY_MESSAGE = '申し訳ありません。現在、利用可能なAI（Gemini / OpenAI）がいずれも高負荷またはエラーのため診断結果を生成できませんでした。時間をおいてもう一度お試しください。';
@@ -341,7 +426,9 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
     // Gemini が3回とも失敗した場合、OpenAI で再試行（キーがあれば）
     let fallbackError = primary.error;
     if (OPENAI_API_KEY && OPENAI_API_KEY.trim()) {
-      const secondary = await callOpenAiWithRetry(prompt, 2, temp);
+      const secondary = await callOpenAiWithRetry(prompt, 2, temp, {
+        model: process.env.OPENAI_MODEL || 'gpt-5.4'
+      });
       if (secondary.ok) {
         return res.json(secondary);
       }
@@ -360,14 +447,28 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
 
 // OpenAI 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/openai-diagnosis', async (req, res) => {
-  const { prompt, temperature } = req.body || {};
+  const { prompt, temperature, model, mode } = req.body || {};
   const promptError = validatePromptField(prompt);
   if (promptError) {
     return res.status(400).json({ ok: false, error: promptError });
   }
+
   const temp = clampTemperature(temperature);
+  const requestedModel = (typeof model === 'string' && model.trim())
+    ? model.trim()
+    : (process.env.OPENAI_MODEL || 'gpt-5.4');
+
+  const useStructuredOutput =
+    String(mode || '') === '2' ||
+    /mainAttribute|subAttribute|hiddenAttribute|readingPoints/.test(prompt);
+
+  const responseFormat = useStructuredOutput ? buildMode2DiagnosisResponseFormat() : null;
+
   try {
-    const primary = await callOpenAiWithRetry(prompt, 2, temp);
+    const primary = await callOpenAiWithRetry(prompt, 2, temp, {
+      model: requestedModel,
+      responseFormat
+    });
     if (primary.ok) {
       return res.json(primary);
     }
@@ -401,6 +502,7 @@ app.post('/api/diagnostic-result', (req, res) => {
   if (!record || typeof record !== 'object') {
     return res.status(400).json({ ok: false, error: 'body が必要です。' });
   }
+
   // 年表JSONのパスとファイル名
   const filePath = record.filePath != null ? String(record.filePath) : '';
 
@@ -431,6 +533,7 @@ app.post('/api/diagnostic-result', (req, res) => {
       ? record.selectedGenres.map(g => String(g))
       : []
   };
+
   try {
     const list = readDiagnosticResults();
     list.push(normalized);

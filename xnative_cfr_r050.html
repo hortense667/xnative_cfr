@@ -676,6 +676,10 @@
   // URLで与える kiosk スイッチ（従来の kioskMode とは別管理）
   const kioskSwitchFromUrl = isTruthyUrlParam(initialUrlParams.get('kiosk'));
   window.kioskSwitchFromUrl = kioskSwitchFromUrl;
+  const kioskDiagnosisMode = String(initialUrlParams.get('mode') || '1').trim() === '2' ? '2' : '1';
+  window.kioskDiagnosisMode = kioskDiagnosisMode;
+  function isKioskMode2() { return kioskDiagnosisMode === '2'; }
+  function getKioskDiagnosisMinCount() { return isKioskMode2() ? 5 : 10; }
   (function(){
     if (initialUrlParams.get('editmode') === 'ON' && settingsBtn) settingsBtn.style.display = '';
   })();
@@ -1054,6 +1058,10 @@
             }
           } catch (_) {}
           showKioskOverallResult();
+        }
+      } else if (phase === 'diag2') {
+        if (typeof showKioskUsageScreen === 'function') {
+          showKioskUsageScreen();
         }
       } else if (phase === 'overall') {
         if (typeof showKioskUsageScreen === 'function') {
@@ -5485,6 +5493,7 @@
     gender: '',       // スタート時アンケートの性別
     nickname: '',     // スタート時アンケートのニックネーム（保存しない）
     selections: [],   // { year, label, genre, imp }
+    selectionMeanings: {}, // { 'year__label': { taste, impact, repeat, self, admiration, discovery } }
     eventYearMoved: false,
     showLowerOverlay: false
   };
@@ -5538,6 +5547,32 @@
     });
   }
   window.confirmRestartToStart = confirmRestartToStart;
+
+
+  function getKioskSelectionKey(selection) {
+    if (!selection) return '';
+    return String(selection.year) + '__' + String(selection.label || '');
+  }
+  function getKioskSourceItem(selection) {
+    if (!selection) return null;
+    const year = selection.year;
+    const label = selection.label;
+    const arr = (events && events[year]) ? events[year] : [];
+    return arr.find(it => it.label === label) || null;
+  }
+  function getKioskMeaningState(selection) {
+    const key = getKioskSelectionKey(selection);
+    if (!key) return {};
+    if (!kioskState.selectionMeanings[key]) kioskState.selectionMeanings[key] = {};
+    return kioskState.selectionMeanings[key];
+  }
+  function escapeHtmlAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
 
   function ensureKioskStepOverlay() {
     let el = document.getElementById('kioskStepOverlay');
@@ -5635,7 +5670,8 @@
     countEl.style.justifyContent = '';
     countEl.style.flexWrap = '';
     countEl.style.marginTop = '';
-    countEl.textContent = isEnglishUi() ? `Checked: ${count} / 10` : `チェックされた数: ${count} / 10`;
+    const minCount = getKioskDiagnosisMinCount();
+    countEl.textContent = isEnglishUi() ? `Checked: ${count} / ${minCount}` : `チェックされた数: ${count} / ${minCount}`;
     if (restartBtn) restartBtn.textContent = t('最初に戻る', 'Back to start');
 
     if (kioskState.step === 1) {
@@ -5673,13 +5709,13 @@
         titleEl.style.display = 'none';
         bodyEl.style.display = 'none';
         box.classList.add('kiosk-hint-step3-compact');
-        countEl.textContent = count + '/10';
+        countEl.textContent = count + '/' + minCount;
         countEl.style.display = 'block';
         nextBtn.style.display = 'none';
         if (step3Actions) step3Actions.style.display = 'flex';
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = t('診断', 'Diagnose');
-        finishBtn.disabled = count < 10;
+        finishBtn.disabled = count < minCount;
         if (restartBtn && step3Actions) {
           restartBtn.style.display = 'inline-block';
           // step3Actions に戻して「診断」の右に置く
@@ -5696,13 +5732,13 @@
         box.classList.remove('kiosk-hint-step3-compact');
         titleEl.textContent = t('ステップ3：チェックボックで選択', 'Step 3: Select events with checkboxes');
         const desc = getLocalizedCfrPrompt('eventChecklistDescription');
-        bodyEl.textContent = desc + (isEnglishUi() ? ' You can press "Diagnose" after checking 10 or more items.' : ' 10個以上チェックすると「診断」ボタンが押せるようになります。');
-        countEl.textContent = isEnglishUi() ? ('Checked: ' + count + ' / 10') : ('チェックされた数: ' + count + ' / 10');
+        bodyEl.textContent = desc + (isEnglishUi() ? ' You can press "Diagnose" after checking ' + minCount + ' or more items.' : ' ' + minCount + '個以上チェックすると「診断」ボタンが押せるようになります。');
+        countEl.textContent = isEnglishUi() ? ('Checked: ' + count + ' / ' + minCount) : ('チェックされた数: ' + count + ' / ' + minCount);
         nextBtn.style.display = 'none';
         if (step3Actions) step3Actions.style.display = 'flex';
         finishBtn.style.display = 'inline-block';
         finishBtn.textContent = t('診断', 'Diagnose');
-        finishBtn.disabled = count < 10;
+        finishBtn.disabled = count < minCount;
         if (restartBtn && step3Actions) {
           restartBtn.style.display = 'inline-block';
           // 「診断」の右に配置（年ボタン群の前）
@@ -6288,6 +6324,7 @@
       : (head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`);
   }
   const GEMINI_MODEL = 'gemini-2.5-flash-lite';
+  const MODE2_OPENAI_MODEL = 'gpt-5.4';
   function getTemperature() {
     const cfr = getCfrPrompts();
     const t = cfr.temperature ?? DEFAULT_CFR_PROMPTS.temperature ?? 0.9;
@@ -6334,12 +6371,14 @@
   }
 
   // OpenAI をサーバ側経由で呼び出す
-  async function callOpenAiViaBackend(prompt) {
+  async function callOpenAiViaBackend(prompt, modelOverride) {
     try {
+      const payload = { prompt, temperature: getTemperature() };
+      if (modelOverride) payload.model = modelOverride;
       const res = await fetch('/api/openai-diagnosis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, temperature: getTemperature() })
+        body: JSON.stringify(payload)
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) {
@@ -6470,7 +6509,7 @@
     })();
   }
 
-  async function showKioskResult() {
+  async function showKioskResultLegacy() {
     saveKioskSessionToStorage();
     // 集約用：サーバー側に診断結果を1件送信（バックエンドが有効な場合のみ保存される）
     const birthYear = (typeof probeBlue !== 'undefined' && probeBlue.birthYear != null) ? probeBlue.birthYear : null;
@@ -6703,6 +6742,553 @@
     }
   }
 
+
+  async function showKioskResult() {
+    if (isKioskMode2()) return showKioskResultMode2();
+    return showKioskResultLegacy();
+  }
+
+  const MODE2_MEANING_DEFS = [
+    { key: 'taste', labelJa: '好み', labelEn: 'Taste', weight: 1.0 },
+    { key: 'impact', labelJa: '影響', labelEn: 'Impact', weight: 1.45 },
+    { key: 'repeat', labelJa: '繰り返し触れた', labelEn: 'Returned to', weight: 1.2 },
+    { key: 'self', labelJa: '自分らしい', labelEn: 'Feels like me', weight: 1.55 },
+    { key: 'admiration', labelJa: '憧れ', labelEn: 'Admiration', weight: 1.2 },
+    { key: 'discovery', labelJa: '発見', labelEn: 'Discovery', weight: 1.3 }
+  ];
+  const MODE2_ATTRS = {
+    world: { ja: '世界観没入', en: 'World Immersion', short: '世', desc: 'その世界に入れる感じで選ぶ属性です。' },
+    mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機', desc: '道具や仕組みそのものに心が動く属性です。' },
+    future: { ja: '未来感受', en: 'Future Sense', short: '未', desc: '次が始まる気配や時代の切り替わりに反応する属性です。' },
+    aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異', desc: '少し危うく変なものに熱を感じる属性です。' },
+    daily: { ja: '日常浸透', en: 'Daily Affinity', short: '日', desc: '生活に溶け込む手触りを長く愛する属性です。' },
+    crossing: { ja: '越境回遊', en: 'Crossing', short: '越', desc: 'ジャンルや媒体の境界を軽やかにまたぐ属性です。' },
+    boyhood: { ja: '少年回路', en: 'Boyhood Circuit', short: '少', desc: '冒険と発見の想像力に火がつく属性です。' },
+    girlhood: { ja: '少女回路', en: 'Girlhood Circuit', short: '少G', desc: '変身と関係性、内面の揺れに惹かれる属性です。' },
+    repeat: { ja: '反復愛着', en: 'Repeat Attachment', short: '反', desc: '何度も戻ることで好きが深まる属性です。' },
+    author: { ja: '作者偏信', en: 'Author Bias', short: '作', desc: '作り手の癖や姿勢まで含めて愛する属性です。' },
+    archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '録', desc: '好きなものを系譜や記録として抱える属性です。' }
+  };
+  const MODE2_SLOT_LABELS = {
+    future_city: '未来都市', school: '学園', frontier: '辺境',
+    device: '道具', screen: '画面', machine: '装置',
+    invention: '発明', turning_point: '転換点', next_life: '先取り生活',
+    absurd: '不条理', body: '変容', underground: '地下文化',
+    everyday: '生活手触り', place: '居場所', comfort: '小さな反復',
+    media_cross: '媒体横断', major_minor: 'メジャー/地下横断', bridge: '越境接続',
+    tokusatsu: '特撮', robot: 'ロボット', secretbase: '秘密基地',
+    transformation: '変身', relation: '関係性', crystal: '内面結晶',
+    revisit: '再見', reuse: '再使用', classic: '定番保持',
+    creator: '作家', edit: '編集文化', label: 'レーベル/媒体',
+    magazine: '雑誌', timeline: '年表', archive: 'アーカイブ'
+  };
+
+  function inferMode2Profile(selection) {
+    const item = getKioskSourceItem(selection) || {};
+    const genres = Array.isArray(item.genre) ? item.genre.map(g => String(g || '').toUpperCase()) : (item.genre ? [String(item.genre).toUpperCase()] : []);
+    const note = String(item.note || item.note_en || '').toLowerCase();
+    const label = String(item.label || item.label_en || selection.label || '').toLowerCase();
+    const text = (label + ' ' + note);
+    const attr = {};
+    const slots = {};
+    const addAttr = (k, v) => { attr[k] = (attr[k] || 0) + v; };
+    const addSlot = (k, v) => { slots[k] = (slots[k] || 0) + v; };
+    const has = (arr) => arr.some(w => text.includes(w));
+
+    if (genres.includes('HAR') || genres.includes('SOF')) { addAttr('mechanism', 2.8); addSlot('device', 2); addSlot('machine', 1.5); }
+    if (genres.includes('NET')) { addAttr('future', 1.7); addAttr('mechanism', 1.4); addSlot('screen', 1.5); addSlot('next_life', 1.2); }
+    if (genres.includes('MOV') || genres.includes('TVP') || genres.includes('ANI')) { addAttr('world', 1.4); }
+    if (genres.includes('MAN')) { addAttr('author', 0.8); addAttr('world', 0.8); }
+    if (genres.includes('GAM')) { addAttr('boyhood', 1.4); addAttr('world', 1.0); addSlot('secretbase', 0.8); }
+    if (genres.length >= 2) { addAttr('crossing', 1.4); addSlot('media_cross', 1.0); }
+
+    if (selection && selection.year != null) {
+      const year = Number(selection.year);
+      if (!Number.isNaN(year) && year <= 1995) { addAttr('archive', 0.5); addSlot('timeline', 0.5); }
+    }
+
+    if (has(['未来','sf','宇宙','電脳','サイバー','time travel','future','space'])) { addAttr('future', 1.8); addAttr('world', 1.0); addSlot('future_city', 1.0); }
+    if (has(['ロボ','robot','メカ','装置','ガジェット','端末','os','pc','computer','コンピュータ','カメラ','drone','ui'])) { addAttr('mechanism', 2.0); addSlot('machine', 1.0); addSlot('screen', 1.0); }
+    if (has(['学園','学校','school'])) { addAttr('world', 1.2); addSlot('school', 1.2); }
+    if (has(['日常','喫茶','家族','生活','ほのぼの','everyday'])) { addAttr('daily', 1.8); addAttr('repeat', 0.6); addSlot('everyday', 1.2); addSlot('place', 1.0); }
+    if (has(['冒険','探検','怪獣','特撮','戦隊','ロボット','少年','基地','宇宙船'])) { addAttr('boyhood', 2.0); addSlot('tokusatsu', 1.2); addSlot('secretbase', 1.1); }
+    if (has(['少女','変身','憧れ','恋愛','関係','きら','魔法少女','内面','美','痛み'])) { addAttr('girlhood', 1.8); addSlot('transformation', 1.0); addSlot('relation', 1.0); }
+    if (has(['不条理','奇妙','グロ','残酷','地下','アングラ','異形','狂気','dark','bizarre'])) { addAttr('aberration', 2.1); addSlot('absurd', 1.2); addSlot('underground', 1.2); }
+    if (has(['作者','監督','作家','編集','雑誌','連載','スタジオ','シリーズ'])) { addAttr('author', 1.8); addSlot('creator', 1.0); addSlot('edit', 1.0); }
+    if (has(['雑誌','資料','アーカイブ','年表','記録','史','市場','文化'])) { addAttr('archive', 2.0); addSlot('magazine', 1.2); addSlot('archive', 1.0); }
+    if (has(['クロスオーバー','横断','ネットワーク','融合','multimedia'])) { addAttr('crossing', 1.8); addSlot('bridge', 1.0); }
+    if (has(['名作','定番','long-running','代表','金字塔'])) { addAttr('repeat', 0.8); addSlot('classic', 1.0); }
+    if (has(['新','初','先駆','勃興','話題','注目','landmark','pioneering'])) { addAttr('future', 1.4); addSlot('turning_point', 1.0); }
+
+    if (!Object.keys(attr).length) addAttr('world', 1.0);
+    return { item, attr, slots };
+  }
+
+  function buildMode2DiagnosisLocal() {
+    const attrScores = {};
+    const slotScores = {};
+    const worldWordScores = {};
+    const roleWordScores = {};
+    const moodWordScores = {};
+    const selectedSummaries = [];
+    const boostWord = (bag, word, val) => { if (!word) return; bag[word] = (bag[word] || 0) + val; };
+    const ensureAttr = (code) => { if (attrScores[code] == null) attrScores[code] = 0; };
+    Object.keys(MODE2_ATTRS).forEach(ensureAttr);
+
+    const roleByAttr = {
+      mechanism: ['司書','整備士','技手'], world: ['住人','旅人','観測者'], future: ['観測者','予報士','技手'],
+      aberration: ['巡礼者','観測者','偏愛民'], daily: ['住人','保守民','偏愛民'], crossing: ['回遊民','案内人','接続者'],
+      boyhood: ['探検民','発明民','観測者'], girlhood: ['結晶民','憧憬民','観測者'], repeat: ['保守民','蒐集家','住人'],
+      author: ['司書','偏愛民','蒐集家'], archive: ['司書','蒐集家','観測者']
+    };
+    const worldBySignal = {
+      HAR: ['電脳','機関','机上'], SOF: ['画面','電脳','机上'], NET: ['回線','電脳','未来'], GAM: ['放課後','秘密基地','冒険'],
+      MOV: ['銀幕','世界','街角'], TVP: ['居間','放課後','街角'], ANI: ['学園','世界','夢'], MAN: ['路地裏','書架','紙上']
+    };
+    const moodByMeaning = { taste: '偏愛', impact: '感化', repeat: '反復', self: '同型', admiration: '憧憬', discovery: '発見' };
+
+    (kioskState.selections || []).forEach((selection) => {
+      const meaning = getKioskMeaningState(selection);
+      const activeMeanings = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]);
+      if (!activeMeanings.length) return;
+      const { item, attr, slots } = inferMode2Profile(selection);
+      let totalMeaningWeight = 0;
+      activeMeanings.forEach(def => {
+        totalMeaningWeight += def.weight;
+        Object.keys(attr).forEach(code => { attrScores[code] = (attrScores[code] || 0) + attr[code] * def.weight; });
+        Object.keys(slots).forEach(code => { slotScores[code] = (slotScores[code] || 0) + slots[code] * def.weight; });
+        boostWord(moodWordScores, moodByMeaning[def.key], def.weight);
+      });
+      const genres = Array.isArray(item && item.genre) ? item.genre.map(g => String(g || '').toUpperCase()) : [];
+      if (genres.length) {
+        genres.forEach(g => (worldBySignal[g] || []).forEach(w => boostWord(worldWordScores, w, totalMeaningWeight / Math.max(1, genres.length))));
+      } else {
+        boostWord(worldWordScores, '世界', totalMeaningWeight);
+      }
+      const topLine = activeMeanings.map(def => def.labelJa).join('・');
+      selectedSummaries.push(`${selection.year}年: ${getPrimaryLabel(item || selection)}［${topLine}］`);
+      if ((item.note || '').includes('雑誌')) boostWord(roleWordScores, '司書', totalMeaningWeight);
+      if (genres.includes('HAR') || genres.includes('SOF')) roleByAttr.mechanism.forEach(w => boostWord(roleWordScores, w, totalMeaningWeight / 4));
+      if (genres.includes('MOV') || genres.includes('ANI') || genres.includes('MAN')) roleByAttr.world.forEach(w => boostWord(roleWordScores, w, totalMeaningWeight / 5));
+    });
+
+    const rankedAttrs = Object.entries(attrScores).sort((a,b) => b[1] - a[1]);
+    const top3 = rankedAttrs.slice(0,3).map(([code, score], idx) => ({
+      code,
+      score,
+      role: idx === 0 ? '主属性' : idx === 1 ? '副属性' : '裏属性',
+      info: MODE2_ATTRS[code]
+    }));
+    while (top3.length < 3) {
+      const fallbackCode = Object.keys(MODE2_ATTRS)[top3.length] || 'world';
+      top3.push({ code: fallbackCode, score: 0, role: top3.length === 0 ? '主属性' : top3.length === 1 ? '副属性' : '裏属性', info: MODE2_ATTRS[fallbackCode] });
+    }
+    top3.forEach(t => (roleByAttr[t.code] || []).forEach(w => boostWord(roleWordScores, w, t.score || 0.1)));
+
+    const topSlots = Object.entries(slotScores).sort((a,b) => b[1] - a[1]).slice(0,3).map(([code]) => MODE2_SLOT_LABELS[code] || code);
+    const topWorldWords = Object.entries(worldWordScores).sort((a,b) => b[1] - a[1]).slice(0,2).map(([word]) => word);
+    const topMoodWord = (Object.entries(moodWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '偏愛';
+    const topRoleWord = (Object.entries(roleWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '観測者';
+    const alias = `${topWorldWords[0] || '電脳'}${topWorldWords[1] ? topWorldWords[1] + 'の' : 'の'}${topMoodWord}${topRoleWord}`;
+    const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
+    const summary = `あなたは「${top3[0].info.ja}」を中心に、「${top3[1].info.ja}」で好みの幅を持ち、「${top3[2].info.ja}」が深いところで効いているタイプです。`;
+    const resultText = [
+      'あなたをつくる3つの感性属性',
+      '',
+      ...top3.flatMap(t => [`${t.role}｜${t.info.ja}`, t.info.desc, '']),
+      'あなたの記号',
+      symbol,
+      '',
+      'あなたの異名',
+      alias,
+      '',
+      '濃く出たスロット',
+      (topSlots.length ? topSlots.join(' / ') : '—'),
+      '',
+      '総合すると',
+      summary
+    ].join('\n');
+    return { top3, topSlots, alias, symbol, summary, resultText, selectedSummaries };
+  }
+
+  function buildMode2SelectedSummaries() {
+    return (kioskState.selections || []).map((selection) => {
+      const meaning = getKioskMeaningState(selection);
+      const activeMeanings = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]);
+      if (!activeMeanings.length) return null;
+      const item = getKioskSourceItem(selection) || selection;
+      const tags = activeMeanings.map(def => def.labelJa).join('・');
+      return `${selection.year}年: ${getPrimaryLabel(item)}［${tags}］`;
+    }).filter(Boolean).sort();
+  }
+
+  function buildMode2Payload() {
+    const nickname = normalizeKioskNickname(kioskState.nickname || '');
+    const timestamp = new Date().toISOString();
+    const selectedItems = (kioskState.selections || []).map((selection) => {
+      const item = getKioskSourceItem(selection) || {};
+      const meaning = getKioskMeaningState(selection);
+      const tags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => def.labelJa);
+      return {
+        label: getPrimaryLabel(item || selection) || selection.label || '',
+        year: selection.year,
+        genre: Array.isArray(item.genre) ? item.genre : (item.genre ? [item.genre] : []),
+        note: String(item.note || item.note_en || ''),
+        tags
+      };
+    }).filter(it => Array.isArray(it.tags) && it.tags.length > 0);
+    return { mode: 2, nickname, timestamp, selectedItems };
+  }
+
+  function getMode2AttrDescJa(name) {
+    const map = {
+      '世界観没入': 'その世界に入れる感じで選ぶ属性です。',
+      '機構偏愛': '道具や仕組みそのものに心が動く属性です。',
+      '未来感受': '次が始まる気配や時代の切り替わりに反応する属性です。',
+      '異形親和': '少し危うく変なものに熱を感じる属性です。',
+      '日常浸透': '生活に溶け込む手触りを長く愛する属性です。',
+      '越境回遊': 'ジャンルや媒体の境界を軽やかにまたぐ属性です。',
+      '少年回路': '冒険と発見の想像力に火がつく属性です。',
+      '少女回路': '変身と関係性、内面の揺れに惹かれる属性です。',
+      '反復愛着': '何度も戻ることで好きが深まる属性です。',
+      '作者偏信': '作り手の癖や姿勢まで含めて愛する属性です。',
+      '記録蒐集': '好きなものを系譜や記録として抱える属性です。'
+    };
+    return map[name] || '選択の並び方から立ち上がった感性属性です。';
+  }
+
+  function stripCodeFences(s) {
+    const src = String(s || '').trim();
+    const m = src.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    return m ? m[1].trim() : src;
+  }
+
+  function parseMode2AiJson(text) {
+    const raw = stripCodeFences(text);
+    try { return JSON.parse(raw); } catch (_) {}
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try { return JSON.parse(raw.slice(start, end + 1)); } catch (_) {}
+    }
+    throw new Error('AI response is not valid JSON');
+  }
+
+  async function fetchDiagnosisFromConfiguredProvider(prompt, options) {
+    const opts = options || {};
+    const mode2OpenAiOnly = !!opts.mode2OpenAiOnly;
+    const openAiModel = opts.openAiModel || '';
+    if (mode2OpenAiOnly) {
+      let lastError = '';
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const result = await callOpenAiViaBackend(prompt, openAiModel || MODE2_OPENAI_MODEL);
+        const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
+        if (hasText) return result;
+        if (result && result.error) lastError = result.error;
+        else lastError = 'OpenAI backend returned empty response.';
+      }
+      return { ok: false, error: lastError || 'OpenAI backend failed' };
+    }
+    const cfr = getCfrPrompts();
+    const provider = ((cfr.aiProvider || DEFAULT_CFR_PROMPTS.aiProvider || 'gemini') + '').toLowerCase();
+    const retryProvider = async (which, maxAttempts) => {
+      let lastError = '';
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const result = which === 'gemini' ? await callGeminiViaBackend(prompt) : await callOpenAiViaBackend(prompt);
+        const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
+        if (hasText) return result;
+        if (result && result.error) lastError = result.error;
+        else lastError = which.toUpperCase() + ' backend returned empty response.';
+      }
+      return { ok: false, error: lastError || 'Unknown error' };
+    };
+    const primary = (provider === 'openai') ? 'openai' : 'gemini';
+    const secondary = (primary === 'gemini') ? 'openai' : 'gemini';
+    const p = await retryProvider(primary, 2);
+    if (p && p.ok && p.text && p.text.trim()) return p;
+    const s = await retryProvider(secondary, 2);
+    if (s && s.ok && s.text && s.text.trim()) return s;
+    return { ok: false, error: (p && p.error) || (s && s.error) || 'AI backend failed' };
+  }
+
+  function buildMode2AiPrompt(payload) {
+    const attrs = [
+      '世界観没入','機構偏愛','未来感受','異形親和','日常浸透','越境回遊','少年回路','少女回路','反復愛着','作者偏信','記録蒐集'
+    ];
+    return [
+      'あなたは、コンテンツ・製品・サービスの選択履歴から、その人の「感性属性」を読む文化的診断アナリストです。',
+      'これは医療・心理診断ではなく、文化的嗜好の読み解きです。',
+      '入力として、ユーザーが選んだ項目一覧と、各項目に対する意味づけタグが渡されます。',
+      'タグは次の6種類です: 好み / 影響 / 繰り返し触れた / 自分らしい / 憧れ / 発見',
+      '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
+      '必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
+      attrs.join(' / '),
+      '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
+      '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。',
+      'また、ユーザー固有の少し変わった異名を1つ作ってください。異名は意味が通ることを優先し、過度に難解にしすぎないでください。',
+      '記号は3属性を表す短い漢字コードにしてください。例: 機・異・録',
+      '制約:',
+      '- 露骨な性格診断や病理的解釈をしない',
+      '- 性別を決めつけない',
+      '- 過剰に褒めすぎない',
+      '- 選択内容に根拠のある範囲で解釈する',
+      '- readingPoints は3件ちょうど返す',
+      '- summary は日本語で120〜220字程度',
+      '- shareText は日本語で80字以内',
+      'JSONの形式は次のキーを必ず含めてください: mainAttribute, subAttribute, hiddenAttribute, emblemCode, epithet, epithetReason, summary, readingPoints, shareText',
+      '各 attribute には name, short, reason を含めてください。',
+      '以下はユーザーの選択結果です。これをもとにJSON形式で診断してください。',
+      JSON.stringify(payload, null, 2)
+    ].join('\n');
+  }
+
+  function normalizeMode2AiResult(parsed, fallbackLocal) {
+    const main = parsed && parsed.mainAttribute ? parsed.mainAttribute : {};
+    const sub = parsed && parsed.subAttribute ? parsed.subAttribute : {};
+    const hidden = parsed && parsed.hiddenAttribute ? parsed.hiddenAttribute : {};
+    const selectedSummaries = buildMode2SelectedSummaries();
+    const normTop3 = [
+      { role: '主属性', info: { ja: String(main.name || (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入'), desc: String(main.short || getMode2AttrDescJa(main.name || '世界観没入')) }, reason: String(main.reason || '') },
+      { role: '副属性', info: { ja: String(sub.name || (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛'), desc: String(sub.short || getMode2AttrDescJa(sub.name || '機構偏愛')) }, reason: String(sub.reason || '') },
+      { role: '裏属性', info: { ja: String(hidden.name || (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集'), desc: String(hidden.short || getMode2AttrDescJa(hidden.name || '記録蒐集')) }, reason: String(hidden.reason || '') }
+    ];
+    const symbol = String(parsed && parsed.emblemCode || fallbackLocal.symbol || '世・機・録');
+    const alias = String(parsed && parsed.epithet || fallbackLocal.alias || '電脳路地裏の観測者');
+    const epithetReason = String(parsed && parsed.epithetReason || '選択された項目の並びと意味づけから組み立てられた異名です。');
+    const summary = String(parsed && parsed.summary || fallbackLocal.summary || '選択の並びと意味づけから、複数の属性が重なって見えました。');
+    const readingPoints = Array.isArray(parsed && parsed.readingPoints) ? parsed.readingPoints.slice(0,3).map(v => String(v || '')) : [];
+    while (readingPoints.length < 3) readingPoints.push('選択された項目の意味づけから、濃い関心の棚が見えます。');
+    const shareText = String(parsed && parsed.shareText || `私は『${alias}』タイプ。${symbol}。`);
+    const resultText = [
+      'あなたをつくる3つの感性属性','',
+      ...normTop3.flatMap(t => [ `${t.role}｜${t.info.ja}`, t.info.desc, t.reason ? `理由: ${t.reason}` : '', '' ]),
+      'あなたの記号', symbol, '',
+      'あなたの異名', alias, '',
+      'この名の由来', epithetReason, '',
+      '総合すると', summary, '',
+      '今回の読み解き', ...readingPoints.map(v => '・' + v)
+    ].filter(Boolean).join('\n');
+    return { top3: normTop3, symbol, alias, epithetReason, summary, readingPoints, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '' };
+  }
+
+  function buildMode2ResultHtml(result) {
+    const parts = result.top3.map(t => `
+      <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; background:#fff;">
+        <div style="font-size:13px; color:#64748b; margin-bottom:4px;">${t.role}</div>
+        <div style="font-size:22px; font-weight:700; margin-bottom:6px;">${escapeHtmlText(t.info.ja)}</div>
+        <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(t.info.desc || '')}</div>
+        ${t.reason ? `<div style="font-size:12px; line-height:1.7; color:#64748b; margin-top:8px;">${escapeHtmlText(t.reason)}</div>` : ''}
+      </div>
+    `).join('');
+    const pickedHtml = result.selectedSummaries.length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.selectedSummaries.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
+    const readingHtml = (result.readingPoints || []).length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.readingPoints.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
+    return `
+      <div data-diagnosis-report="1" style="white-space:pre-wrap; font-size:13px; line-height:1.8;">${escapeHtmlText(result.resultText)}</div>
+      <div style="margin-top:16px; display:grid; gap:12px;">${parts}</div>
+      <div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+        <div style="font-size:13px; color:#64748b;">あなたの記号</div>
+        <div style="font-size:24px; font-weight:700; margin-top:4px;">${escapeHtmlText(result.symbol)}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">あなたの異名</div>
+        <div style="font-size:22px; font-weight:700; margin-top:4px;">${escapeHtmlText(result.alias)}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">この名の由来</div>
+        <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.epithetReason || '')}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">総合すると</div>
+        <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.summary)}</div>
+      </div>
+      <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
+        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">今回の読み解き</div>
+        ${readingHtml}
+      </div>
+      <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
+        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">今回強く印を付けた項目</div>
+        ${pickedHtml}
+      </div>
+      ${result.fallbackError ? `<p style="margin-top:12px; font-size:12px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
+      <div style="margin-top:16px; display:flex; flex-wrap:wrap; gap:16px;">
+        <div><button type="button" id="kioskQrPersonalBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('個人レポートのQRを表示', 'Show QR for personal report')}</button></div>
+      </div>
+      <p style="margin-top:16px; font-size:12px; color:#666;">${t('QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます。', 'Scanning the QR shows the checked item list and diagnosis text.')}</p>
+    `;
+  }
+
+  function attachKioskPersonalQrButton(report) {
+    const pBtn = document.getElementById('kioskQrPersonalBtn');
+    if (!pBtn) return;
+    pBtn.addEventListener('click', () => {
+      const nickname = normalizeKioskNickname(kioskState.nickname || '');
+      const selectedLines = (kioskState.selections || []).slice().sort((a,b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year).map(s => {
+        const source = getKioskSourceItem(s) || s;
+        return `${s.year}年: ${getPrimaryLabel(source)}`;
+      });
+      const textEncoder = new TextEncoder();
+      const utf8Len = (s) => textEncoder.encode(String(s || '')).length;
+      const clampUtf8 = (text, maxBytes) => {
+        const src = String(text || '');
+        if (maxBytes <= 0) return '';
+        const bytes = textEncoder.encode(src);
+        if (bytes.length <= maxBytes) return src;
+        let i = maxBytes;
+        while (i > 0 && (bytes[i - 1] & 0xC0) === 0x80) i--;
+        return new TextDecoder('utf-8').decode(bytes.slice(0, i));
+      };
+      const MAX_QR_BYTES = 2800;
+      const omitNote = '（以下QRコードに入らないため省略しました）';
+      const fixedPrefix = '【ニックネーム】\n' + nickname + '\n\n【診断結果】\n' + report + '\n\n【チェックした項目】\n';
+      if (utf8Len(fixedPrefix) > MAX_QR_BYTES) {
+        openModalText('QR生成エラー', '診断結果本文が長すぎるため、QRコードに収まりませんでした。');
+        return;
+      }
+      const available = MAX_QR_BYTES - utf8Len(fixedPrefix);
+      let checkedBody = '（' + selectedLines.length + '件）\n' + selectedLines.join('\n');
+      if (utf8Len(checkedBody) > available) {
+        checkedBody = '（' + selectedLines.length + '件）\n';
+        const acc = [];
+        for (const line of selectedLines) {
+          const next = '（' + selectedLines.length + '件）\n' + acc.concat(line).join('\n') + '\n' + omitNote;
+          if (utf8Len(next) <= available) acc.push(line); else break;
+        }
+        checkedBody = '（' + selectedLines.length + '件）\n' + acc.join('\n') + '\n' + omitNote;
+      }
+      const qrText = clampUtf8(fixedPrefix + checkedBody, MAX_QR_BYTES);
+      let overlay = document.getElementById('kioskQrPersonalOverlay');
+      if (overlay) overlay.remove();
+      overlay = document.createElement('div');
+      overlay.id = 'kioskQrPersonalOverlay';
+      overlay.innerHTML = '<div class="kiosk-qr-img" style="color:#fff;font-size:18px;">QR生成中…</div><button type="button" class="kiosk-qr-close">閉じる</button>';
+      overlay.querySelector('.kiosk-qr-close').addEventListener('click', () => overlay.remove());
+      document.body.appendChild(overlay);
+      const showQrOverlay = (dataUrl) => {
+        const wrap = overlay.querySelector('.kiosk-qr-img');
+        wrap.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.alt = '個人レポートQR';
+        wrap.appendChild(img);
+      };
+      const showError = (msg) => {
+        const wrap = overlay.querySelector('.kiosk-qr-img');
+        wrap.style.color = '#f88';
+        wrap.textContent = msg || 'QRの生成に失敗しました';
+      };
+      const runGenerate = () => {
+        const qrSize = Math.min(520, Math.min(window.innerWidth, window.innerHeight) - 80);
+        try {
+          const Q = window.QRCode || window.qrcode || (typeof QRCode !== 'undefined' ? QRCode : null);
+          if (!Q) return showError('QRライブラリが読み込めません');
+          const canvas = document.createElement('canvas');
+          const opts = { width: qrSize, margin: 2, errorCorrectionLevel: 'L' };
+          if (typeof Q.toCanvas === 'function') {
+            Q.toCanvas(canvas, qrText, opts, (err) => {
+              if (err) return showError('QRの生成に失敗しました');
+              try { showQrOverlay(canvas.toDataURL('image/png')); } catch (_) { showError('画像の作成に失敗'); }
+            });
+            return;
+          }
+          if (typeof Q.toDataURL === 'function') {
+            const p = Q.toDataURL(qrText, opts);
+            if (p && typeof p.then === 'function') p.then(showQrOverlay).catch(() => showError('QRの生成に失敗しました'));
+            return;
+          }
+          showError('QR APIが見つかりません');
+        } catch (_) { showError('QRの生成に失敗しました'); }
+      };
+      if (window.QRCode || window.qrcode) return runGenerate();
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';
+      script.crossOrigin = 'anonymous';
+      script.onload = runGenerate;
+      script.onerror = () => showError('QRライブラリの読み込みに失敗しました');
+      document.head.appendChild(script);
+    });
+  }
+
+  async function showKioskResultMode2() {
+    const fallbackLocal = buildMode2DiagnosisLocal();
+    let result = fallbackLocal;
+    let fallbackError = '';
+    try {
+      saveKioskSessionToStorage();
+      const payload = buildMode2Payload();
+      const prompt = buildMode2AiPrompt(payload);
+      const aiResult = await fetchDiagnosisFromConfiguredProvider(prompt, { mode2OpenAiOnly: true, openAiModel: MODE2_OPENAI_MODEL });
+      if (!aiResult || !aiResult.ok || !aiResult.text || !String(aiResult.text).trim()) {
+        throw new Error((aiResult && aiResult.error) ? aiResult.error : 'AI diagnosis returned empty response');
+      }
+      const parsed = parseMode2AiJson(aiResult.text);
+      result = normalizeMode2AiResult(parsed, fallbackLocal);
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      fallbackError = t('※ AI診断の取得に失敗したため、簡易診断を表示しています: ', '* AI diagnosis failed, showing simplified diagnosis: ') + msg;
+      result = Object.assign({}, fallbackLocal, { fallbackError });
+    }
+    kioskState.step = 4;
+    updateKioskHint();
+    if (probeEventsPanel) {
+      probeEventsPanel.style.display = 'none';
+      probeEventsPanel.innerHTML = '';
+      lastProbeEventYear = null;
+    }
+    window.lastDiagnosisExecutedAt = new Date().toISOString();
+    kioskModalPhase = 'diag2';
+    openModal('診断結果', buildMode2ResultHtml(result), { footer: 'next' });
+    attachKioskPersonalQrButton(result.resultText);
+  }
+
+  function showKioskMeaningSelection() {
+    const selections = kioskState.selections.slice().sort((a,b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year);
+    const defs = MODE2_MEANING_DEFS;
+    const rows = selections.map(sel => {
+      const source = getKioskSourceItem(sel) || sel;
+      const state = getKioskMeaningState(sel);
+      const key = getKioskSelectionKey(sel);
+      const chips = defs.map(def => {
+        const active = !!state[def.key];
+        return `<label style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid ${active ? '#818cf8' : '#cbd5e1'}; background:${active ? '#eef2ff' : '#fff'}; cursor:pointer; font-size:13px;">
+          <input type="checkbox" data-meaning-key="${def.key}" data-selection-key="${escapeHtmlAttr(key)}" ${active ? 'checked' : ''} style="margin:0;">${def.labelJa}
+        </label>`;
+      }).join('');
+      return `<div style="border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:12px; background:#fff;">
+        <div style="font-size:16px; font-weight:700; margin-bottom:8px;">${escapeHtmlText(sel.year + '年: ' + getPrimaryLabel(source))}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">${chips}</div>
+      </div>`;
+    }).join('');
+    const html = `
+      <p style="font-size:18px; line-height:1.7;">${t('選んだ項目について、どんな意味で大事だったかを選んでください。複数選択できます。', 'For each selected item, choose how it mattered to you. Multiple selections are allowed.')}</p>
+      <div style="max-height:420px; overflow-y:auto; margin-top:12px; padding-right:4px;">${rows}</div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+        <button type="button" id="kioskBackToCheckBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('チェックに戻る', 'Back to checklist')}</button>
+        <button type="button" id="kioskGoResultBtn" style="padding:6px 12px; border-radius:8px; border:none; background:#0d9488; color:#fff; cursor:pointer; font-weight:600;">${t('診断する', 'Diagnose')}</button>
+      </div>
+    `;
+    kioskModalPhase = null;
+    openModal(t('意味づけ', 'Add meaning'), html, { footer: 'none' });
+    document.querySelectorAll('input[data-meaning-key][data-selection-key]').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const target = e.currentTarget;
+        const selectionKey = target.getAttribute('data-selection-key') || '';
+        const meaningKey = target.getAttribute('data-meaning-key') || '';
+        kioskState.selectionMeanings[selectionKey] = kioskState.selectionMeanings[selectionKey] || {};
+        kioskState.selectionMeanings[selectionKey][meaningKey] = !!target.checked;
+      });
+    });
+    const backBtn = document.getElementById('kioskBackToCheckBtn');
+    const goBtn = document.getElementById('kioskGoResultBtn');
+    if (backBtn) backBtn.addEventListener('click', () => closeModal());
+    if (goBtn) {
+      goBtn.addEventListener('click', () => {
+        const selectedMeaningCount = Object.values(kioskState.selectionMeanings || {}).reduce((acc, item) => acc + Object.values(item || {}).filter(Boolean).length, 0);
+        if (!selectedMeaningCount) {
+          openModalText('選択が必要です', '少なくとも1つは印を付けてください。');
+          return;
+        }
+        closeModal();
+        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('GPT-5.4で3属性診断を生成しています。<br>しばらくお待ちください。', 'Generating your 3-attribute diagnosis with GPT-5.4...<br>Please wait.') + '</p></div>';
+        openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
+        showKioskResultMode2();
+      });
+    }
+  }
+
   function showKioskSelectionsSummary() {
     if (!window.kioskMode) return;
     const list = kioskState.selections.slice();
@@ -6735,13 +7321,13 @@
       })
       .join('');
     const html = `
-      <p style="font-size:20px;">${t('これまでにチェックした項目の一覧です。OKなら「終了して診断」を選んでください。', 'This is the list of items you have checked. If OK, choose "Finish and Diagnose".')}</p>
+      <p style="font-size:20px;">${t('これまでにチェックした項目の一覧です。OKなら次へ進んでください。', 'This is the list of items you have checked. If OK, continue to the next step.')}</p>
       <ul style="max-height:300px; overflow-y:auto; padding-left:18px; font-size:18px; margin-top:8px;">
         ${itemsHtml}
       </ul>
       <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
         <button type="button" id="kioskBackToCheckBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('チェックに戻る', 'Back to checklist')}</button>
-        <button type="button" id="kioskGoResultBtn" style="padding:6px 12px; border-radius:8px; border:none; background:#0d9488; color:#fff; cursor:pointer; font-weight:600;">${t('終了して診断する', 'Finish and Diagnose')}</button>
+        <button type="button" id="kioskGoResultBtn" style="padding:6px 12px; border-radius:8px; border:none; background:#0d9488; color:#fff; cursor:pointer; font-weight:600;">${t('次へ', 'Next')}</button>
       </div>
     `;
     kioskModalPhase = null;
@@ -6756,6 +7342,10 @@
     if (goBtn) {
       goBtn.addEventListener('click', () => {
         closeModal();
+        if (isKioskMode2()) {
+          showKioskMeaningSelection();
+          return;
+        }
         const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('AIで診断を生成しています。<br>しばらくお待ちください。', 'Generating AI diagnosis...<br>Please wait.') + '</p></div>';
         openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
         showKioskResult();
@@ -6901,6 +7491,7 @@
     // 状態リセット
     kioskState.step = 0;
     kioskState.selections = [];
+    kioskState.selectionMeanings = {};
     kioskState.nickname = '';
     kioskState.eventYearMoved = false;
     kioskState.showLowerOverlay = false;
@@ -6954,7 +7545,7 @@
     // 「次へ」はステップ遷移には使わない（常に非表示）
     nextBtn.addEventListener('click', () => {});
     finishBtn.addEventListener('click', () => {
-      if (kioskState.step === 3 && kioskState.selections.length >= 10) {
+      if (kioskState.step === 3 && kioskState.selections.length >= getKioskDiagnosisMinCount()) {
         showKioskSelectionsSummary();
       }
     });
