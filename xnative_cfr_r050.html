@@ -7135,7 +7135,26 @@
     `;
   }
 
-  function attachKioskPersonalQrButton(report) {
+  function buildMode2CompactQrReport(result) {
+    if (!result || typeof result !== 'object') return '';
+    const top3 = Array.isArray(result.top3) ? result.top3 : [];
+    const compactLines = [
+      'あなたをつくる3つの感性属性',
+      ...top3.slice(0, 3).map(t => `${t.role}｜${mode2ValueToText(t && t.info && t.info.ja, '—')}`),
+      '',
+      'あなたの記号',
+      mode2ValueToText(result.emblemCode || result.symbol, '—'),
+      '',
+      'あなたの異名',
+      mode2ValueToText(result.epithet || result.alias, '—'),
+      '',
+      '総合すると',
+      mode2ValueToText(result.shareText || result.summary, '')
+    ].filter(Boolean);
+    return compactLines.join('\n');
+  }
+
+  function attachKioskPersonalQrButton(reportOrResult) {
     const pBtn = document.getElementById('kioskQrPersonalBtn');
     if (!pBtn) return;
     pBtn.addEventListener('click', () => {
@@ -7157,23 +7176,41 @@
       };
       const MAX_QR_BYTES = 2800;
       const omitNote = '（以下QRコードに入らないため省略しました）';
-      const fixedPrefix = '【ニックネーム】\n' + nickname + '\n\n【診断結果】\n' + report + '\n\n【チェックした項目】\n';
-      if (utf8Len(fixedPrefix) > MAX_QR_BYTES) {
-        openModalText('QR生成エラー', '診断結果本文が長すぎるため、QRコードに収まりませんでした。');
-        return;
-      }
-      const available = MAX_QR_BYTES - utf8Len(fixedPrefix);
-      let checkedBody = '（' + selectedLines.length + '件）\n' + selectedLines.join('\n');
-      if (utf8Len(checkedBody) > available) {
+      const fullReport = typeof reportOrResult === 'string'
+        ? reportOrResult
+        : mode2ValueToText(reportOrResult && reportOrResult.resultText, '');
+      const compactReport = typeof reportOrResult === 'object'
+        ? buildMode2CompactQrReport(reportOrResult)
+        : fullReport;
+      const reportCandidates = [fullReport];
+      if (compactReport && compactReport !== fullReport) reportCandidates.push(compactReport);
+
+      const buildCheckedBodyWithin = (available) => {
+        if (available <= 0) return '';
+        let checkedBody = '（' + selectedLines.length + '件）\n' + selectedLines.join('\n');
+        if (utf8Len(checkedBody) <= available) return checkedBody;
         checkedBody = '（' + selectedLines.length + '件）\n';
         const acc = [];
         for (const line of selectedLines) {
           const next = '（' + selectedLines.length + '件）\n' + acc.concat(line).join('\n') + '\n' + omitNote;
           if (utf8Len(next) <= available) acc.push(line); else break;
         }
-        checkedBody = '（' + selectedLines.length + '件）\n' + acc.join('\n') + '\n' + omitNote;
+        return '（' + selectedLines.length + '件）\n' + acc.join('\n') + '\n' + omitNote;
+      };
+
+      let qrText = '';
+      for (const report of reportCandidates) {
+        const fixedPrefix = '【ニックネーム】\n' + nickname + '\n\n【診断結果】\n' + report + '\n\n【チェックした項目】\n';
+        if (utf8Len(fixedPrefix) > MAX_QR_BYTES) continue;
+        const available = MAX_QR_BYTES - utf8Len(fixedPrefix);
+        const checkedBody = buildCheckedBodyWithin(available);
+        qrText = clampUtf8(fixedPrefix + checkedBody, MAX_QR_BYTES);
+        if (qrText) break;
       }
-      const qrText = clampUtf8(fixedPrefix + checkedBody, MAX_QR_BYTES);
+      if (!qrText) {
+        openModalText('QR生成エラー', '診断結果本文が長すぎるため、QRコードに収まりませんでした。短縮版も試しましたが入りませんでした。');
+        return;
+      }
       let overlay = document.getElementById('kioskQrPersonalOverlay');
       if (overlay) overlay.remove();
       overlay = document.createElement('div');
@@ -7255,7 +7292,7 @@
     window.lastDiagnosisExecutedAt = new Date().toISOString();
     kioskModalPhase = 'diag2';
     openModal('診断結果', buildMode2ResultHtml(result), { footer: 'next' });
-    attachKioskPersonalQrButton(result.resultText);
+    attachKioskPersonalQrButton(result);
   }
 
   function showKioskMeaningSelection() {
