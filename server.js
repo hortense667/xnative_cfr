@@ -515,6 +515,11 @@ app.post('/api/diagnostic-result', (req, res) => {
           ? s.genre.map(g => String(g))
           : (s.genre != null && s.genre !== '')
             ? [String(s.genre)]
+            : [],
+        meaningTags: Array.isArray(s.meaningTags)
+          ? s.meaningTags.map(t => String(t))
+          : Array.isArray(s.tags)
+            ? s.tags.map(t => String(t))
             : []
       }))
     : [];

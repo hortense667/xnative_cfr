@@ -6477,7 +6477,9 @@
           const urlEn = item.url_e || item.url_en || item.URL_en || item.URL_e || item.urlEn || '';
           const labelEn = item.label_en || '';
           const note = item.note || '';
-          return { year: s.year, label: s.label, label_en: labelEn, genre: genre, url: url, urlEn: urlEn, note: note };
+          const meaning = getKioskMeaningState(s);
+          const meaningTags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => def.labelJa);
+          return { year: s.year, label: s.label, label_en: labelEn, genre: genre, url: url, urlEn: urlEn, note: note, meaningTags: meaningTags };
         })
       });
       localStorage.setItem(KIOSK_SESSIONS_KEY, JSON.stringify(list));
@@ -6509,11 +6511,9 @@
     })();
   }
 
-  async function showKioskResultLegacy() {
-    saveKioskSessionToStorage();
-    // 集約用：サーバー側に診断結果を1件送信（バックエンドが有効な場合のみ保存される）
+  function buildDiagnosticBackendRecord(includeMeaningTags) {
     const birthYear = (typeof probeBlue !== 'undefined' && probeBlue.birthYear != null) ? probeBlue.birthYear : null;
-    const record = {
+    return {
       timestamp: new Date().toISOString(),
       nickname: normalizeKioskNickname(kioskState.nickname || ''),
       gender: kioskState.gender || '',
@@ -6525,16 +6525,26 @@
       selections: kioskState.selections.map(s => {
         const arr = events[s.year] || [];
         const item = arr.find(it => it.label === s.label) || {};
-        return {
+        const result = {
           year: s.year,
           label: s.label,
           label_en: item.label_en || '',
           genre: s.genre != null ? s.genre : ''
         };
+        if (includeMeaningTags) {
+          const meaning = getKioskMeaningState(s);
+          result.meaningTags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => def.labelJa);
+        }
+        return result;
       }),
-      // 診断実行時点でジャンル選択モーダルで選ばれていたジャンルコードの一覧
       selectedGenres: Array.from(selectedGenres || [])
     };
+  }
+
+  async function showKioskResultLegacy() {
+    saveKioskSessionToStorage();
+    // 集約用：サーバー側に診断結果を1件送信（バックエンドが有効な場合のみ保存される）
+    const record = buildDiagnosticBackendRecord(true);
     submitDiagnosticResultToBackend(record);
     const { report: dummyReport, aggregateHtml } = buildKioskReportAndAggregate();
     let report = dummyReport;
@@ -7269,6 +7279,7 @@
     let fallbackError = '';
     try {
       saveKioskSessionToStorage();
+      submitDiagnosticResultToBackend(buildDiagnosticBackendRecord(true));
       const payload = buildMode2Payload();
       const prompt = buildMode2AiPrompt(payload);
       const aiResult = await fetchDiagnosisFromConfiguredProvider(prompt, { mode2OpenAiOnly: true, openAiModel: MODE2_OPENAI_MODEL });
