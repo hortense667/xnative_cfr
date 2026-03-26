@@ -6767,17 +6767,17 @@
     { key: 'discovery', labelJa: '発見', labelEn: 'Discovery', weight: 1.3 }
   ];
   const MODE2_ATTRS = {
-    world: { ja: '世界観没入', en: 'World Immersion', short: '世', desc: 'その世界に入れる感じで選ぶ属性です。' },
-    mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機', desc: '道具や仕組みそのものに心が動く属性です。' },
-    future: { ja: '未来感受', en: 'Future Sense', short: '未', desc: '次が始まる気配や時代の切り替わりに反応する属性です。' },
-    aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異', desc: '少し危うく変なものに熱を感じる属性です。' },
-    daily: { ja: '日常浸透', en: 'Daily Affinity', short: '日', desc: '生活に溶け込む手触りを長く愛する属性です。' },
-    crossing: { ja: '越境回遊', en: 'Crossing', short: '越', desc: 'ジャンルや媒体の境界を軽やかにまたぐ属性です。' },
-    boyhood: { ja: '少年回路', en: 'Boyhood Circuit', short: '少', desc: '冒険と発見の想像力に火がつく属性です。' },
-    girlhood: { ja: '少女回路', en: 'Girlhood Circuit', short: '少G', desc: '変身と関係性、内面の揺れに惹かれる属性です。' },
-    repeat: { ja: '反復愛着', en: 'Repeat Attachment', short: '反', desc: '何度も戻ることで好きが深まる属性です。' },
-    author: { ja: '作者偏信', en: 'Author Bias', short: '作', desc: '作り手の癖や姿勢まで含めて愛する属性です。' },
-    archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '録', desc: '好きなものを系譜や記録として抱える属性です。' }
+    world: { ja: '世界観没入', en: 'World Immersion', short: '世界', desc: 'その世界に入れる感じで選ぶ属性です。' },
+    mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機構', desc: '道具や仕組みそのものに心が動く属性です。' },
+    future: { ja: '未来感受', en: 'Future Sense', short: '未来', desc: '次が始まる気配や時代の切り替わりに反応する属性です。' },
+    aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異形', desc: '少し危うく変なものに熱を感じる属性です。' },
+    daily: { ja: '日常浸透', en: 'Daily Affinity', short: '日常', desc: '生活に溶け込む手触りを長く愛する属性です。' },
+    crossing: { ja: '越境回遊', en: 'Crossing', short: '越境', desc: 'ジャンルや媒体の境界を軽やかにまたぐ属性です。' },
+    boyhood: { ja: '少年回路', en: 'Boyhood Circuit', short: '少年', desc: '冒険と発見の想像力に火がつく属性です。' },
+    girlhood: { ja: '少女回路', en: 'Girlhood Circuit', short: '少女', desc: '変身と関係性、内面の揺れに惹かれる属性です。' },
+    repeat: { ja: '反復愛着', en: 'Repeat Attachment', short: '反復', desc: '何度も戻ることで好きが深まる属性です。' },
+    author: { ja: '作者偏信', en: 'Author Bias', short: '作者', desc: '作り手の癖や姿勢まで含めて愛する属性です。' },
+    archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', desc: '好きなものを系譜や記録として抱える属性です。' }
   };
   const MODE2_SLOT_LABELS = {
     future_city: '未来都市', school: '学園', frontier: '辺境',
@@ -7086,6 +7086,25 @@
     '記録蒐集': { short: 'Archive', code: 'AR' }
   };
 
+  const MODE2_ATTR_SHORT_JA = {
+    '世界観没入': '世界',
+    '機構偏愛': '機構',
+    '未来感受': '未来',
+    '異形親和': '異形',
+    '日常浸透': '日常',
+    '越境回遊': '越境',
+    '少年回路': '少年',
+    '少女回路': '少女',
+    '反復愛着': '反復',
+    '作者偏信': '作者',
+    '記録蒐集': '蒐集'
+  };
+
+  function mode2ShortJa(name) {
+    return MODE2_ATTR_SHORT_JA[String(name || '').trim()] || String(name || '').trim();
+  }
+
+
   function splitMode2BilingualText(raw) {
     const text = mode2ValueToText(raw, '').trim();
     if (!text) return { ja: '', en: '' };
@@ -7098,7 +7117,10 @@
 
   function buildMode2SymbolTexts(parsedSymbol, top3) {
     const parsed = splitMode2BilingualText(parsedSymbol);
-    const jp = parsed.ja || (Array.isArray(top3) ? top3.map(t => mode2ValueToText(t && t.info && t.info.ja, '')).filter(Boolean).join('・') : '');
+    const top3Ja = Array.isArray(top3)
+      ? top3.map(t => mode2ShortJa(mode2ValueToText(t && t.info && t.info.ja, ''))).filter(Boolean)
+      : [];
+    const jp = top3Ja.length ? top3Ja.join('・') : (parsed.ja || '');
     let en = parsed.en || '';
     if (!en && Array.isArray(top3)) {
       en = top3.map(t => {
@@ -7106,7 +7128,7 @@
         return (MODE2_ATTR_EN[name] && MODE2_ATTR_EN[name].code) ? MODE2_ATTR_EN[name].code : 'AT';
       }).filter(Boolean).join('-');
     }
-    return { ja: jp || '世界観没入・機構偏愛・記録蒐集', en: en || 'WI-ME-AR' };
+    return { ja: jp || '世界・機構・蒐集', en: en || 'WI-ME-AR' };
   }
 
   function buildMode2AliasTexts(parsedAlias, top3) {
