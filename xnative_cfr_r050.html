@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Xnative/Timeline 1.1</title>
+<title>Xnative/Timeline 1.6</title>
 <style>
   :root { --bg:#fafafa; --grid:#d0d0d0; --axis:#888; --text:#222; }
   html,body{height:100%; margin:0}
@@ -550,7 +550,7 @@
 </head>
 <body>
   <header>
-    <strong style="font-size: 1.5em;">Xnative/Timeline 1.1o</strong>
+    <strong style="font-size: 1.5em;">Xnative/Timeline 1.6o</strong>
     <div id="repoInfo" style="font-size: 12px; color: #666; margin-left: 12px; display: none;">
       <span id="repoInfoText"></span>
     </div>
@@ -730,7 +730,7 @@
   function applyUiLanguage() {
     document.documentElement.lang = isEnglishUi() ? 'en' : 'ja';
     const headerTitle = document.querySelector('header strong');
-    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.1o';
+    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.6o';
     const impLabel = selImp && selImp.parentElement;
     if (impLabel) impLabel.childNodes[0].nodeValue = t('重要度', 'Importance');
     if (selImp && selImp.options && selImp.options.length > 0) selImp.options[0].text = t('すべて', 'All');
@@ -6938,12 +6938,12 @@
     const selectedItems = (kioskState.selections || []).map((selection) => {
       const item = getKioskSourceItem(selection) || {};
       const meaning = getKioskMeaningState(selection);
-      const tags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => isEnglishUi() ? def.labelEn : def.labelJa);
+      const tags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => def.labelJa);
       return {
         label: getPrimaryLabel(item || selection) || selection.label || '',
         year: selection.year,
         genre: Array.isArray(item.genre) ? item.genre : (item.genre ? [item.genre] : []),
-        note: String(isEnglishUi() ? (item.note_en || item.note || '') : (item.note || item.note_en || '')),
+        note: String(item.note || item.note_en || ''),
         tags
       };
     }).filter(it => Array.isArray(it.tags) && it.tags.length > 0);
@@ -7022,39 +7022,9 @@
   }
 
   function buildMode2AiPrompt(payload) {
-    const attrsJa = [
+    const attrs = [
       '世界観没入','機構偏愛','未来感受','異形親和','日常浸透','越境回遊','少年回路','少女回路','反復愛着','作者偏信','記録蒐集'
     ];
-    const attrsEn = [
-      'World Immersion','Mechanism Love','Future Sense','Aberration Affinity','Daily Affinity','Crossing','Boyhood Circuit','Girlhood Circuit','Repeat Attachment','Author Bias','Archive Impulse'
-    ];
-    if (isEnglishUi()) {
-      return [
-        'You are a cultural diagnosis analyst who reads a person's sensibility attributes from their selected content, products, and services.',
-        'This is not a medical or psychological diagnosis. It is an interpretation of cultural taste and affinity.',
-        'You will receive a list of selected items and meaning tags attached to each item.',
-        'The six meaning tags are: Taste / Impact / Returned to / Feels like me / Admiration / Discovery.',
-        'Read not only the selected objects themselves, but also the pattern of selections, crossings between genres and media, jumps across time periods, and the distribution of the meaning tags.',
-        'Choose exactly three attributes, and only from the following fixed list. Do not invent new attribute names.',
-        attrsEn.join(' / '),
-        'Return JSON only. Do not include markdown, code fences, or any explanatory text before or after the JSON.',
-        'For mainAttribute, subAttribute, and hiddenAttribute, provide name, short, and reason in English.',
-        'Create one distinctive epithet for the user. It should be a little unusual but still meaningful and readable.',
-        'emblemCode must be a single string in the format "ENGLISH || 日本語". Example: GH-DY-RP || 少女・日常・反復',
-        'epithet must be a single string in the format "English alias || 日本語の異名". Example: Archivist of Cyber Alley Devices || 電脳路地裏の装置司書',
-        'Constraints:',
-        '- Do not make clinical or pathological interpretations.',
-        '- Do not assume the user's gender.',
-        '- Do not overpraise.',
-        '- Interpret only within what is supported by the selected items and tags.',
-        '- readingPoints must contain exactly 3 items, all in English.',
-        '- summary must be in English, about 80 to 180 words.',
-        '- shareText must be in English and within 120 characters.',
-        'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, emblemCode, epithet, epithetReason, summary, readingPoints, shareText.',
-        'Below is the user input. Diagnose it and return JSON.',
-        JSON.stringify(payload, null, 2)
-      ].join('\n');
-    }
     return [
       'あなたは、コンテンツ・製品・サービスの選択履歴から、その人の「感性属性」を読む文化的診断アナリストです。',
       'これは医療・心理診断ではなく、文化的嗜好の読み解きです。',
@@ -7062,11 +7032,11 @@
       'タグは次の6種類です: 好み / 影響 / 繰り返し触れた / 自分らしい / 憧れ / 発見',
       '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
       '必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
-      attrsJa.join(' / '),
+      attrs.join(' / '),
       '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
       '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。',
       'また、ユーザー固有の少し変わった異名を1つ作ってください。異名は意味が通ることを優先し、過度に難解にしすぎないでください。',
-      'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は2〜4文字程度の属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
+      'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は1文字略号ではなく、属性名そのものを「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。右側の英語は短く自然な英語名にしてください。例: 電脳路地裏の装置司書 || Archivist of Cyber Alley Devices',
       '制約:',
       '- 露骨な性格診断や病理的解釈をしない',
@@ -7083,7 +7053,7 @@
     ].join('\n');
   }
 
-function mode2ValueToText(value, fallback='') {
+  function mode2ValueToText(value, fallback='') {
     if (value == null) return fallback;
     if (typeof value === 'string') return value;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -7130,48 +7100,6 @@ function mode2ValueToText(value, fallback='') {
     '記録蒐集': '蒐集'
   };
 
-
-  const MODE2_ATTR_JA_TO_EN = {
-    '世界観没入': 'World Immersion',
-    '機構偏愛': 'Mechanism Love',
-    '未来感受': 'Future Sense',
-    '異形親和': 'Aberration Affinity',
-    '日常浸透': 'Daily Affinity',
-    '越境回遊': 'Crossing',
-    '少年回路': 'Boyhood Circuit',
-    '少女回路': 'Girlhood Circuit',
-    '反復愛着': 'Repeat Attachment',
-    '作者偏信': 'Author Bias',
-    '記録蒐集': 'Archive Impulse'
-  };
-  const MODE2_ATTR_EN_TO_JA = Object.fromEntries(Object.entries(MODE2_ATTR_JA_TO_EN).map(([ja,en]) => [en, ja]));
-
-  function mode2AttrNameJa(name) {
-    const s = String(name || '').trim();
-    return MODE2_ATTR_EN_TO_JA[s] || s;
-  }
-  function mode2AttrNameEn(name) {
-    const s = String(name || '').trim();
-    return MODE2_ATTR_JA_TO_EN[s] || s;
-  }
-  function getMode2AttrDescEn(name) {
-    const jaName = mode2AttrNameJa(name);
-    const map = {
-      '世界観没入': 'You are drawn to works through the feeling of entering their world.',
-      '機構偏愛': 'You are moved by tools, systems, and mechanisms themselves.',
-      '未来感受': 'You respond to the feeling that a new era is beginning.',
-      '異形親和': 'You feel heat in things that are strange, risky, or slightly warped.',
-      '日常浸透': 'You love textures that sink into everyday life and stay there.',
-      '越境回遊': 'You cross borders between genres and media with ease.',
-      '少年回路': 'Your imagination ignites around adventure and discovery.',
-      '少女回路': 'You are drawn to transformation, relationships, and inner tremors.',
-      '反復愛着': 'Your affection deepens by returning to something again and again.',
-      '作者偏信': 'You love the creator's voice, habits, and stance as much as the work itself.',
-      '記録蒐集': 'You hold onto things as records, lineages, and cultural traces.'
-    };
-    return map[jaName] || 'An attribute inferred from the pattern of selections.';
-  }
-
   function mode2ShortJa(name) {
     return MODE2_ATTR_SHORT_JA[String(name || '').trim()] || String(name || '').trim();
   }
@@ -7200,7 +7128,7 @@ function mode2ValueToText(value, fallback='') {
         return (MODE2_ATTR_EN[name] && MODE2_ATTR_EN[name].code) ? MODE2_ATTR_EN[name].code : 'AT';
       }).filter(Boolean).join('-');
     }
-    return { ja: jp || '少女・日常・反復', en: en || 'GH-DY-RP' };
+    return { ja: jp || '世界・機構・蒐集', en: en || 'WI-ME-AR' };
   }
 
   function buildMode2AliasTexts(parsedAlias, top3) {
@@ -7224,83 +7152,75 @@ function mode2ValueToText(value, fallback='') {
     const sub = parsed && parsed.subAttribute ? parsed.subAttribute : {};
     const hidden = parsed && parsed.hiddenAttribute ? parsed.hiddenAttribute : {};
     const selectedSummaries = buildMode2SelectedSummaries();
-    const mainRaw = mode2ValueToText(main.name, (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入');
-    const subRaw = mode2ValueToText(sub.name, (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛');
-    const hiddenRaw = mode2ValueToText(hidden.name, (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集');
-    const mainJa = mode2AttrNameJa(mainRaw);
-    const subJa = mode2AttrNameJa(subRaw);
-    const hiddenJa = mode2AttrNameJa(hiddenRaw);
-    const mainEn = mode2AttrNameEn(mainJa);
-    const subEn = mode2AttrNameEn(subJa);
-    const hiddenEn = mode2AttrNameEn(hiddenJa);
+    const mainName = mode2ValueToText(main.name, (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入');
+    const subName = mode2ValueToText(sub.name, (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛');
+    const hiddenName = mode2ValueToText(hidden.name, (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集');
     const normTop3 = [
-      { roleJa: '主属性', roleEn: 'Main Attribute', info: { ja: mainJa, en: mainEn, descJa: mode2ValueToText(main.short, getMode2AttrDescJa(mainJa || '世界観没入')), descEn: isEnglishUi() ? mode2ValueToText(main.short, getMode2AttrDescEn(mainEn || 'World Immersion')) : getMode2AttrDescEn(mainEn || 'World Immersion') }, reason: mode2ValueToText(main.reason, '') },
-      { roleJa: '副属性', roleEn: 'Sub Attribute', info: { ja: subJa, en: subEn, descJa: mode2ValueToText(sub.short, getMode2AttrDescJa(subJa || '機構偏愛')), descEn: isEnglishUi() ? mode2ValueToText(sub.short, getMode2AttrDescEn(subEn || 'Mechanism Love')) : getMode2AttrDescEn(subEn || 'Mechanism Love') }, reason: mode2ValueToText(sub.reason, '') },
-      { roleJa: '裏属性', roleEn: 'Hidden Attribute', info: { ja: hiddenJa, en: hiddenEn, descJa: mode2ValueToText(hidden.short, getMode2AttrDescJa(hiddenJa || '記録蒐集')), descEn: isEnglishUi() ? mode2ValueToText(hidden.short, getMode2AttrDescEn(hiddenEn || 'Archive Impulse')) : getMode2AttrDescEn(hiddenEn || 'Archive Impulse') }, reason: mode2ValueToText(hidden.reason, '') }
+      { role: '主属性', info: { ja: mainName, desc: mode2ValueToText(main.short, getMode2AttrDescJa(mainName || '世界観没入')) }, reason: mode2ValueToText(main.reason, '') },
+      { role: '副属性', info: { ja: subName, desc: mode2ValueToText(sub.short, getMode2AttrDescJa(subName || '機構偏愛')) }, reason: mode2ValueToText(sub.reason, '') },
+      { role: '裏属性', info: { ja: hiddenName, desc: mode2ValueToText(hidden.short, getMode2AttrDescJa(hiddenName || '記録蒐集')) }, reason: mode2ValueToText(hidden.reason, '') }
     ];
-    const symbolRaw = mode2ValueToText(parsed && parsed.emblemCode, fallbackLocal.symbol || '少女・日常・反復 || GH-DY-RP');
+    const symbolRaw = mode2ValueToText(parsed && parsed.emblemCode, fallbackLocal.symbol || '世界観没入・機構偏愛・記録蒐集 || WI-ME-AR');
     const aliasRaw = mode2ValueToText(parsed && parsed.epithet, fallbackLocal.alias || '電脳路地裏の観測者 || Observer of Cyber Alley');
     const symbolTexts = buildMode2SymbolTexts(symbolRaw, normTop3);
     const aliasTexts = buildMode2AliasTexts(aliasRaw, normTop3);
-    const symbol = isEnglishUi() ? symbolTexts.en : symbolTexts.ja;
-    const symbolSecondary = isEnglishUi() ? symbolTexts.ja : symbolTexts.en;
-    const alias = isEnglishUi() ? aliasTexts.en : aliasTexts.ja;
-    const aliasSecondary = isEnglishUi() ? aliasTexts.ja : aliasTexts.en;
-    const epithetReason = mode2ValueToText(parsed && parsed.epithetReason, isEnglishUi() ? 'This alias was built from the pattern and meaning of your selections.' : '選択された項目の並びと意味づけから組み立てられた異名です。');
-    const summary = mode2ValueToText(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Your selections suggest several sensibility attributes overlapping with one another.' : '選択の並びと意味づけから、複数の属性が重なって見えました。'));
+    const symbol = symbolTexts.ja;
+    const alias = aliasTexts.ja;
+    const epithetReason = mode2ValueToText(parsed && parsed.epithetReason, '選択された項目の並びと意味づけから組み立てられた異名です。');
+    const summary = mode2ValueToText(parsed && parsed.summary, fallbackLocal.summary || '選択の並びと意味づけから、複数の属性が重なって見えました。');
     const readingPoints = Array.isArray(parsed && parsed.readingPoints)
       ? parsed.readingPoints.slice(0,3).map(v => mode2ValueToText(v, '')).filter(Boolean)
       : [];
-    while (readingPoints.length < 3) readingPoints.push(isEnglishUi() ? 'The meaning tags reveal a concentrated shelf of interests.' : '選択された項目の意味づけから、濃い関心の棚が見えます。');
-    const shareText = mode2ValueToText(parsed && parsed.shareText, isEnglishUi() ? `I am the ${alias}. ${symbol}.` : `私は『${alias}』タイプ。${symbol}。`);
+    while (readingPoints.length < 3) readingPoints.push('選択された項目の意味づけから、濃い関心の棚が見えます。');
+    const shareText = mode2ValueToText(parsed && parsed.shareText, `私は『${alias}』タイプ。${symbol}。`);
     const resultText = [
-      isEnglishUi() ? 'Three Sensibility Attributes That Shape You' : 'あなたをつくる3つの感性属性','',
-      ...normTop3.flatMap(t => [ `${isEnglishUi() ? t.roleEn : t.roleJa} | ${isEnglishUi() ? t.info.en : t.info.ja}`, isEnglishUi() ? t.info.descEn : t.info.descJa, t.reason ? `${isEnglishUi() ? 'Reason' : '理由'}: ${t.reason}` : '', '' ]),
-      isEnglishUi() ? 'Your Emblem' : 'あなたの記号', symbol, symbolSecondary ? `${isEnglishUi() ? 'Japanese' : 'English'}: ${symbolSecondary}` : '', '',
-      isEnglishUi() ? 'Your Epithet' : 'あなたの異名', alias, aliasSecondary ? `${isEnglishUi() ? 'Japanese' : 'English'}: ${aliasSecondary}` : '', '',
-      isEnglishUi() ? 'Why this name' : 'この名の由来', epithetReason, '',
-      isEnglishUi() ? 'Overall' : '総合すると', summary, '',
-      isEnglishUi() ? 'Reading of your selections' : '今回の読み解き', ...readingPoints.map(v => '• ' + v)
+      'あなたをつくる3つの感性属性','',
+      ...normTop3.flatMap(t => [ `${t.role}｜${t.info.ja}`, t.info.desc, t.reason ? `理由: ${t.reason}` : '', '' ]),
+      'あなたの記号', symbol, '',
+      'あなたの異名', alias, '',
+      'この名の由来', epithetReason, '',
+      '総合すると', summary, '',
+      '今回の読み解き', ...readingPoints.map(v => '・' + v)
     ].filter(Boolean).join('\n');
-    return { top3: normTop3, symbol, symbolJa: symbolTexts.ja, symbolEn: symbolTexts.en, symbolSecondary, alias, aliasJa: aliasTexts.ja, aliasEn: aliasTexts.en, aliasSecondary, epithetReason, summary, readingPoints, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '' };
+    return { top3: normTop3, symbol, symbolEn: symbolTexts.en, alias, aliasEn: aliasTexts.en, epithetReason, summary, readingPoints, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '' };
   }
 
-function buildMode2ResultHtml(result) {
+  function buildMode2ResultHtml(result) {
     const parts = result.top3.map(t => `
       <div style="padding:14px; border:1px solid #dbe4f0; border-radius:12px; background:#fff;">
-        <div style="font-size:13px; color:#64748b; margin-bottom:4px;">${isEnglishUi() ? t.roleEn : t.roleJa}</div>
-        <div style="font-size:22px; font-weight:700; margin-bottom:6px;">${escapeHtmlText(isEnglishUi() ? t.info.en : t.info.ja)}</div>
-        <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(isEnglishUi() ? (t.info.descEn || '') : (t.info.descJa || ''))}</div>
-        ${t.reason ? `<div style="font-size:12px; line-height:1.8; color:#64748b; margin-top:8px;"><strong>${t('理由', 'Reason')}:</strong> ${escapeHtmlText(t.reason)}</div>` : ''}
+        <div style="font-size:13px; color:#64748b; margin-bottom:4px;">${t.role}</div>
+        <div style="font-size:22px; font-weight:700; margin-bottom:6px;">${escapeHtmlText(t.info.ja)}</div>
+        <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(t.info.desc || '')}</div>
+        ${t.reason ? `<div style="font-size:12px; line-height:1.8; color:#64748b; margin-top:8px;">${escapeHtmlText(t.reason)}</div>` : ''}
       </div>
     `).join('');
     const pickedHtml = result.selectedSummaries.length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.selectedSummaries.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
     const readingHtml = (result.readingPoints || []).length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.readingPoints.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
     return `
-      <div style="font-size:20px; font-weight:700; margin-bottom:12px;">${t('あなたをつくる3つの感性属性', 'Three Sensibility Attributes That Shape You')}</div>
+      <div style="font-size:20px; font-weight:700; margin-bottom:12px;">あなたをつくる3つの感性属性</div>
       <div style="display:grid; gap:12px;">${parts}</div>
       <div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
-        <div style="font-size:13px; color:#64748b;">${t('あなたの記号', 'Your Emblem')}</div>
+        <div style="font-size:13px; color:#64748b;">あなたの記号</div>
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
           <div style="font-size:24px; font-weight:700;">${escapeHtmlText(result.symbol)}</div>
-          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.symbolSecondary || '')}</div>
+          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.symbolEn || '')}</div>
         </div>
-        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('あなたの異名', 'Your Epithet')}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">あなたの異名</div>
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
           <div style="font-size:22px; font-weight:700;">${escapeHtmlText(result.alias)}</div>
-          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasSecondary || '')}</div>
+          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasEn || '')}</div>
         </div>
-        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('この名の由来', 'Why this name')}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">この名の由来</div>
         <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.epithetReason || '')}</div>
-        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('総合すると', 'Overall')}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">総合すると</div>
         <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.summary)}</div>
       </div>
       <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
-        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">${t('今回の読み解き', 'Reading of your selections')}</div>
+        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">今回の読み解き</div>
         ${readingHtml}
       </div>
       <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
-        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">${t('今回強く印を付けた項目', 'Items you marked strongly')}</div>
+        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">今回強く印を付けた項目</div>
         ${pickedHtml}
       </div>
       ${result.fallbackError ? `<p style="margin-top:12px; font-size:12px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
@@ -7312,25 +7232,6 @@ function buildMode2ResultHtml(result) {
   }
 
   function buildMode2CompactQrReport(result) {
-    if (!result || typeof result !== 'object') return '';
-    const top3 = Array.isArray(result.top3) ? result.top3 : [];
-    const compactLines = [
-      t('あなたをつくる3つの感性属性', 'Three Sensibility Attributes That Shape You'),
-      ...top3.slice(0, 3).map(ti => `${isEnglishUi() ? ti.roleEn : ti.roleJa}｜${isEnglishUi() ? mode2ValueToText(ti && ti.info && ti.info.en, '—') : mode2ValueToText(ti && ti.info && ti.info.ja, '—')}`),
-      '',
-      t('あなたの記号', 'Your Emblem'),
-      [mode2ValueToText(result.symbol, '—'), mode2ValueToText(result.symbolSecondary, '')].filter(Boolean).join(' / '),
-      '',
-      t('あなたの異名', 'Your Epithet'),
-      [mode2ValueToText(result.alias, '—'), mode2ValueToText(result.aliasSecondary, '')].filter(Boolean).join(' / '),
-      '',
-      t('総合すると', 'Overall'),
-      mode2ValueToText(result.shareText || result.summary, '')
-    ].filter(Boolean);
-    return compactLines.join('\n');
-  }
-
-function buildMode2CompactQrReport(result) {
     if (!result || typeof result !== 'object') return '';
     const top3 = Array.isArray(result.top3) ? result.top3 : [];
     const compactLines = [
@@ -7501,7 +7402,7 @@ function buildMode2CompactQrReport(result) {
       const chips = defs.map(def => {
         const active = !!state[def.key];
         return `<label style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid ${active ? '#818cf8' : '#cbd5e1'}; background:${active ? '#eef2ff' : '#fff'}; cursor:pointer; font-size:13px;">
-          <input type="checkbox" data-meaning-key="${def.key}" data-selection-key="${escapeHtmlAttr(key)}" ${active ? 'checked' : ''} style="margin:0;">${isEnglishUi() ? def.labelEn : def.labelJa}
+          <input type="checkbox" data-meaning-key="${def.key}" data-selection-key="${escapeHtmlAttr(key)}" ${active ? 'checked' : ''} style="margin:0;">${def.labelJa}
         </label>`;
       }).join('');
       return `<div style="border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:12px; background:#fff;">
@@ -7510,7 +7411,7 @@ function buildMode2CompactQrReport(result) {
       </div>`;
     }).join('');
     const html = `
-      <p style="font-size:18px; line-height:1.7;">${t('選んだ項目について、どんな意味で大事だったかを選んでください。複数選択できます。', 'For each selected item, choose how it mattered to you. Multiple selections are allowed.')}</p>
+      <p style="font-size:18px; line-height:1.7;">${t('とくに大事なものについてのみ自分にとっての意味を選んでください。複数選択できます。', 'For each selected item, choose the meaning that mattered to you. Multiple selections are allowed.')}</p>
       <div style="max-height:420px; overflow-y:auto; margin-top:12px; padding-right:4px;">${rows}</div>
       <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
         <button type="button" id="kioskBackToCheckBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('チェックに戻る', 'Back to checklist')}</button>
@@ -7535,11 +7436,11 @@ function buildMode2CompactQrReport(result) {
       goBtn.addEventListener('click', () => {
         const selectedMeaningCount = Object.values(kioskState.selectionMeanings || {}).reduce((acc, item) => acc + Object.values(item || {}).filter(Boolean).length, 0);
         if (!selectedMeaningCount) {
-          openModalText(t('選択が必要です', 'Selection required'), t('少なくとも1つは印を付けてください。', 'Please mark at least one meaning tag.'));
+          openModalText('選択が必要です', '少なくとも1つは印を付けてください。');
           return;
         }
         closeModal();
-        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('GPT-5.4で3属性診断を生成しています。<br>しばらくお待ちください。', 'Generating your 3-attribute diagnosis with GPT-5.4...<br>Please wait.') + '</p></div>';
+        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('属性診断を生成しています。<br>しばらくお待ちください。', 'Generating your attribute diagnosis...<br>Please wait.') + '</p></div>';
         openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
         showKioskResultMode2();
       });
