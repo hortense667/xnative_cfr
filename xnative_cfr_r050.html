@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Xnative/Timeline 1.1</title>
+<title>Xnative/Timeline 1.6</title>
 <style>
   :root { --bg:#fafafa; --grid:#d0d0d0; --axis:#888; --text:#222; }
   html,body{height:100%; margin:0}
@@ -550,7 +550,7 @@
 </head>
 <body>
   <header>
-    <strong style="font-size: 1.5em;">Xnative/Timeline 1.1o</strong>
+    <strong style="font-size: 1.5em;">Xnative/Timeline 1.6o</strong>
     <div id="repoInfo" style="font-size: 12px; color: #666; margin-left: 12px; display: none;">
       <span id="repoInfoText"></span>
     </div>
@@ -730,7 +730,7 @@
   function applyUiLanguage() {
     document.documentElement.lang = isEnglishUi() ? 'en' : 'ja';
     const headerTitle = document.querySelector('header strong');
-    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.1o';
+    if (headerTitle) headerTitle.textContent = 'Xnative/Timeline 1.6o';
     const impLabel = selImp && selImp.parentElement;
     if (impLabel) impLabel.childNodes[0].nodeValue = t('重要度', 'Importance');
     if (selImp && selImp.options && selImp.options.length > 0) selImp.options[0].text = t('すべて', 'All');
@@ -7440,7 +7440,7 @@
           return;
         }
         closeModal();
-        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('GPT-5.4で3属性診断を生成しています。<br>しばらくお待ちください。', 'Generating your 3-attribute diagnosis with GPT-5.4...<br>Please wait.') + '</p></div>';
+        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('属性診断を生成しています。<br>しばらくお待ちください。', 'Generating your attribute diagnosis...<br>Please wait.') + '</p></div>';
         openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
         showKioskResultMode2();
       });
