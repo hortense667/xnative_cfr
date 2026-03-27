@@ -6975,7 +6975,6 @@
         label: getPrimaryLabel(item || selection) || selection.label || '',
         year: selection.year,
         genre: Array.isArray(item.genre) ? item.genre : (item.genre ? [item.genre] : []),
-        note: String(item.note || item.note_en || ''),
         tags
       };
     }).filter(it => Array.isArray(it.tags) && it.tags.length > 0);
