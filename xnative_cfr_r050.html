@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Xnative/Timeline 1.1</title>
+<title>Xnative/Timeline 1.6r</title>
 <style>
   :root { --bg:#fafafa; --grid:#d0d0d0; --axis:#888; --text:#222; }
   html,body{height:100%; margin:0}
@@ -99,6 +99,66 @@
   .modal footer{ padding:10px 16px 16px; display:flex; justify-content:flex-end; }
   .modal footer .btn{ background:#f6f6f6; border:1px solid #ddd; border-radius:10px; padding:6px 10px; cursor:pointer; }
   .modal footer .btn.btn-primary{ background:#007bff; border-color:#007bff; color:#fff; padding:10px 24px; font-size:18px; font-weight:600; }
+  .kiosk-usage-final{
+    min-height:300px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:24px;
+    text-align:center;
+    padding:16px 10px 8px;
+  }
+  .kiosk-usage-final .harc-logo{
+    width:min(620px, 92%);
+    height:auto;
+    display:block;
+  }
+  .kiosk-usage-final .copyright{
+    margin:-10px 0 0;
+    color:#9ca3af;
+    font-size:11px;
+    line-height:1.35;
+  }
+  .kiosk-usage-final .message{
+    margin:0;
+    color:#71717a;
+    font-size:17px;
+    line-height:1.45;
+  }
+  .kiosk-usage-final #kioskUsageStartBtn{
+    min-width:0;
+    padding:10px 20px;
+    border:none;
+    border-radius:12px;
+    background:var(--diag-accent);
+    color:#fff;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .kiosk-usage-final #kioskUsageStartBtn:hover{
+    background:var(--diag-accent-hover);
+  }
+  .kiosk-usage-final #kioskUsageStartBtn:focus-visible{
+    outline:3px solid rgba(47,129,219,.35);
+    outline-offset:2px;
+  }
+  @media (max-width: 768px) {
+    .kiosk-usage-final{
+      min-height:230px;
+      gap:16px;
+      padding:8px 0 0;
+    }
+    .kiosk-usage-final .copyright{
+      margin:-8px 0 0;
+      font-size:9px;
+    }
+    .kiosk-usage-final .message{
+      font-size:15px;
+      line-height:1.4;
+    }
+  }
   .credit{ font-size:12px; color:#777; margin-top:8px; }
 
   /* 診断フロー用配色（若者向け・読みやすさ維持） */
@@ -550,7 +610,7 @@
 </head>
 <body>
   <header>
-    <strong style="font-size: 1.5em;">Xnative/Timeline 1.1o</strong>
+    <strong style="font-size: 1.5em;">Xnative/Timeline 1.6r</strong>
     <div id="repoInfo" style="font-size: 12px; color: #666; margin-left: 12px; display: none;">
       <span id="repoInfoText"></span>
     </div>
@@ -1668,8 +1728,8 @@
     overallTitle: '総合結果',
     overallDescription: 'ここに「総合結果（ダミー）」を表示します。実際の実装では、複数人分の傾向や集計結果などを表示する予定です。',
     secondPromptHead: '',
-    usageTitle: '最終画面（仮）',
-    usageDescription: 'ここでは「HARC の紹介」と「Xnative Timeline の紹介」の映像が流れる予定です。下の「スタート」ボタンで最初の画面に戻ります。'
+    usageTitle: '最終画面（ダミー）',
+    usageDescription: '下の「スタート」ボタンで最初の画面に戻ります。'
   };
   const DEFAULT_CFR_PROMPTS_EN = {
     temperature: 0.9,
@@ -1682,8 +1742,8 @@
     overallTitle: 'Overall Result',
     overallDescription: 'This screen shows a dummy overall result. In production, this area can show trends and aggregates across multiple participants.',
     secondPromptHead: '',
-    usageTitle: 'How To Use (Demo)',
-    usageDescription: 'This screen plays introduction videos for HARC and Xnative Timeline. Press the Start button to return to the beginning.'
+    usageTitle: 'Final Screen (Demo)',
+    usageDescription: 'Press the Start button below to return to the first screen.'
   };
   let cfrPromptsConfig = null;   // cfr_prompts.json 全体
   let activeCfrPrompts = null;   // 現在の年表ファイルに対応する設定
@@ -7707,17 +7767,27 @@
   let kioskUsageMouseHandler = null;
   function showKioskUsageScreen() {
     if (!window.kioskMode) return;
-    const desc = getLocalizedCfrPrompt('usageDescription');
+    const usageText = t('下の「スタート」ボタンで最初の画面に戻ります。', 'Press the Start button below to return to the first screen.')
+      .replace(/</g,'&lt;')
+      .replace(/\\n/g,'<br>');
     const html = `
-      <div style="height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:14px; color:#666; gap:16px;">
-        <div>${(desc || '').replace(/</g,'&lt;').replace(/\\n/g,'<br>')}</div>
-        <button type="button" id="kioskUsageStartBtn" style="padding:8px 16px; border-radius:10px; border:1px solid #ccc; background:#007bff; color:#fff; cursor:pointer;">
+      <div class="kiosk-usage-final">
+        <img
+          class="harc-logo"
+          src="https://zen.ac.jp/icon/icon-harc-logo.svg"
+          alt="HARC logo"
+          loading="eager"
+          decoding="async"
+        >
+        <p class="copyright">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
+        <p class="message">${usageText}</p>
+        <button type="button" id="kioskUsageStartBtn">
           ${t('スタート', 'Start')}
         </button>
       </div>
     `;
     kioskModalPhase = 'usage';
-    const usageTitle = getLocalizedCfrPrompt('usageTitle');
+    const usageTitle = t('最終画面（ダミー）', 'Final Screen (Demo)');
     openModal(usageTitle, html, { footer: 'none' });
     const startBtn = document.getElementById('kioskUsageStartBtn');
     if (startBtn) {
