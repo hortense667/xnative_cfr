@@ -1303,6 +1303,9 @@
     else if(it.URL_e) o.url_e = it.URL_e;
     else if(it.urlEn) o.url_e = it.urlEn;
     if(it.note) o.note = it.note;
+    if(it.note_en) o.note_en = it.note_en;
+    if(it.genreBadge) o.genreBadge = it.genreBadge;
+    if(it.diagnostic && typeof it.diagnostic === 'object') o.diagnostic = it.diagnostic;
     if(it.deleted !== undefined) o.deleted = it.deleted;
     return o;
   }
@@ -1317,6 +1320,7 @@
             // 新しい形式（events + eraSettings）
             eraSettings = data.eraSettings || [];
             if (data.genres) { setGenresFromRemote(data.genres); }
+            if (data.diagnosticConfig) { applyDiagnosticConfig(data.diagnosticConfig); }
             console.log('loadEvents: eraSettings読み込み:', eraSettings);
             return normalizeAll(data.events);
           } else {
@@ -1332,6 +1336,7 @@
       const embedded=JSON.parse(txt);
       // 埋め込みJSONにも genres があれば使用
       if (embedded.genres) { setGenresFromRemote(embedded.genres); }
+      if (embedded.diagnosticConfig) { applyDiagnosticConfig(embedded.diagnosticConfig); }
       return normalizeAll(embedded.events ? embedded.events : embedded); 
     } catch(e){ 
       console.error('embedded JSON parse failed', e); 
@@ -6871,6 +6876,10 @@
     author: { ja: '作者偏信', en: 'Author Bias', short: '作者', desc: '作り手の癖や姿勢まで含めて愛する属性です。' },
     archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', desc: '好きなものを系譜や記録として抱える属性です。' }
   };
+  const MODE2_ATTR_EN = Object.values(MODE2_ATTRS).reduce((acc, item) => {
+    acc[item.ja] = { label: item.en, short: item.en };
+    return acc;
+  }, {});
   const MODE2_SLOT_LABELS = {
     future_city: '未来都市', school: '学園', frontier: '辺境',
     device: '道具', screen: '画面', machine: '装置',
@@ -6926,7 +6935,218 @@
     return { item, attr, slots };
   }
 
-  function buildMode2DiagnosisLocal() {
+
+  let MODE2_DEEP_LOWER_MODULES = [
+    { key:'moe', ja:'萌え／美少女', en:'Moe / Bishoujo', level:'deep' },
+    { key:'bl', ja:'BL／耽美', en:'BL / Aesthetic', level:'deep' },
+    { key:'wa', ja:'和風／伝承', en:'Japanese / Folklore', level:'deep' },
+    { key:'rail', ja:'鉄道／交通', en:'Rail / Transit', level:'deep' },
+    { key:'anonnet', ja:'匿名ネット文化', en:'Anonymous Net Culture', level:'deep' },
+    { key:'watchalong', ja:'共同視聴文化', en:'Shared Viewing Culture', level:'deep' },
+    { key:'vocaloid', ja:'ボカロ／仮想人格', en:'Vocaloid / Virtual Persona', level:'deep' },
+    { key:'apple', ja:'アップル美学', en:'Apple Aesthetics', level:'deep' },
+    { key:'unix', ja:'DOS/UNIX実務', en:'DOS/UNIX Practicality', level:'deep' },
+    { key:'game', ja:'ゲーム実践', en:'Game Practice', level:'deep' },
+    { key:'authoring', ja:'創作／オーサリング', en:'Creation / Authoring', level:'deep' },
+    { key:'engineering', ja:'エンジニアリング', en:'Engineering', level:'deep' },
+    { key:'doujin', ja:'同人／二次創作', en:'Doujin / Fan Creation', level:'deep' },
+    { key:'idol', ja:'アイドル／推し文化', en:'Idol / Oshikatsu Culture', level:'deep' }
+  ];
+  let MODE2_GENERAL_LOWER_MODULES = [
+    { key:'storyworld', ja:'物語世界', en:'Story Worlds', level:'general' },
+    { key:'character', ja:'キャラクター愛着', en:'Character Attachment', level:'general' },
+    { key:'dailyfun', ja:'日常エンタメ', en:'Everyday Entertainment', level:'general' },
+    { key:'gadget', ja:'機械／ガジェット', en:'Machines / Gadgets', level:'general' },
+    { key:'gamefriendly', ja:'ゲーム親和', en:'Game Affinity', level:'general' },
+    { key:'netsocial', ja:'ネット交流', en:'Online Interaction', level:'general' },
+    { key:'musicrhythm', ja:'音楽／リズム', en:'Music / Rhythm', level:'general' },
+    { key:'creativetools', ja:'創作ツール', en:'Creative Tools', level:'general' },
+    { key:'nostalgia', ja:'懐かしさ／ノスタルジー', en:'Nostalgia', level:'general' },
+    { key:'wafantasy', ja:'和風幻想', en:'Japanese Fantasy', level:'general' }
+  ];
+  function getMode2AllLowerModules() { return MODE2_DEEP_LOWER_MODULES.concat(MODE2_GENERAL_LOWER_MODULES); }
+  let MODE2_PRACTICE_MODES = [
+    { key:'watch', ja:'観る', en:'Watch' },
+    { key:'use', ja:'使う', en:'Use' },
+    { key:'collect', ja:'集める', en:'Collect' },
+    { key:'create', ja:'作る', en:'Create' },
+    { key:'modify', ja:'改造する', en:'Modify' },
+    { key:'support', ja:'推す', en:'Support' },
+    { key:'talk', ja:'語る', en:'Talk' },
+    { key:'research', ja:'研究する', en:'Research' }
+  ];
+
+  function slugifyMode2Name(s, fallback) {
+    const t = String(s || '').trim();
+    if (!t) return fallback || '';
+    return t.toLowerCase().replace(/\s+/g, '_');
+  }
+  function applyDiagnosticConfig(cfg) {
+    try {
+      if (!cfg || typeof cfg !== 'object') return;
+      if (Array.isArray(cfg.deepModules) && cfg.deepModules.length) {
+        MODE2_DEEP_LOWER_MODULES = cfg.deepModules.map((name, idx) => ({
+          key: slugifyMode2Name(name, 'deep_' + idx),
+          ja: String(name),
+          en: String(name),
+          level: 'deep'
+        }));
+      }
+      if (Array.isArray(cfg.generalModules) && cfg.generalModules.length) {
+        MODE2_GENERAL_LOWER_MODULES = cfg.generalModules.map((name, idx) => ({
+          key: slugifyMode2Name(name, 'general_' + idx),
+          ja: String(name),
+          en: String(name),
+          level: 'general'
+        }));
+      }
+      if (Array.isArray(cfg.practiceModes) && cfg.practiceModes.length) {
+        MODE2_PRACTICE_MODES = cfg.practiceModes.map((name, idx) => ({
+          key: slugifyMode2Name(name, 'practice_' + idx),
+          ja: String(name),
+          en: String(name)
+        }));
+      }
+    } catch (e) {
+      console.warn('diagnosticConfig の適用に失敗:', e);
+    }
+  }
+
+  function getMode2LowerModuleInfoByName(name) {
+    const s = String(name || '').trim();
+    return getMode2AllLowerModules().find(m => m.ja === s || m.en === s) || null;
+  }
+  function getMode2LowerModuleLevel(name) {
+    const info = getMode2LowerModuleInfoByName(name);
+    return info && info.level ? info.level : 'none';
+  }
+  function getMode2PracticeInfoByName(name) {
+    const s = String(name || '').trim();
+    return MODE2_PRACTICE_MODES.find(m => m.ja === s || m.en === s) || null;
+  }
+
+  function inferMode2Supplemental() {
+    const deepScores = {};
+    const generalScores = {};
+    const practiceScores = {};
+    const labelsForFragments = [];
+    const add = (bag, key, val) => { bag[key] = (bag[key] || 0) + val; };
+    const containsAny = (text, words) => words.some(w => text.indexOf(w) >= 0);
+
+    (kioskState.selections || []).forEach((selection) => {
+      const item = getKioskSourceItem(selection) || selection || {};
+      const label = String(getPrimaryLabel(item || selection) || selection.label || '');
+      const genres = Array.isArray(item.genre) ? item.genre.map(g => String(g || '').toUpperCase()) : [];
+      const meaning = getKioskMeaningState(selection);
+      const active = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]);
+      if (!active.length) return;
+      const weight = active.reduce((s, def) => s + (def.weight || 1), 0);
+      labelsForFragments.push({
+        label,
+        score: weight + (meaning.self ? 1.4 : 0) + (meaning.impact ? 1.0 : 0) + (meaning.admiration ? 0.8 : 0)
+      });
+
+      const diag = (item && item.diagnostic && typeof item.diagnostic === 'object') ? item.diagnostic : null;
+      if (diag) {
+        if (Array.isArray(diag.deepModules)) {
+          diag.deepModules.forEach(name => {
+            const info = getMode2LowerModuleInfoByName(name);
+            if (info && info.level === 'deep') add(deepScores, info.key, weight + (meaning.self ? 1.2 : 0) + (meaning.impact ? 1.0 : 0) + (meaning.repeat ? 0.8 : 0));
+          });
+        }
+        if (Array.isArray(diag.generalModules)) {
+          diag.generalModules.forEach(name => {
+            const info = getMode2LowerModuleInfoByName(name);
+            if (info && info.level === 'general') add(generalScores, info.key, weight + (meaning.taste ? 0.8 : 0));
+          });
+        }
+        if (Array.isArray(diag.practiceHints)) {
+          diag.practiceHints.forEach(name => {
+            const info = getMode2PracticeInfoByName(name);
+            if (info) add(practiceScores, info.key, weight + (meaning.self ? 0.8 : 0) + (meaning.impact ? 0.6 : 0));
+          });
+        }
+      }
+
+      if (genres.includes('NET')) add(generalScores, 'netsocial', weight);
+      if (genres.includes('GM') || genres.includes('GAM')) add(generalScores, 'gamefriendly', weight);
+      if (genres.includes('HAR')) add(generalScores, 'gadget', weight);
+      if (genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) add(generalScores, 'creativetools', weight * 0.5);
+      if (genres.includes('MUS')) add(generalScores, 'musicrhythm', weight);
+      if (genres.includes('MNG') || genres.includes('MAN') || genres.includes('ANM') || genres.includes('ANI') || genres.includes('MOV') || genres.includes('TV') || genres.includes('TVP')) {
+        add(generalScores, 'storyworld', weight * 0.4);
+        add(generalScores, 'character', weight * 0.3);
+        add(generalScores, 'dailyfun', weight * 0.3);
+      }
+      if (meaning.repeat) add(generalScores, 'nostalgia', weight + 0.8);
+
+      if (genres.includes('NET')) add(deepScores, 'anonnet', weight);
+      if (genres.includes('GM') || genres.includes('GAM')) add(deepScores, 'game', weight);
+      if (genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) {
+        add(deepScores, 'engineering', weight * 0.5);
+        add(deepScores, 'authoring', weight * 0.5);
+      }
+
+      if (containsAny(label, ['2ちゃん','あやしいわーるど','ふたば','ASCIIアート','電車男','テキストサイト'])) add(deepScores, 'anonnet', weight + 2);
+      if (containsAny(label, ['ニコニコ','実況','生放送','Twitch','超会議'])) add(deepScores, 'watchalong', weight + 2);
+      if (containsAny(label, ['初音ミク','VOCALOID','UTAU','重音テト','MikuMikuDance','VOICEROID','ボカロ'])) add(deepScores, 'vocaloid', weight + 2);
+      if (containsAny(label, ['Macintosh','Apple','Mac','HyperCard','iMac','iPhone','iPod','iPad'])) add(deepScores, 'apple', weight + 2);
+      if (containsAny(label, ['MS-DOS','DOS','UNIX','Linux','Windows','BSD','Emacs','C言語','JavaScript','Python','GitHub'])) add(deepScores, 'unix', weight + 2);
+      if (containsAny(label, ['Photoshop','Illustrator','Director','Flash','HyperCard','RPGツクール','DTM','Final Cut','GarageBand','Painter'])) add(deepScores, 'authoring', weight + 2);
+      if (containsAny(label, ['Arduino','Raspberry Pi','BASIC','C言語','JavaScript','Python','GitHub','Linux'])) add(deepScores, 'engineering', weight + 2);
+      if (containsAny(label, ['コミックマーケット','Pixiv','東方','Fate','月姫','同人','コミケ','アンソロジー'])) add(deepScores, 'doujin', weight + 2);
+      if (containsAny(label, ['ときめきメモリアル','To Heart','Kanon','同級生','シスター・プリンセス','セーラームーン','ラブライブ'])) add(deepScores, 'moe', weight + 2);
+      if (containsAny(label, ['JUNE','風と木の詩','トーマの心臓','BANANA FISH','日出処の天子','BL'])) add(deepScores, 'bl', weight + 2);
+      if (containsAny(label, ['鬼太郎','陰陽師','遠野物語','夏目友人帳','もののけ','千と千尋','京極','犬夜叉'])) {
+        add(deepScores, 'wa', weight + 2);
+        add(generalScores, 'wafantasy', weight + 1.4);
+      }
+      if (containsAny(label, ['鉄道','電車','Suica','A列車','時刻表','駅','Rail','電車でGO'])) add(deepScores, 'rail', weight + 2);
+      if (containsAny(label, ['モーニング娘。','AKB48','アイドルマスター','ホロライブ','にじさんじ','Vtuber','ラブライブ','おニャン子'])) add(deepScores, 'idol', weight + 2);
+
+      if (containsAny(label, ['ラブライブ','セーラームーン','初音ミク','アイドルマスター','BANANA FISH','トーマの心臓'])) add(generalScores, 'character', weight + 1.5);
+      if (containsAny(label, ['Apple','Macintosh','HyperCard','UNIX','Linux','Windows','Arduino','Raspberry Pi','MS-DOS'])) add(generalScores, 'gadget', weight + 1.5);
+      if (containsAny(label, ['Photoshop','Flash','Director','RPGツクール','Pixiv','コミックマーケット','初音ミク','VOICEROID'])) add(generalScores, 'creativetools', weight + 1.8);
+      if (containsAny(label, ['2ちゃん','ニコニコ','Twitch','ホロライブ','にじさんじ','Pixiv','Mastodon','mixi'])) add(generalScores, 'netsocial', weight + 1.8);
+      if (containsAny(label, ['東方','Fate','ドラゴンクエスト','ストリートファイター','ときめきメモリアル','モンスターハンター'])) add(generalScores, 'gamefriendly', weight + 1.8);
+      if (containsAny(label, ['ゲームボーイ','ファミコン','PC-9801','MS-DOS','ポラロイド','VHS','カセット','ウォークマン'])) add(generalScores, 'nostalgia', weight + 1.2);
+
+      if (meaning.repeat) add(practiceScores, 'collect', weight + 1);
+      if (meaning.taste) add(practiceScores, (genres.includes('HAR') || genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) ? 'use' : 'watch', weight);
+      if (meaning.impact || meaning.discovery) add(practiceScores, 'research', weight);
+      if (meaning.self) add(practiceScores, (genres.includes('HAR') || genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) ? 'use' : 'talk', weight);
+      if (meaning.admiration) add(practiceScores, 'support', weight + 1);
+      if ((genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) && containsAny(label, ['HyperCard','Director','Flash','Photoshop','RPGツクール','VOICEROID','初音ミク'])) add(practiceScores, 'create', weight + 1);
+      if (genres.includes('HAR') || containsAny(label, ['Arduino','Raspberry Pi'])) add(practiceScores, 'modify', weight * 0.6);
+    });
+
+    const rankedDeep = Object.entries(deepScores).sort((a,b)=>b[1]-a[1]);
+    const rankedGeneral = Object.entries(generalScores).sort((a,b)=>b[1]-a[1]);
+
+    let lowerModuleLevel = 'none';
+    let lowerModules = [];
+    const deepBest = rankedDeep[0] ? rankedDeep[0][1] : 0;
+    const deepSecond = rankedDeep[1] ? rankedDeep[1][1] : 0;
+    const generalBest = rankedGeneral[0] ? rankedGeneral[0][1] : 0;
+
+    if (deepBest >= 4 && (deepSecond >= 2.4 || rankedDeep.length === 1)) {
+      lowerModuleLevel = 'deep';
+      lowerModules = rankedDeep.slice(0,2).map(([key]) => MODE2_DEEP_LOWER_MODULES.find(m => m.key === key)).filter(Boolean).map(info => ({ key: info.key, ja: info.ja, en: info.en, level: info.level }));
+    } else if (generalBest >= 2.8) {
+      lowerModuleLevel = 'general';
+      lowerModules = rankedGeneral.slice(0,2).map(([key]) => MODE2_GENERAL_LOWER_MODULES.find(m => m.key === key)).filter(Boolean).map(info => ({ key: info.key, ja: info.ja, en: info.en, level: info.level }));
+    }
+
+    const practiceModes = Object.entries(practiceScores).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([key]) => {
+      const info = MODE2_PRACTICE_MODES.find(m => m.key === key);
+      return info ? { key, ja: info.ja, en: info.en } : null;
+    }).filter(Boolean);
+    const fragments = labelsForFragments.sort((a,b)=>b.score-a.score).slice(0,2).map(x => x.label);
+    return { lowerModules, lowerModuleLevel, practiceModes, fragments };
+  }
+
+
+function buildMode2DiagnosisLocal() {
     const attrScores = {};
     const slotScores = {};
     const worldWordScores = {};
@@ -6944,8 +7164,8 @@
       author: ['司書','偏愛民','蒐集家'], archive: ['司書','蒐集家','観測者']
     };
     const worldBySignal = {
-      HAR: ['電脳','機関','机上'], SOF: ['画面','電脳','机上'], NET: ['回線','電脳','未来'], GAM: ['放課後','秘密基地','冒険'],
-      MOV: ['銀幕','世界','街角'], TVP: ['居間','放課後','街角'], ANI: ['学園','世界','夢'], MAN: ['路地裏','書架','紙上']
+      HAR: ['電脳','機関','机上'], SW: ['画面','電脳','机上'], SOF: ['画面','電脳','机上'], SFT: ['画面','電脳','机上'], NET: ['回線','電脳','未来'], GM: ['放課後','秘密基地','冒険'], GAM: ['放課後','秘密基地','冒険'],
+      MOV: ['銀幕','世界','街角'], TV: ['居間','放課後','街角'], TVP: ['居間','放課後','街角'], ANM: ['学園','世界','夢'], ANI: ['学園','世界','夢'], MNG: ['路地裏','書架','紙上'], MAN: ['路地裏','書架','紙上']
     };
     const moodByMeaning = { taste: '偏愛', impact: '感化', repeat: '反復', self: '同型', admiration: '憧憬', discovery: '発見' };
 
@@ -6970,8 +7190,8 @@
       const topLine = activeMeanings.map(def => def.labelJa).join('・');
       selectedSummaries.push(`${selection.year}年: ${getPrimaryLabel(item || selection)}［${topLine}］`);
       if ((item.note || '').includes('雑誌')) boostWord(roleWordScores, '司書', totalMeaningWeight);
-      if (genres.includes('HAR') || genres.includes('SOF')) roleByAttr.mechanism.forEach(w => boostWord(roleWordScores, w, totalMeaningWeight / 4));
-      if (genres.includes('MOV') || genres.includes('ANI') || genres.includes('MAN')) roleByAttr.world.forEach(w => boostWord(roleWordScores, w, totalMeaningWeight / 5));
+      if (genres.includes('HAR') || genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) roleByAttr.mechanism.forEach(w => boostWord(roleWordScores, w, totalMeaningWeight / 4));
+      if (genres.includes('MOV') || genres.includes('ANM') || genres.includes('ANI') || genres.includes('MNG') || genres.includes('MAN')) roleByAttr.world.forEach(w => boostWord(roleWordScores, w, totalMeaningWeight / 5));
     });
 
     const rankedAttrs = Object.entries(attrScores).sort((a,b) => b[1] - a[1]);
@@ -6991,26 +7211,26 @@
     const topWorldWords = Object.entries(worldWordScores).sort((a,b) => b[1] - a[1]).slice(0,2).map(([word]) => word);
     const topMoodWord = (Object.entries(moodWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '偏愛';
     const topRoleWord = (Object.entries(roleWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '観測者';
-    const alias = `${topWorldWords[0] || '電脳'}${topWorldWords[1] ? topWorldWords[1] + 'の' : 'の'}${topMoodWord}${topRoleWord}`;
+    const supplemental = inferMode2Supplemental();
+    const fragments = supplemental.fragments || [];
+    const aliasLead = fragments.length ? fragments.join('と') + 'を抱えた' : '';
+    const alias = `${aliasLead}${topWorldWords[0] || '電脳'}${topWorldWords[1] ? topWorldWords[1] + 'の' : 'の'}${topMoodWord}${topRoleWord}`;
+    const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
     const summary = `あなたは「${top3[0].info.ja}」を中心に、「${top3[1].info.ja}」で好みの幅を持ち、「${top3[2].info.ja}」が深いところで効いているタイプです。`;
+    const localModuleTitle = supplemental.lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏';
     const resultText = [
-      'あなたをつくる3つの感性属性',
-      '',
+      'あなたをつくる3つの感性属性','',
       ...top3.flatMap(t => [`${t.role}｜${t.info.ja}`, t.info.desc, '']),
-      'あなたの記号',
-      symbol,
-      '',
-      'あなたの異名',
-      alias,
-      '',
-      '濃く出たスロット',
-      (topSlots.length ? topSlots.join(' / ') : '—'),
-      '',
-      '総合すると',
-      summary
+      ...(supplemental.lowerModules.length ? [localModuleTitle, ...(supplemental.lowerModules.map(m => `・${m.ja}`)), ''] : []),
+      ...(supplemental.practiceModes.length ? ['関わり方', ...(supplemental.practiceModes.map(m => `・${m.ja}`)), ''] : []),
+      'あなたの記号', symbol, '',
+      'あなたの異名', alias, '',
+      '短い異名', aliasShort, '',
+      '濃く出たスロット', (topSlots.length ? topSlots.join(' / ') : '—'), '',
+      '総合すると', summary
     ].join('\n');
-    return { top3, topSlots, alias, symbol, summary, resultText, selectedSummaries };
+    return { top3, topSlots, alias, aliasShort, symbol, summary, resultText, selectedSummaries, lowerModules: supplemental.lowerModules, lowerModuleLevel: supplemental.lowerModuleLevel, practiceModes: supplemental.practiceModes };
   }
 
   function buildMode2SelectedSummaries() {
@@ -7112,10 +7332,15 @@
     return { ok: false, error: (p && p.error) || (s && s.error) || 'AI backend failed' };
   }
 
-  function buildMode2AiPrompt(payload) {
+  
+function buildMode2AiPrompt(payload) {
     const attrs = [
       '世界観没入','機構偏愛','未来感受','異形親和','日常浸透','越境回遊','少年回路','少女回路','反復愛着','作者偏信','記録蒐集'
     ];
+    const deepLowerModules = MODE2_DEEP_LOWER_MODULES.map(m => m.ja);
+    const generalLowerModules = MODE2_GENERAL_LOWER_MODULES.map(m => m.ja);
+    const allLowerModules = getMode2AllLowerModules().map(m => m.ja);
+    const practiceModes = MODE2_PRACTICE_MODES.map(m => m.ja);
     if (isEnglishUi()) {
       return [
         'You are a cultural diagnosis analyst.',
@@ -7123,18 +7348,30 @@
         'You will receive a list of selected items and meaning tags for each item.',
         'The six meaning tags are: Taste / Impact / Returned to / Feels like me / Admiration / Discovery.',
         'Read the pattern of selections, crossings between genres and media, jumps across time periods, and the distribution of the meaning tags.',
-        'Choose exactly three attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the name exactly as written in Japanese.',
+        'Choose exactly three upper attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the names exactly as written in Japanese.',
         attrs.join(' / '),
+        'Then think about lower modules in this order.',
+        'First, examine whether any DEEP lower modules clearly fit. Use them only when there is strong evidence in the selections and meaning tags.',
+        'Deep lower modules:', deepLowerModules.join(' / '),
+        'If deep lower modules are not strongly supported, choose from the following GENERAL lower modules instead:',
+        'General lower modules:', generalLowerModules.join(' / '),
+        'If neither deep nor general lower modules are well supported, return an empty array for lowerModules.',
+        'Any lowerModules that you return must be chosen only from this combined fixed list:', allLowerModules.join(' / '),
+        'Infer one or two practice modes only from the following fixed Japanese labels:',
+        practiceModes.join(' / '),
         'Return JSON only. No markdown. No code fences. No commentary outside JSON.',
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
-        'Write summary, readingPoints, epithetReason, and shareText in English.',
+        'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
+        'epithet should be a longer and distinctive English alias when possible. If the selections clearly suggest one or two important works, fragments of those titles or character names may be woven into the epithet, but keep it readable.',
+        'epithetShort should be a shorter English alias for sharing.',
         'Set emblemCode to an English code only, such as GH-DY-RP.',
-        'Set epithet to an English alias only.',
         'readingPoints must contain exactly 3 strings.',
-        'summary should be in English, about 60 to 140 words.',
-        'shareText should be in English and within 100 characters.',
-        'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, emblemCode, epithet, epithetReason, summary, readingPoints, shareText.',
+        'summary should be in English, about 80 to 180 words.',
+        'shareText should be in English and within 120 characters.',
+        'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, readingPoints, shareText.',
         'Each attribute object must contain name, short, and reason.',
+        'lowerModules may be an empty array, or an array of 1 to 2 objects, each with name and reason. Keep name in Japanese.',
+        'practiceModes must be an array of 1 or 2 objects, each with name and reason. Keep name in Japanese.',
         'Below is the user input. Diagnose it and return JSON.',
         JSON.stringify(payload, null, 2)
       ].join('\n');
@@ -7145,64 +7382,43 @@
       '入力として、ユーザーが選んだ項目一覧と、各項目に対する意味づけタグが渡されます。',
       'タグは次の6種類です: 好み / 影響 / 繰り返し触れた / 自分らしい / 憧れ / 発見',
       '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
-      '必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
+      '上位属性は必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
       attrs.join(' / '),
+      '下位モジュールは、まず「深いモジュール」が十分に当てはまるかを検討してください。十分な根拠があるときだけ採用してください。',
+      '深いモジュール候補:',
+      deepLowerModules.join(' / '),
+      '深いモジュールが弱い場合は、次の一般向けモジュールを検討してください。',
+      '一般向けモジュール候補:',
+      generalLowerModules.join(' / '),
+      '深いモジュールも一般向けモジュールも弱い場合は、lowerModules は空配列にしてください。',
+      'lowerModules に返してよい名前は、次の固定リスト内のものだけです。',
+      allLowerModules.join(' / '),
+      'また、実践モードは次の固定リストから1〜2つ選んでください。',
+      practiceModes.join(' / '),
       '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
       '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。',
-      'また、ユーザー固有の少し変わった異名を1つ作ってください。異名は意味が通ることを優先し、過度に難解にしすぎないでください。',
-      'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は1文字略号ではなく、属性名そのものを「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
-      'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。右側の英語は短く自然な英語名にしてください。例: 電脳路地裏の装置司書 || Archivist of Cyber Alley Devices',
+      'また、ユーザー固有の少し長めの異名を1つ作ってください。重要作品の断片やキャラクター名、世界観の象徴語が自然に入るなら、1〜2個まで織り込んでかまいません。ただし作品名の羅列にはせず、読みやすく意味が通るものにしてください。',
+      'あわせて、短い異名も1つ返してください。',
+      'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
+      'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。右側の英語は短く自然な英語名にしてください。',
+      'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
       '制約:',
       '- 露骨な性格診断や病理的解釈をしない',
       '- 性別を決めつけない',
       '- 過剰に褒めすぎない',
       '- 選択内容に根拠のある範囲で解釈する',
+      '- lowerModules は空配列、または1〜2件の配列にする',
+      '- practiceModes は1〜2件の配列にする',
       '- readingPoints は3件ちょうど返す',
       '- summary は日本語で120〜220字程度',
       '- shareText は日本語で80字以内',
-      'JSONの形式は次のキーを必ず含めてください: mainAttribute, subAttribute, hiddenAttribute, emblemCode, epithet, epithetReason, summary, readingPoints, shareText',
-      '各 attribute には name, short, reason を含めてください。',
-      '以下はユーザーの選択結果です。これをもとにJSON形式で診断してください。',
+      'JSONは必ず次のキーを含めてください: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, readingPoints, shareText',
+      'mainAttribute, subAttribute, hiddenAttribute は、それぞれ name, short, reason を含むオブジェクトです。',
+      'lowerModules の各要素は name と reason を含むオブジェクトです。',
+      'practiceModes の各要素は name と reason を含むオブジェクトです。',
+      '以下が入力データです。JSON形式で診断してください。',
       JSON.stringify(payload, null, 2)
     ].join('\n');
-  }
-
-  function mode2ValueToText(value, fallback='') {
-    if (value == null) return fallback;
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    if (Array.isArray(value)) {
-      const joined = value.map(v => mode2ValueToText(v, '')).filter(Boolean).join(' / ');
-      return joined || fallback;
-    }
-    if (typeof value === 'object') {
-      const candidates = [value.text, value.label, value.title, value.name, value.reason, value.description, value.short, value.point, value.summary];
-      for (const c of candidates) {
-        const s = mode2ValueToText(c, '');
-        if (s) return s;
-      }
-      try { return JSON.stringify(value); } catch (_) { return fallback; }
-    }
-    return fallback;
-  }
-
-  const MODE2_ATTR_EN = {
-    '世界観没入': { short: 'World', label: 'World Immersion', code: 'WI' },
-    '機構偏愛': { short: 'Mechanism', label: 'Mechanism Love', code: 'ME' },
-    '未来感受': { short: 'Future', label: 'Future Sense', code: 'FU' },
-    '異形親和': { short: 'Aberration', label: 'Aberration Affinity', code: 'AB' },
-    '日常浸透': { short: 'Daily', label: 'Daily Affinity', code: 'DY' },
-    '越境回遊': { short: 'Crossing', label: 'Crossing', code: 'CR' },
-    '少年回路': { short: 'Boyhood', label: 'Boyhood Circuit', code: 'BH' },
-    '少女回路': { short: 'Girlhood', label: 'Girlhood Circuit', code: 'GH' },
-    '反復愛着': { short: 'Repeat', label: 'Repeat Attachment', code: 'RP' },
-    '作者偏信': { short: 'Author', label: 'Author Bias', code: 'AU' },
-    '記録蒐集': { short: 'Archive', label: 'Archive Impulse', code: 'AR' }
-  };
-
-  function mode2AttrLabelEn(name) {
-    const key = String(name || '').trim();
-    return (MODE2_ATTR_EN[key] && (MODE2_ATTR_EN[key].label || MODE2_ATTR_EN[key].short)) || key;
   }
 
   function mode2RoleLabel(roleJa) {
@@ -7226,6 +7442,39 @@
 
   function mode2ShortJa(name) {
     return MODE2_ATTR_SHORT_JA[String(name || '').trim()] || String(name || '').trim();
+  }
+
+  function mode2AttrLabelEn(name) {
+    const key = String(name || '').trim();
+    return (MODE2_ATTR_EN[key] && MODE2_ATTR_EN[key].label) ? MODE2_ATTR_EN[key].label : key;
+  }
+
+  function mode2ValueToText(value, fallback) {
+    const fb = (fallback == null) ? '' : String(fallback);
+    if (value == null) return fb;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      const joined = value.map(v => mode2ValueToText(v, '')).filter(Boolean).join(' / ');
+      return joined || fb;
+    }
+    if (typeof value === 'object') {
+      const preferredKeys = ['text', 'label', 'title', 'name', 'reason', 'summary', 'short', 'ja', 'en'];
+      for (const key of preferredKeys) {
+        if (value[key] != null) {
+          const picked = mode2ValueToText(value[key], '');
+          if (picked) return picked;
+        }
+      }
+      try {
+        const raw = JSON.stringify(value);
+        return raw && raw !== '{}' ? raw : fb;
+      } catch (_) {
+        return fb;
+      }
+    }
+    return fb;
   }
 
 
@@ -7273,7 +7522,8 @@
   }
 
 
-  function normalizeMode2AiResult(parsed, fallbackLocal) {
+  
+function normalizeMode2AiResult(parsed, fallbackLocal) {
     const main = parsed && parsed.mainAttribute ? parsed.mainAttribute : {};
     const sub = parsed && parsed.subAttribute ? parsed.subAttribute : {};
     const hidden = parsed && parsed.hiddenAttribute ? parsed.hiddenAttribute : {};
@@ -7286,27 +7536,51 @@
       { role: '副属性', info: { ja: subName, en: mode2AttrLabelEn(subName), desc: mode2ValueToText(sub.short, getMode2AttrDescJa(subName || '機構偏愛')) }, reason: mode2ValueToText(sub.reason, '') },
       { role: '裏属性', info: { ja: hiddenName, en: mode2AttrLabelEn(hiddenName), desc: mode2ValueToText(hidden.short, getMode2AttrDescJa(hiddenName || '記録蒐集')) }, reason: mode2ValueToText(hidden.reason, '') }
     ];
-    const symbolRaw = mode2ValueToText(parsed && parsed.emblemCode, fallbackLocal.symbol || '世界観没入・機構偏愛・記録蒐集 || WI-ME-AR');
+    const lowerModulesRaw = Array.isArray(parsed && parsed.lowerModules) ? parsed.lowerModules : [];
+    const practiceModesRaw = Array.isArray(parsed && parsed.practiceModes) ? parsed.practiceModes : [];
+    const lowerModules = (lowerModulesRaw.length ? lowerModulesRaw : (fallbackLocal.lowerModules || [])).slice(0,2).map(v => {
+      const name = mode2ValueToText(v && v.name ? v.name : (v && v.ja), '');
+      const info = getMode2LowerModuleInfoByName(name) || {};
+      return { ja: info.ja || name, en: info.en || mode2ValueToText(v && v.en, ''), reason: mode2ValueToText(v && v.reason, ''), level: info.level || mode2ValueToText(v && v.level, '') || '' };
+    }).filter(v => v.ja);
+    const lowerModuleLevel = lowerModules.length ? (lowerModules.some(v => v.level === 'deep') ? 'deep' : 'general') : (fallbackLocal.lowerModuleLevel || 'none');
+    const practiceModes = (practiceModesRaw.length ? practiceModesRaw : (fallbackLocal.practiceModes || [])).slice(0,2).map(v => {
+      const name = mode2ValueToText(v && v.name ? v.name : (v && v.ja), '');
+      const info = getMode2PracticeInfoByName(name) || {};
+      return { ja: info.ja || name, en: info.en || mode2ValueToText(v && v.en, ''), reason: mode2ValueToText(v && v.reason, '') };
+    }).filter(v => v.ja);
+
+    const symbolRaw = mode2ValueToText(parsed && parsed.emblemCode, fallbackLocal.symbol || '世界・機構・蒐集 || WI-ME-AR');
     const aliasRaw = mode2ValueToText(parsed && parsed.epithet, '');
+    const aliasShortRaw = mode2ValueToText(parsed && parsed.epithetShort, '');
     const symbolTexts = buildMode2SymbolTexts(symbolRaw, normTop3);
     const aliasTexts = buildMode2AliasTexts(aliasRaw, normTop3);
+    const aliasShortTexts = buildMode2AliasTexts(aliasShortRaw, normTop3);
+
     const symbol = isEnglishUi() ? (symbolTexts.en || 'WI-ME-AR') : symbolTexts.ja;
     const symbolEn = isEnglishUi() ? symbolTexts.ja : symbolTexts.en;
-    const alias = isEnglishUi() ? (aliasTexts.en || 'Observer of Cyber Alley') : aliasTexts.ja;
+    const alias = isEnglishUi() ? (aliasTexts.en || aliasShortTexts.en || 'Observer of Cyber Alley') : aliasTexts.ja;
     const aliasEn = isEnglishUi() ? (aliasTexts.ja || fallbackLocal.alias || '電脳路地裏の観測者') : aliasTexts.en;
+    const aliasShort = isEnglishUi() ? (aliasShortTexts.en || aliasTexts.en || 'Observer of Cyber Alley') : (aliasShortTexts.ja || fallbackLocal.aliasShort || fallbackLocal.alias || '電脳路地裏の観測者');
+    const aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
+
     const epithetReason = mode2ValueToText(parsed && parsed.epithetReason, isEnglishUi() ? 'This epithet was built from the pattern of your selections and their meanings.' : '選択された項目の並びと意味づけから組み立てられた異名です。');
     const summary = mode2ValueToText(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Several attributes overlap in the pattern and meanings of your selections.' : '選択の並びと意味づけから、複数の属性が重なって見えました。'));
     const readingPoints = Array.isArray(parsed && parsed.readingPoints)
       ? parsed.readingPoints.slice(0,3).map(v => mode2ValueToText(v, '')).filter(Boolean)
       : [];
     while (readingPoints.length < 3) readingPoints.push(isEnglishUi() ? 'Your meaning tags reveal a few especially strong shelves of interest.' : '選択された項目の意味づけから、濃い関心の棚が見えます。');
-    const shareText = mode2ValueToText(parsed && parsed.shareText, isEnglishUi() ? `My type is "${alias}". ${symbol}.` : `私は『${alias}』タイプ。${symbol}。`);
+    const shareText = mode2ValueToText(parsed && parsed.shareText, isEnglishUi() ? `My type is "${aliasShort}". ${symbol}.` : `私は『${aliasShort}』タイプ。${symbol}。`);
+
     const resultText = isEnglishUi()
       ? [
           'Three Sensibility Attributes That Shape You','',
           ...normTop3.flatMap(t => [ `${mode2RoleLabel(t.role)} | ${t.info.en}`, t.info.desc, t.reason ? `Reason: ${t.reason}` : '', '' ]),
+          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
+          'How You Engage', ...practiceModes.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), '',
           'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
           'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
+          'Short Epithet', `${aliasShort}${aliasShortEn ? ' (' + aliasShortEn + ')' : ''}`, '',
           'Why this name', epithetReason, '',
           'Overall', summary, '',
           'Reading of your selections', ...readingPoints.map(v => '- ' + v)
@@ -7314,16 +7588,19 @@
       : [
           'あなたをつくる3つの感性属性','',
           ...normTop3.flatMap(t => [ `${t.role}｜${t.info.ja}`, t.info.desc, t.reason ? `理由: ${t.reason}` : '', '' ]),
+          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏'), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
+          '関わり方', ...practiceModes.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), '',
           'あなたの記号', symbol, '',
           'あなたの異名', alias, '',
+          '短い異名', aliasShort, '',
           'この名の由来', epithetReason, '',
           '総合すると', summary, '',
           '今回の読み解き', ...readingPoints.map(v => '・' + v)
         ].filter(Boolean).join('\n');
-    return { top3: normTop3, symbol, symbolEn, alias, aliasEn, epithetReason, summary, readingPoints, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '' };
+    return { top3: normTop3, symbol, symbolEn, alias, aliasEn, aliasShort, aliasShortEn, epithetReason, summary, readingPoints, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '', lowerModules, lowerModuleLevel, practiceModes };
   }
 
-  function buildMode2ResultHtml(result) {
+function buildMode2ResultHtml(result) {
     const parts = result.top3.map(t => `
       <div style="padding:14px; border:1px solid #dbe4f0; border-radius:12px; background:#fff;">
         <div style="font-size:13px; color:#64748b; margin-bottom:4px;">${escapeHtmlText(mode2RoleLabel(t.role))}</div>
@@ -7337,9 +7614,16 @@
     `).join('');
     const pickedHtml = result.selectedSummaries.length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.selectedSummaries.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
     const readingHtml = (result.readingPoints || []).length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.readingPoints.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
+    const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
+    const moduleSectionTitle = result.lowerModuleLevel === 'general' ? t('惹かれやすい領域', 'Areas You Naturally Gravitate Toward') : t('濃い文化圏', 'Strong Cultural Modules');
+    const practiceHtml = (result.practiceModes || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.practiceModes.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
     return `
       <div style="font-size:20px; font-weight:700; margin-bottom:12px;">${t('あなたをつくる3つの感性属性', 'Three Sensibility Attributes That Shape You')}</div>
       <div style="display:grid; gap:12px;">${parts}</div>
+      ${(result.lowerModules || []).length || (result.practiceModes || []).length ? `<div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+        ${(result.lowerModules || []).length ? `<div style="font-size:13px; color:#64748b;">${moduleSectionTitle}</div>${moduleHtml}` : ``}
+        ${(result.practiceModes || []).length ? `<div style="font-size:13px; color:#64748b; margin-top:${(result.lowerModules || []).length ? '12px' : '0'};">${t('関わり方', 'How You Engage')}</div>${practiceHtml}` : ``}
+      </div>` : ``}
       <div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
         <div style="font-size:13px; color:#64748b;">${t('あなたの記号', 'Your Emblem')}</div>
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
@@ -7350,6 +7634,11 @@
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
           <div style="font-size:22px; font-weight:700;">${escapeHtmlText(result.alias)}</div>
           <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasEn || '')}</div>
+        </div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('短い異名', 'Short Epithet')}</div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
+          <div style="font-size:18px; font-weight:700;">${escapeHtmlText(result.aliasShort || '')}</div>
+          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasShortEn || '')}</div>
         </div>
         <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('この名の由来', 'Why this name')}</div>
         <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.epithetReason || '')}</div>
@@ -7372,7 +7661,7 @@
     `;
   }
 
-  function buildMode2CompactQrReport(result) {
+function buildMode2CompactQrReport(result) {
     if (!result || typeof result !== 'object') return '';
     const top3 = Array.isArray(result.top3) ? result.top3 : [];
     const compactLines = [
