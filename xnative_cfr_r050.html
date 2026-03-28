@@ -7477,6 +7477,28 @@ function buildMode2AiPrompt(payload) {
     return fb;
   }
 
+  function hasReplacementChar(value) {
+    return /�/.test(String(value || ''));
+  }
+
+  function sanitizeMode2Text(value, fallback) {
+    const fb = (fallback == null) ? '' : String(fallback);
+    const text = mode2ValueToText(value, fb);
+    if (!text) return fb;
+    if (!hasReplacementChar(text)) return text;
+    const cleaned = String(text).replace(/�+/g, '').trim();
+    return cleaned || fb;
+  }
+
+  function normalizeMode2AttrName(rawValue, fallbackName) {
+    const fb = String(fallbackName || '').trim();
+    const candidate = sanitizeMode2Text(rawValue, fb).trim();
+    if (!candidate) return fb;
+    // 上位属性名は固定リスト外を許可しない（文字化けや予期しない出力を抑止）
+    if (Object.prototype.hasOwnProperty.call(MODE2_ATTRS, candidate)) return candidate;
+    return fb;
+  }
+
 
   function splitMode2BilingualText(raw) {
     const text = mode2ValueToText(raw, '').trim();
@@ -7528,31 +7550,34 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const sub = parsed && parsed.subAttribute ? parsed.subAttribute : {};
     const hidden = parsed && parsed.hiddenAttribute ? parsed.hiddenAttribute : {};
     const selectedSummaries = buildMode2SelectedSummaries();
-    const mainName = mode2ValueToText(main.name, (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入');
-    const subName = mode2ValueToText(sub.name, (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛');
-    const hiddenName = mode2ValueToText(hidden.name, (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集');
+    const mainFallback = (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入';
+    const subFallback = (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛';
+    const hiddenFallback = (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集';
+    const mainName = normalizeMode2AttrName(main.name, mainFallback);
+    const subName = normalizeMode2AttrName(sub.name, subFallback);
+    const hiddenName = normalizeMode2AttrName(hidden.name, hiddenFallback);
     const normTop3 = [
-      { role: '主属性', info: { ja: mainName, en: mode2AttrLabelEn(mainName), desc: mode2ValueToText(main.short, getMode2AttrDescJa(mainName || '世界観没入')) }, reason: mode2ValueToText(main.reason, '') },
-      { role: '副属性', info: { ja: subName, en: mode2AttrLabelEn(subName), desc: mode2ValueToText(sub.short, getMode2AttrDescJa(subName || '機構偏愛')) }, reason: mode2ValueToText(sub.reason, '') },
-      { role: '裏属性', info: { ja: hiddenName, en: mode2AttrLabelEn(hiddenName), desc: mode2ValueToText(hidden.short, getMode2AttrDescJa(hiddenName || '記録蒐集')) }, reason: mode2ValueToText(hidden.reason, '') }
+      { role: '主属性', info: { ja: mainName, en: mode2AttrLabelEn(mainName), desc: getMode2AttrDescJa(mainName || '世界観没入') }, reason: sanitizeMode2Text(main.reason, '') },
+      { role: '副属性', info: { ja: subName, en: mode2AttrLabelEn(subName), desc: getMode2AttrDescJa(subName || '機構偏愛') }, reason: sanitizeMode2Text(sub.reason, '') },
+      { role: '裏属性', info: { ja: hiddenName, en: mode2AttrLabelEn(hiddenName), desc: getMode2AttrDescJa(hiddenName || '記録蒐集') }, reason: sanitizeMode2Text(hidden.reason, '') }
     ];
     const lowerModulesRaw = Array.isArray(parsed && parsed.lowerModules) ? parsed.lowerModules : [];
     const practiceModesRaw = Array.isArray(parsed && parsed.practiceModes) ? parsed.practiceModes : [];
     const lowerModules = (lowerModulesRaw.length ? lowerModulesRaw : (fallbackLocal.lowerModules || [])).slice(0,2).map(v => {
-      const name = mode2ValueToText(v && v.name ? v.name : (v && v.ja), '');
+      const name = sanitizeMode2Text(v && v.name ? v.name : (v && v.ja), '');
       const info = getMode2LowerModuleInfoByName(name) || {};
-      return { ja: info.ja || name, en: info.en || mode2ValueToText(v && v.en, ''), reason: mode2ValueToText(v && v.reason, ''), level: info.level || mode2ValueToText(v && v.level, '') || '' };
+      return { ja: info.ja || name, en: info.en || sanitizeMode2Text(v && v.en, ''), reason: sanitizeMode2Text(v && v.reason, ''), level: info.level || sanitizeMode2Text(v && v.level, '') || '' };
     }).filter(v => v.ja);
     const lowerModuleLevel = lowerModules.length ? (lowerModules.some(v => v.level === 'deep') ? 'deep' : 'general') : (fallbackLocal.lowerModuleLevel || 'none');
     const practiceModes = (practiceModesRaw.length ? practiceModesRaw : (fallbackLocal.practiceModes || [])).slice(0,2).map(v => {
-      const name = mode2ValueToText(v && v.name ? v.name : (v && v.ja), '');
+      const name = sanitizeMode2Text(v && v.name ? v.name : (v && v.ja), '');
       const info = getMode2PracticeInfoByName(name) || {};
-      return { ja: info.ja || name, en: info.en || mode2ValueToText(v && v.en, ''), reason: mode2ValueToText(v && v.reason, '') };
+      return { ja: info.ja || name, en: info.en || sanitizeMode2Text(v && v.en, ''), reason: sanitizeMode2Text(v && v.reason, '') };
     }).filter(v => v.ja);
 
-    const symbolRaw = mode2ValueToText(parsed && parsed.emblemCode, fallbackLocal.symbol || '世界・機構・蒐集 || WI-ME-AR');
-    const aliasRaw = mode2ValueToText(parsed && parsed.epithet, '');
-    const aliasShortRaw = mode2ValueToText(parsed && parsed.epithetShort, '');
+    const symbolRaw = sanitizeMode2Text(parsed && parsed.emblemCode, fallbackLocal.symbol || '世界・機構・蒐集 || WI-ME-AR');
+    const aliasRaw = sanitizeMode2Text(parsed && parsed.epithet, '');
+    const aliasShortRaw = sanitizeMode2Text(parsed && parsed.epithetShort, '');
     const symbolTexts = buildMode2SymbolTexts(symbolRaw, normTop3);
     const aliasTexts = buildMode2AliasTexts(aliasRaw, normTop3);
     const aliasShortTexts = buildMode2AliasTexts(aliasShortRaw, normTop3);
@@ -7564,13 +7589,13 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const aliasShort = isEnglishUi() ? (aliasShortTexts.en || aliasTexts.en || 'Observer of Cyber Alley') : (aliasShortTexts.ja || fallbackLocal.aliasShort || fallbackLocal.alias || '電脳路地裏の観測者');
     const aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
 
-    const epithetReason = mode2ValueToText(parsed && parsed.epithetReason, isEnglishUi() ? 'This epithet was built from the pattern of your selections and their meanings.' : '選択された項目の並びと意味づけから組み立てられた異名です。');
-    const summary = mode2ValueToText(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Several attributes overlap in the pattern and meanings of your selections.' : '選択の並びと意味づけから、複数の属性が重なって見えました。'));
+    const epithetReason = sanitizeMode2Text(parsed && parsed.epithetReason, isEnglishUi() ? 'This epithet was built from the pattern of your selections and their meanings.' : '選択された項目の並びと意味づけから組み立てられた異名です。');
+    const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Several attributes overlap in the pattern and meanings of your selections.' : '選択の並びと意味づけから、複数の属性が重なって見えました。'));
     const readingPoints = Array.isArray(parsed && parsed.readingPoints)
-      ? parsed.readingPoints.slice(0,3).map(v => mode2ValueToText(v, '')).filter(Boolean)
+      ? parsed.readingPoints.slice(0,3).map(v => sanitizeMode2Text(v, '')).filter(Boolean)
       : [];
     while (readingPoints.length < 3) readingPoints.push(isEnglishUi() ? 'Your meaning tags reveal a few especially strong shelves of interest.' : '選択された項目の意味づけから、濃い関心の棚が見えます。');
-    const shareText = mode2ValueToText(parsed && parsed.shareText, isEnglishUi() ? `My type is "${aliasShort}". ${symbol}.` : `私は『${aliasShort}』タイプ。${symbol}。`);
+    const shareText = sanitizeMode2Text(parsed && parsed.shareText, isEnglishUi() ? `My type is "${aliasShort}". ${symbol}.` : `私は『${aliasShort}』タイプ。${symbol}。`);
 
     const resultText = isEnglishUi()
       ? [
