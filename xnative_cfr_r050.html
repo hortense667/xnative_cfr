@@ -6104,7 +6104,9 @@
               ${topTitleLines.map(line => `<span style="display:block;">${escapeHtmlText(line)}</span>`).join('')}
             </h2>
             <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
-            <p style="margin-top:24px; font-size:12px; color:#888; text-align:left;">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</p>
+            <div style="margin-top:6px; font-size:18px; color:#666;">
+              ${t('※入力した内容や選択内容は診断結果の表示や集計に使わせていただきます。', 'Your inputs and selections are used to show and aggregate diagnosis results.')}
+            </div>
             <div class="kiosk-start-bottom">
               <label class="kiosk-start-en">
                 <input type="checkbox" id="kioskEnglishToggle" ${checked}>
@@ -6155,10 +6157,6 @@
                 <div id="kioskPadGrid" style="margin-top:8px; display:grid; grid-template-columns:repeat(10, minmax(0, 1fr)); gap:6px;"></div>
               </div>
             </div>
-            <div style="margin-top:6px; font-size:18px; color:#666;">
-              ${t('※入力した内容や選択内容は診断結果の表示や集計に使わせていただきます。', 'Your inputs and selections are used to show and aggregate diagnosis results.')}
-            </div>
-
             <div class="actions">
               <button type="button" id="kioskStep2NextBtn">${t('次へ', 'Next')}</button>
             </div>
@@ -7025,13 +7023,55 @@
     return MODE2_PRACTICE_MODES.find(m => m.ja === s || m.en === s) || null;
   }
 
-  function inferMode2Supplemental() {
+  
+function inferMode2Supplemental() {
     const deepScores = {};
     const generalScores = {};
     const practiceScores = {};
     const labelsForFragments = [];
+    const deepCounts = {};
+    const generalCounts = {};
+    const deepStrongCounts = {};
+    const generalStrongCounts = {};
+    const moduleClusterCounts = {};
     const add = (bag, key, val) => { bag[key] = (bag[key] || 0) + val; };
+    const incr = (bag, key, val) => { bag[key] = (bag[key] || 0) + (val == null ? 1 : val); };
     const containsAny = (text, words) => words.some(w => text.indexOf(w) >= 0);
+    const inferClusters = (item, label, diag) => {
+      const out = [];
+      if (diag && Array.isArray(diag.moduleCluster)) {
+        diag.moduleCluster.forEach(v => {
+          const s = String(v || '').trim();
+          if (s) out.push(s);
+        });
+      }
+      const genres = Array.isArray(item && item.genre) ? item.genre.map(g => String(g || '').toUpperCase()) : [];
+      if (
+        containsAny(label, ['Apple','Mac','Macintosh','iMac','iBook','iPod','iPhone','iPad','Final Cut','GarageBand','Lisa','HyperCard']) ||
+        (diag && Array.isArray(diag.deepModules) && diag.deepModules.some(name => String(name || '').indexOf('アップル美学') >= 0))
+      ) out.push('apple_ecosystem');
+      if (
+        containsAny(label, ['MS-DOS','DOS','UNIX','Linux','BSD','Emacs','C言語','Windows 95','Windows XP','X68000','PC-9801']) ||
+        (diag && Array.isArray(diag.deepModules) && diag.deepModules.some(name => String(name || '').indexOf('DOS/UNIX実務') >= 0))
+      ) out.push('unix_practical');
+      if (
+        containsAny(label, ['初音ミク','VOCALOID','鏡音','巡音','UTAU','重音テト','MikuMikuDance','Project DIVA','CeVIO']) ||
+        (diag && Array.isArray(diag.deepModules) && diag.deepModules.some(name => String(name || '').indexOf('ボカロ／仮想人格') >= 0))
+      ) out.push('vocaloid_persona');
+      if (
+        containsAny(label, ['2ちゃんねる','あやしいわーるど','ふたば','侍魂','電車男','ASCIIアート','VIP']) ||
+        (diag && Array.isArray(diag.deepModules) && diag.deepModules.some(name => String(name || '').indexOf('匿名ネット文化') >= 0))
+      ) out.push('anon_net');
+      if (
+        containsAny(label, ['ニコニコ動画','ニコニコ生放送','超会議','Twitch','歌ってみた','踊ってみた','実況']) ||
+        (diag && Array.isArray(diag.deepModules) && diag.deepModules.some(name => String(name || '').indexOf('共同視聴') >= 0))
+      ) out.push('shared_viewing');
+      if (
+        containsAny(label, ['時刻表','鉄道','電車','列車','A列車','電車でGO!','Suica','青春18きっぷ','Rail','路線図']) ||
+        (diag && Array.isArray(diag.deepModules) && diag.deepModules.some(name => String(name || '').indexOf('鉄道／交通') >= 0))
+      ) out.push('rail_transit');
+      return [...new Set(out)];
+    };
 
     (kioskState.selections || []).forEach((selection) => {
       const item = getKioskSourceItem(selection) || selection || {};
@@ -7041,100 +7081,140 @@
       const active = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]);
       if (!active.length) return;
       const weight = active.reduce((s, def) => s + (def.weight || 1), 0);
+      const strongSignal = (meaning.self ? 1 : 0) + (meaning.impact ? 1 : 0) + (meaning.repeat ? 1 : 0);
       labelsForFragments.push({
         label,
-        score: weight + (meaning.self ? 1.4 : 0) + (meaning.impact ? 1.0 : 0) + (meaning.admiration ? 0.8 : 0)
+        score: weight + (meaning.self ? 1.6 : 0) + (meaning.impact ? 1.2 : 0) + (meaning.admiration ? 0.8 : 0)
       });
 
       const diag = (item && item.diagnostic && typeof item.diagnostic === 'object') ? item.diagnostic : null;
+      inferClusters(item, label, diag).forEach(cluster => incr(moduleClusterCounts, cluster, 1));
+
       if (diag) {
         if (Array.isArray(diag.deepModules)) {
           diag.deepModules.forEach(name => {
             const info = getMode2LowerModuleInfoByName(name);
-            if (info && info.level === 'deep') add(deepScores, info.key, weight + (meaning.self ? 1.2 : 0) + (meaning.impact ? 1.0 : 0) + (meaning.repeat ? 0.8 : 0));
+            if (info && info.level === 'deep') {
+              add(deepScores, info.key, weight + (meaning.self ? 1.8 : 0) + (meaning.impact ? 1.5 : 0) + (meaning.repeat ? 1.2 : 0) + (meaning.admiration ? 0.8 : 0));
+              incr(deepCounts, info.key, 1);
+              if (strongSignal > 0) incr(deepStrongCounts, info.key, strongSignal);
+            }
           });
         }
         if (Array.isArray(diag.generalModules)) {
           diag.generalModules.forEach(name => {
             const info = getMode2LowerModuleInfoByName(name);
-            if (info && info.level === 'general') add(generalScores, info.key, weight + (meaning.taste ? 0.8 : 0));
+            if (info && info.level === 'general') {
+              add(generalScores, info.key, (weight * 0.82) + (meaning.taste ? 0.9 : 0) + (meaning.admiration ? 0.8 : 0) + (meaning.repeat ? 0.4 : 0));
+              incr(generalCounts, info.key, 1);
+              if (strongSignal > 0) incr(generalStrongCounts, info.key, strongSignal);
+            }
           });
         }
         if (Array.isArray(diag.practiceHints)) {
           diag.practiceHints.forEach(name => {
             const info = getMode2PracticeInfoByName(name);
-            if (info) add(practiceScores, info.key, weight + (meaning.self ? 0.8 : 0) + (meaning.impact ? 0.6 : 0));
+            if (info) add(practiceScores, info.key, weight + (meaning.self ? 1.0 : 0) + (meaning.repeat ? 0.7 : 0));
           });
         }
       }
 
-      if (genres.includes('NET')) add(generalScores, 'netsocial', weight);
-      if (genres.includes('GM') || genres.includes('GAM')) add(generalScores, 'gamefriendly', weight);
-      if (genres.includes('HAR')) add(generalScores, 'gadget', weight);
-      if (genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) add(generalScores, 'creativetools', weight * 0.5);
-      if (genres.includes('MUS')) add(generalScores, 'musicrhythm', weight);
-      if (genres.includes('MNG') || genres.includes('MAN') || genres.includes('ANM') || genres.includes('ANI') || genres.includes('MOV') || genres.includes('TV') || genres.includes('TVP')) {
-        add(generalScores, 'storyworld', weight * 0.4);
-        add(generalScores, 'character', weight * 0.3);
-        add(generalScores, 'dailyfun', weight * 0.3);
-      }
-      if (meaning.repeat) add(generalScores, 'nostalgia', weight + 0.8);
+      // ラベル・genre 由来の補助（diagnostic 未整備項目の保険）
+      if (containsAny(label, ['初音ミク','VOCALOID','鏡音','巡音','UTAU','重音テト','MikuMikuDance','Project DIVA','CeVIO'])) add(deepScores, 'vocaloid', weight + 1.2);
+      if (containsAny(label, ['2ちゃんねる','あやしいわーるど','ふたば','侍魂','電車男','ASCIIアート','VIP'])) add(deepScores, 'anonnet', weight + 1.0);
+      if (containsAny(label, ['ニコニコ動画','ニコニコ生放送','超会議','Twitch','歌ってみた','踊ってみた','実況'])) add(deepScores, 'watchalong', weight + 1.0);
+      if (containsAny(label, ['Macintosh','Apple','Lisa','HyperCard','iMac','iBook','iPod','iPhone','iPad','Final Cut','GarageBand'])) add(deepScores, 'apple', weight + 1.6);
+      if (containsAny(label, ['MS-DOS','UNIX','Linux','BSD','Emacs','C言語','Windows 95','Windows XP','X68000','PC-9801'])) add(deepScores, 'unix', weight + 1.1);
+      if (containsAny(label, ['Pixiv','コミックマーケット','東方Project','月姫','Fate/stay night','艦これ','同人'])) add(deepScores, 'doujin', weight + 0.9);
+      if (containsAny(label, ['AKB48','アイドルマスター','ラブライブ','ホロライブ','にじさんじ','Vtuber','おニャン子','モーニング娘。'])) add(deepScores, 'idol', weight + 0.9);
+      if (containsAny(label, ['時刻表','鉄道','電車','列車','A列車','電車でGO!','Suica','青春18きっぷ','Rail','路線図','桃太郎電鉄'])) add(deepScores, 'rail', weight + 1.0);
+      if (containsAny(label, ['ガロ','ねじ式','少女椿','ライチ☆光クラブ','悪の華','丸尾末広'])) add(deepScores, 'underground', weight + 0.9);
 
-      if (genres.includes('NET')) add(deepScores, 'anonnet', weight);
-      if (genres.includes('GM') || genres.includes('GAM')) add(deepScores, 'game', weight);
-      if (genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) {
-        add(deepScores, 'engineering', weight * 0.5);
-        add(deepScores, 'authoring', weight * 0.5);
-      }
+      if (containsAny(label, ['セーラームーン','ときめきメモリアル','To Heart','Kanon','AIR','CLANNAD','シスター・プリンセス','らき☆すた','ラブライブ'])) add(deepScores, 'moe', weight + 0.8);
+      if (containsAny(label, ['風と木の詩','トーマの心臓','ポーの一族','BANANA FISH','日出処の天子','JUNE','絶愛','パタリロ','純情ロマンチカ','世界一初恋'])) add(deepScores, 'bl', weight + 0.8);
 
-      if (containsAny(label, ['2ちゃん','あやしいわーるど','ふたば','ASCIIアート','電車男','テキストサイト'])) add(deepScores, 'anonnet', weight + 2);
-      if (containsAny(label, ['ニコニコ','実況','生放送','Twitch','超会議'])) add(deepScores, 'watchalong', weight + 2);
-      if (containsAny(label, ['初音ミク','VOCALOID','UTAU','重音テト','MikuMikuDance','VOICEROID','ボカロ'])) add(deepScores, 'vocaloid', weight + 2);
-      if (containsAny(label, ['Macintosh','Apple','Mac','HyperCard','iMac','iPhone','iPod','iPad'])) add(deepScores, 'apple', weight + 2);
-      if (containsAny(label, ['MS-DOS','DOS','UNIX','Linux','Windows','BSD','Emacs','C言語','JavaScript','Python','GitHub'])) add(deepScores, 'unix', weight + 2);
-      if (containsAny(label, ['Photoshop','Illustrator','Director','Flash','HyperCard','RPGツクール','DTM','Final Cut','GarageBand','Painter'])) add(deepScores, 'authoring', weight + 2);
-      if (containsAny(label, ['Arduino','Raspberry Pi','BASIC','C言語','JavaScript','Python','GitHub','Linux'])) add(deepScores, 'engineering', weight + 2);
-      if (containsAny(label, ['コミックマーケット','Pixiv','東方','Fate','月姫','同人','コミケ','アンソロジー'])) add(deepScores, 'doujin', weight + 2);
-      if (containsAny(label, ['ときめきメモリアル','To Heart','Kanon','同級生','シスター・プリンセス','セーラームーン','ラブライブ'])) add(deepScores, 'moe', weight + 2);
-      if (containsAny(label, ['JUNE','風と木の詩','トーマの心臓','BANANA FISH','日出処の天子','BL'])) add(deepScores, 'bl', weight + 2);
-      if (containsAny(label, ['鬼太郎','陰陽師','遠野物語','夏目友人帳','もののけ','千と千尋','京極','犬夜叉'])) {
-        add(deepScores, 'wa', weight + 2);
-        add(generalScores, 'wafantasy', weight + 1.4);
-      }
-      if (containsAny(label, ['鉄道','電車','Suica','A列車','時刻表','駅','Rail','電車でGO'])) add(deepScores, 'rail', weight + 2);
-      if (containsAny(label, ['モーニング娘。','AKB48','アイドルマスター','ホロライブ','にじさんじ','Vtuber','ラブライブ','おニャン子'])) add(deepScores, 'idol', weight + 2);
-
-      if (containsAny(label, ['ラブライブ','セーラームーン','初音ミク','アイドルマスター','BANANA FISH','トーマの心臓'])) add(generalScores, 'character', weight + 1.5);
-      if (containsAny(label, ['Apple','Macintosh','HyperCard','UNIX','Linux','Windows','Arduino','Raspberry Pi','MS-DOS'])) add(generalScores, 'gadget', weight + 1.5);
-      if (containsAny(label, ['Photoshop','Flash','Director','RPGツクール','Pixiv','コミックマーケット','初音ミク','VOICEROID'])) add(generalScores, 'creativetools', weight + 1.8);
-      if (containsAny(label, ['2ちゃん','ニコニコ','Twitch','ホロライブ','にじさんじ','Pixiv','Mastodon','mixi'])) add(generalScores, 'netsocial', weight + 1.8);
-      if (containsAny(label, ['東方','Fate','ドラゴンクエスト','ストリートファイター','ときめきメモリアル','モンスターハンター'])) add(generalScores, 'gamefriendly', weight + 1.8);
-      if (containsAny(label, ['ゲームボーイ','ファミコン','PC-9801','MS-DOS','ポラロイド','VHS','カセット','ウォークマン'])) add(generalScores, 'nostalgia', weight + 1.2);
+      if (containsAny(label, ['Macintosh','Apple','iMac','iPod','iPhone','iPad','PC','Windows','Linux','Arduino','Raspberry Pi','ポラロイド','VHS','カセット','ウォークマン'])) add(generalScores, 'gadget', weight + 1.0);
+      if (containsAny(label, ['ゲーム','ファミコン','スーパーファミコン','ストリートファイター','ドラクエ','FF','ポケモン','パズドラ','モンハン'])) add(generalScores, 'gamefriendly', weight + 0.9);
+      if (containsAny(label, ['ニコニコ','2ちゃんねる','Pixiv','Mastodon','mixi','Facebook','YouTube','Twitch','ChatGPT'])) add(generalScores, 'netsocial', weight + 0.8);
+      if (containsAny(label, ['初音ミク','VOCALOID','音楽','紅白','MTV','iPod','ウォークマン'])) add(generalScores, 'musicrhythm', weight + 0.8);
+      if (containsAny(label, ['ゲームボーイ','ファミコン','PC-9801','MS-DOS','ポラロイド','VHS','カセット','ウォークマン','iMac','iPod'])) add(generalScores, 'nostalgia', weight + 1.2);
+      if (containsAny(label, ['ガロ','ねじ式','ツイン・ピークス','デビルマン','火の鳥','ゲゲゲ','遠野物語'])) add(generalScores, 'storyworld', weight + 0.7);
 
       if (meaning.repeat) add(practiceScores, 'collect', weight + 1);
       if (meaning.taste) add(practiceScores, (genres.includes('HAR') || genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) ? 'use' : 'watch', weight);
       if (meaning.impact || meaning.discovery) add(practiceScores, 'research', weight);
-      if (meaning.self) add(practiceScores, (genres.includes('HAR') || genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) ? 'use' : 'talk', weight);
+      if (meaning.self) add(practiceScores, (genres.includes('HAR') || genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) ? 'use' : 'talk', weight + 0.8);
       if (meaning.admiration) add(practiceScores, 'support', weight + 1);
-      if ((genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) && containsAny(label, ['HyperCard','Director','Flash','Photoshop','RPGツクール','VOICEROID','初音ミク'])) add(practiceScores, 'create', weight + 1);
+      if ((genres.includes('SW') || genres.includes('SOF') || genres.includes('SFT')) && containsAny(label, ['HyperCard','Director','Flash','Photoshop','RPGツクール','VOICEROID','初音ミク','Final Cut','GarageBand'])) add(practiceScores, 'create', weight + 1);
       if (genres.includes('HAR') || containsAny(label, ['Arduino','Raspberry Pi'])) add(practiceScores, 'modify', weight * 0.6);
     });
+
+    // 件数・強いタグ・ブランド系列のボーナス
+    Object.keys(deepCounts).forEach((key) => {
+      const count = deepCounts[key] || 0;
+      const strong = deepStrongCounts[key] || 0;
+      const countBonus = count >= 5 ? 20 : count === 4 ? 14 : count === 3 ? 9 : count === 2 ? 5 : count === 1 ? 2 : 0;
+      add(deepScores, key, countBonus);
+      if (count >= 2 && strong >= 1) add(deepScores, key, 4.5);
+      if (count >= 2 && strong >= 3) add(deepScores, key, 3.5);
+      if (count >= 3) add(deepScores, key, count * 0.8);
+    });
+    Object.keys(generalCounts).forEach((key) => {
+      const count = generalCounts[key] || 0;
+      const strong = generalStrongCounts[key] || 0;
+      const countBonus = count >= 5 ? 7 : count === 4 ? 5 : count === 3 ? 3 : count === 2 ? 1.6 : 0;
+      add(generalScores, key, countBonus);
+      if (count >= 2 && strong >= 2) add(generalScores, key, 1.5);
+    });
+
+    // ブランド／文化圏クラスターの強制ブースト
+    const appleClusterCount = moduleClusterCounts.apple_ecosystem || 0;
+    if (appleClusterCount >= 3) add(deepScores, 'apple', appleClusterCount >= 5 ? 18 : 10);
+    const unixClusterCount = moduleClusterCounts.unix_practical || 0;
+    if (unixClusterCount >= 3) add(deepScores, 'unix', unixClusterCount >= 5 ? 14 : 8);
+    const vocaloidClusterCount = moduleClusterCounts.vocaloid_persona || 0;
+    if (vocaloidClusterCount >= 3) add(deepScores, 'vocaloid', vocaloidClusterCount >= 5 ? 14 : 8);
+    const anonClusterCount = moduleClusterCounts.anon_net || 0;
+    if (anonClusterCount >= 3) add(deepScores, 'anonnet', anonClusterCount >= 5 ? 14 : 8);
+    const watchClusterCount = moduleClusterCounts.shared_viewing || 0;
+    if (watchClusterCount >= 3) add(deepScores, 'watchalong', watchClusterCount >= 5 ? 14 : 8);
+    const railClusterCount = moduleClusterCounts.rail_transit || 0;
+    if (railClusterCount >= 3) add(deepScores, 'rail', railClusterCount >= 5 ? 14 : 8);
 
     const rankedDeep = Object.entries(deepScores).sort((a,b)=>b[1]-a[1]);
     const rankedGeneral = Object.entries(generalScores).sort((a,b)=>b[1]-a[1]);
 
     let lowerModuleLevel = 'none';
     let lowerModules = [];
+    const deepBestKey = rankedDeep[0] ? rankedDeep[0][0] : '';
     const deepBest = rankedDeep[0] ? rankedDeep[0][1] : 0;
     const deepSecond = rankedDeep[1] ? rankedDeep[1][1] : 0;
     const generalBest = rankedGeneral[0] ? rankedGeneral[0][1] : 0;
+    const deepBestCount = deepCounts[deepBestKey] || 0;
+    const deepBestStrong = deepStrongCounts[deepBestKey] || 0;
 
-    if (deepBest >= 4 && (deepSecond >= 2.4 || rankedDeep.length === 1)) {
+    const shouldPreferDeep =
+      (deepBestCount >= 3) ||
+      (deepBestCount >= 2 && deepBestStrong >= 1) ||
+      (deepBest >= 4.8 && deepBest >= (generalBest * 1.15)) ||
+      (deepBest >= 9 && deepBest > generalBest);
+
+    if (shouldPreferDeep) {
       lowerModuleLevel = 'deep';
-      lowerModules = rankedDeep.slice(0,2).map(([key]) => MODE2_DEEP_LOWER_MODULES.find(m => m.key === key)).filter(Boolean).map(info => ({ key: info.key, ja: info.ja, en: info.en, level: info.level }));
+      const secondThreshold = Math.max(2.4, deepBest * 0.45);
+      lowerModules = rankedDeep
+        .filter(([key, score], idx) => idx === 0 || score >= secondThreshold)
+        .slice(0,2)
+        .map(([key]) => MODE2_DEEP_LOWER_MODULES.find(m => m.key === key))
+        .filter(Boolean)
+        .map(info => ({ key: info.key, ja: info.ja, en: info.en, level: info.level }));
     } else if (generalBest >= 2.8) {
       lowerModuleLevel = 'general';
-      lowerModules = rankedGeneral.slice(0,2).map(([key]) => MODE2_GENERAL_LOWER_MODULES.find(m => m.key === key)).filter(Boolean).map(info => ({ key: info.key, ja: info.ja, en: info.en, level: info.level }));
+      lowerModules = rankedGeneral
+        .slice(0,2)
+        .map(([key]) => MODE2_GENERAL_LOWER_MODULES.find(m => m.key === key))
+        .filter(Boolean)
+        .map(info => ({ key: info.key, ja: info.ja, en: info.en, level: info.level }));
     }
 
     const practiceModes = Object.entries(practiceScores).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([key]) => {
@@ -7144,6 +7224,7 @@
     const fragments = labelsForFragments.sort((a,b)=>b.score-a.score).slice(0,2).map(x => x.label);
     return { lowerModules, lowerModuleLevel, practiceModes, fragments };
   }
+
 
 
 function buildMode2DiagnosisLocal() {
@@ -7362,8 +7443,8 @@ function buildMode2AiPrompt(payload) {
         'Return JSON only. No markdown. No code fences. No commentary outside JSON.',
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
         'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
-        'epithet should be a longer and distinctive English alias when possible. If the selections clearly suggest one or two important works, fragments of those titles or character names may be woven into the epithet, but keep it readable.',
-        'epithetShort should be a shorter English alias for sharing.',
+        'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
+        'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
         'Set emblemCode to an English code only, such as GH-DY-RP.',
         'readingPoints must contain exactly 3 strings.',
         'summary should be in English, about 80 to 180 words.',
@@ -7397,8 +7478,8 @@ function buildMode2AiPrompt(payload) {
       practiceModes.join(' / '),
       '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
       '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。',
-      'また、ユーザー固有の少し長めの異名を1つ作ってください。重要作品の断片やキャラクター名、世界観の象徴語が自然に入るなら、1〜2個まで織り込んでかまいません。ただし作品名の羅列にはせず、読みやすく意味が通るものにしてください。',
-      'あわせて、短い異名も1つ返してください。',
+      'また、ユーザー固有の少し長めの異名を1つ作ってください。作品名・製品名・キャラクター名をそのまま異名に入れてはいけません。代わりに、それらを感じさせる象徴語・比喩語・断片語に変換してください。JSONの diagnostic.keywords がある項目では、その keywords を優先して使ってください。keywords がない場合も、媒体・文化圏・手触りを匂わせる抽象語に置き換え、直接名は避けてください。異名は戒名・家紋名・種族名のように、少し謎めいていても雰囲気が伝わるものにしてください。',
+      'あわせて、短い異名も1つ返してください。短い異名も同様に、直接的な固有名詞ではなく、象徴語ベースにしてください。',
       'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。右側の英語は短く自然な英語名にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
@@ -7500,6 +7581,259 @@ function buildMode2AiPrompt(payload) {
   }
 
 
+  const MODE2_SYMBOLIC_TERMS = {
+    "Macintosh": ["林檎", "果実", "白机", "角丸筐体", "林檎電脳"],
+    "Apple II": ["黎明果実", "果実筐体", "林檎電脳"],
+    "iMac (初代)": ["林檎", "白机", "角丸", "半透明", "果実机"],
+    "iMac": ["林檎", "白机", "角丸", "半透明", "果実机"],
+    "iPod": ["白い耳線", "掌の果実", "小さな光沢", "音の果実"],
+    "iPod nano": ["薄い果実", "掌の光沢", "白い耳線"],
+    "iPhone": ["掌の窓", "光る果実", "掌上の硝子", "林檎の窓"],
+    "iPad": ["光板", "掌上の硝子", "平たい果実", "ひらたい光"],
+    "HyperCard": ["カード束", "積層札", "机上の束", "連環札"],
+    "Final Cut Pro": ["編集机", "光の切継", "映像机"],
+    "GarageBand": ["机上録音", "音の工房", "私設スタジオ"],
+    "MS-DOS": ["黒画面", "命令線", "文字窓"],
+    "UNIX": ["黒端末", "命令路", "文字の森"],
+    "Linux": ["自由核", "黒端末", "電脳工房"],
+    "Windows 95": ["窓明け", "窓辺", "大衆の窓"],
+    "2ちゃんねる": ["匿名路", "路地裏", "灰色掲示路", "文字井戸"],
+    "ニコニコ動画": ["弾幕", "コメントの海", "重ね声", "同時視の広場"],
+    "初音ミク": ["青い声", "硝子声", "仮想歌姫", "人なき歌声"],
+    "VOCALOID": ["電声", "合成声", "仮想声帯"],
+    "MikuMikuDance": ["踊る電声", "仮想舞台", "振付幻灯"],
+    "Pixiv": ["絵の海", "画帖の園", "筆の広場"],
+    "コミックマーケット": ["紙の祭", "紙市", "冊子の祭"],
+    "東方Project": ["境界", "弾幕", "幻想郷", "東の幻野"],
+    "ガロ": ["地下誌", "路地裏紙片", "前衛紙", "紙の裂け目"],
+    "ねじ式": ["螺子夢", "歪景", "夢路の螺子"],
+    "少女椿": ["赤幕", "見世物小屋", "病める花"],
+    "ライチ☆光クラブ": ["黒鉄学舎", "地下果実", "暗黒学園"],
+    "悪の華": ["思春の毒", "倒錯の花", "黒い花園"],
+    "ツイン・ピークス": ["深森", "赤室", "梟", "霧町"],
+    "時刻表": ["時刻", "鉄路", "旅程", "発車標"],
+    "A列車で行こう": ["鉄路箱庭", "路線の庭", "都市線"],
+    "電車でGO!": ["運転席", "鉄路前面", "発車の眼"],
+    "AKB48": ["劇場灯", "推し席", "群像舞台"],
+    "アイドルマスター": ["担当", "舞台灯", "育成譜", "推しの壇"],
+    "ホロライブ": ["配信灯", "箱の星座", "声の配列"],
+    "にじさんじ": ["虹の座", "配信群像", "声の広場"],
+    "Mastodon": ["分散路", "群島回線", "自由な群れ"],
+    "ChatGPT": ["対話機", "電脳対話", "言葉の核"],
+    "らき☆すた": ["日常星片", "放課後の星屑", "軽やかな余白"]
+  };
+
+  const MODE2_SYMBOLIC_ROLE_JA = [
+    "観測者", "司書", "蒐集家", "巡礼者", "語り部", "継ぎ手", "編み手",
+    "使い手", "開拓者", "案内人", "記録者", "採集者", "祀り手", "旅人", "組版師"
+  ];
+
+  const MODE2_SYMBOLIC_ROLE_EN = {
+    "観測者": "Observer", "司書": "Archivist", "蒐集家": "Collector", "巡礼者": "Pilgrim",
+    "語り部": "Storykeeper", "継ぎ手": "Bridgebearer", "編み手": "Weaver", "使い手": "Operator",
+    "開拓者": "Pioneer", "案内人": "Guide", "記録者": "Recorder", "採集者": "Gatherer",
+    "祀り手": "Keeper", "旅人": "Traveler", "組版師": "Composer"
+  };
+
+  const MODE2_SYMBOLIC_MODULE_HINTS = {
+    "匿名ネット文化": ["路地裏", "匿名路", "掲示路", "灰色回線"],
+    "共同視聴文化": ["弾幕", "重ね声", "同時視", "共鳴広場"],
+    "ボカロ／仮想人格": ["青い声", "電声", "仮想歌姫", "硝子声"],
+    "アップル美学": ["林檎", "果実", "白机", "角丸", "掌の窓"],
+    "DOS/UNIX実務": ["黒端末", "命令路", "文字窓", "無骨な核"],
+    "同人／二次創作": ["紙市", "余白", "再話", "境界"],
+    "BL／耽美": ["薄明", "白い廊下", "耽美", "傷心譜"],
+    "鉄道／交通": ["鉄路", "時刻", "発車標", "旅程"],
+    "アングラ／サブカル前衛": ["地下誌", "螺子夢", "赤幕", "歪景"],
+    "アイドル／推し文化": ["推灯", "舞台灯", "群像", "声援"],
+    "音楽体験": ["律動", "歌声", "音の海", "旋律"],
+    "音楽メディア体験": ["律動", "歌声", "音の海", "旋律"],
+    "和風／伝承": ["民譚", "妖気", "山影", "古層"],
+    "萌え／美少女": ["変身", "星飾り", "憧れ", "光粒"],
+    "ゲーム実践": ["箱庭", "攻略", "操縦", "反復"],
+    "創作／オーサリング": ["筆", "机上工房", "組成", "編成"],
+    "エンジニアリング": ["工房", "回路", "実装", "電脳細工"]
+  };
+
+  const MODE2_SYMBOLIC_GENERAL_HINTS = {
+    "物語世界": ["幻野", "物語", "夢路", "深界"],
+    "キャラクター愛着": ["面影", "憧れ", "伴走", "余韻"],
+    "日常エンタメ": ["日常", "居間", "街角", "暮らし"],
+    "機械／ガジェット": ["機械", "装置", "筐体", "机上"],
+    "ゲーム親和": ["遊戯", "箱庭", "操作", "攻略"],
+    "ネット交流": ["回線", "広場", "接続", "群れ"],
+    "音楽体験": ["律動", "歌声", "音の海", "旋律"],
+    "創作関心": ["筆", "紙片", "工房", "編み"],
+    "懐かしさ／ノスタルジー": ["余韻", "旧景", "郷愁", "古層"],
+    "和風幻想": ["妖気", "山影", "民譚", "古譚"],
+    "推し／パフォーマンス": ["舞台灯", "群像", "声援", "推灯"]
+  };
+
+  const MODE2_SYMBOLIC_GENRE_HINTS = {
+    "MNG": ["紙片", "冊子", "漫画譜", "紙の影"], "ANM": ["幻灯", "作画", "動画譜", "光画"],
+    "TV": ["電波", "居間", "放送", "茶の間"], "MOV": ["銀幕", "映写", "光影", "暗座"],
+    "GM": ["箱庭", "操作", "攻略", "遊戯"], "SW": ["回路", "端末", "窓", "命令"],
+    "HW": ["筐体", "装置", "機械", "手触り"], "NET": ["回線", "接続", "広場", "群れ"],
+    "WEB": ["回線", "接続", "広場", "群れ"], "MAG": ["雑誌", "紙片", "誌面", "特集"],
+    "BK": ["書物", "頁", "読書", "紙背"], "BOO": ["書物", "頁", "読書", "紙背"],
+    "NOV": ["小説", "語り", "紙上", "章句"], "MUS": ["旋律", "歌声", "律動", "音の海"],
+    "EVT": ["祭", "会場", "群衆", "広場"], "FMT": ["媒体", "規格", "記録層", "器"],
+    "TOY": ["玩具", "掌", "遊具", "箱"], "IDL": ["推灯", "舞台灯", "群像", "声援"]
+  };
+
+  function mode2UniqueStrings(list) {
+    const seen = new Set();
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach(v => {
+      const s = String(v || '').trim();
+      if (!s || seen.has(s)) return;
+      seen.add(s);
+      out.push(s);
+    });
+    return out;
+  }
+
+  function mode2NormalizeGenreCodes(genre) {
+    const arr = Array.isArray(genre) ? genre : (genre ? [genre] : []);
+    return arr.map(v => String(v || '').trim().toUpperCase()).filter(Boolean);
+  }
+
+  function findEventItemBySelection(selection) {
+    if (!selection || selection.year == null) return null;
+    const yearList = (events && events[String(selection.year)]) || (events && events[selection.year]) || [];
+    if (!Array.isArray(yearList)) return null;
+    return yearList.find(it => String(it.label || '') === String(selection.label || '')) || null;
+  }
+
+  function getMode2SelectionMeaningTags(selection) {
+    if (!selection) return [];
+    const state = (typeof getKioskMeaningState === 'function') ? getKioskMeaningState(selection) : null;
+    const tags = [];
+    if (state && typeof MODE2_MEANING_DEFS !== 'undefined' && Array.isArray(MODE2_MEANING_DEFS)) {
+      MODE2_MEANING_DEFS.forEach(def => { if (state[def.key]) tags.push(def.labelJa || def.key); });
+    }
+    return tags;
+  }
+
+  function getMode2MeaningWeight(tag) {
+    const t = String(tag || '');
+    if (t === '影響') return 4.0;
+    if (t === '自分らしい') return 5.0;
+    if (t === '繰り返し触れた' || t === '反復') return 3.0;
+    if (t === '憧れ') return 2.0;
+    if (t === '発見') return 1.8;
+    if (t === '好み' || t === '好き') return 1.2;
+    return 1.0;
+  }
+
+  function getSymbolicTermsForItem(item, selection) {
+    const out = [];
+    const diagnostic = item && item.diagnostic && typeof item.diagnostic === 'object' ? item.diagnostic : null;
+    if (diagnostic && Array.isArray(diagnostic.keywords)) {
+      out.push(...diagnostic.keywords.map(v => String(v || '').trim()).filter(Boolean));
+    }
+    const label = item && item.label ? String(item.label) : '';
+    if (!out.length && label && MODE2_SYMBOLIC_TERMS[label]) {
+      out.push(...MODE2_SYMBOLIC_TERMS[label]);
+    }
+    if (!out.length && diagnostic) {
+      const deep = Array.isArray(diagnostic.deepModules) ? diagnostic.deepModules : [];
+      deep.forEach(name => {
+        const list = MODE2_SYMBOLIC_MODULE_HINTS[String(name || '').trim()];
+        if (list) out.push(...list);
+      });
+      if (!out.length) {
+        const general = Array.isArray(diagnostic.generalModules) ? diagnostic.generalModules : [];
+        general.forEach(name => {
+          const list = MODE2_SYMBOLIC_GENERAL_HINTS[String(name || '').trim()];
+          if (list) out.push(...list);
+        });
+      }
+    }
+    if (!out.length) {
+      mode2NormalizeGenreCodes(item && item.genre).forEach(code => {
+        const list = MODE2_SYMBOLIC_GENRE_HINTS[code];
+        if (list) out.push(...list);
+      });
+    }
+    const meaningTags = getMode2SelectionMeaningTags(selection);
+    const weight = meaningTags.reduce((sum, tag) => sum + getMode2MeaningWeight(tag), 0);
+    const unique = mode2UniqueStrings(out);
+    if (weight >= 5 && unique.length > 1) return unique.slice(0, 2);
+    return unique;
+  }
+
+  function collectMode2SelectedItems() {
+    const selections = (window.kioskState && Array.isArray(window.kioskState.selections)) ? window.kioskState.selections : [];
+    return selections.map(sel => {
+      const item = findEventItemBySelection(sel) || { label: sel.label || '', genre: sel.genre || [] };
+      const tags = getMode2SelectionMeaningTags(sel);
+      const weight = Math.max(1, tags.reduce((sum, tag) => sum + getMode2MeaningWeight(tag), 0) || 0);
+      return { selection: sel, item, tags, weight, terms: getSymbolicTermsForItem(item, sel) };
+    });
+  }
+
+  function getMode2TopSymbolicTerms(limit) {
+    const usage = new Map();
+    collectMode2SelectedItems().forEach(entry => {
+      const uniq = mode2UniqueStrings(entry.terms).slice(0, 3);
+      uniq.forEach((term, index) => {
+        const prev = usage.get(term) || 0;
+        usage.set(term, prev + entry.weight - (index * 0.15));
+      });
+    });
+    return [...usage.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'ja')).slice(0, Math.max(1, limit || 2)).map(([term]) => term);
+  }
+
+  function getMode2RoleCandidatesFromResult(top3, lowerModules, practiceModes) {
+    const out = [];
+    (Array.isArray(practiceModes) ? practiceModes : []).forEach(v => {
+      const name = String((v && (v.ja || v.name)) || v || '').trim();
+      if (name === '集める') out.push('蒐集家', '記録者');
+      if (name === '語る') out.push('語り部', '案内人');
+      if (name === '観る') out.push('観測者');
+      if (name === '使う') out.push('使い手', '開拓者');
+      if (name === '作る') out.push('編み手', '組版師');
+      if (name === '研究する') out.push('記録者', '採集者');
+      if (name === '推す') out.push('継ぎ手', '祀り手');
+      if (name === '改造する') out.push('開拓者', '使い手');
+    });
+    (Array.isArray(lowerModules) ? lowerModules : []).forEach(v => {
+      const name = String((v && (v.ja || v.name)) || v || '').trim();
+      if (name === '同人／二次創作') out.push('継ぎ手', '編み手');
+      if (name === '匿名ネット文化') out.push('観測者', '語り部');
+      if (name === '鉄道／交通') out.push('巡礼者', '記録者');
+      if (name === 'アップル美学') out.push('司書', '観測者', '使い手');
+      if (name === 'アングラ／サブカル前衛') out.push('採集者', '観測者');
+      if (name === 'BL／耽美') out.push('語り部', '観測者');
+      if (name === 'アイドル／推し文化') out.push('継ぎ手', '祀り手');
+    });
+    (Array.isArray(top3) ? top3 : []).forEach(v => {
+      const name = String(v && v.info && v.info.ja ? v.info.ja : '').trim();
+      if (name === '記録蒐集') out.push('司書', '記録者', '蒐集家');
+      if (name === '世界観没入') out.push('巡礼者', '旅人');
+      if (name === '越境回遊') out.push('旅人', '案内人');
+      if (name === '機構偏愛') out.push('使い手', '観測者');
+      if (name === '作者偏信') out.push('語り部', '継ぎ手');
+      if (name === '未来感受') out.push('開拓者');
+    });
+    return mode2UniqueStrings(out.concat(MODE2_SYMBOLIC_ROLE_JA));
+  }
+
+  function buildMode2LocalAlias(top3, lowerModules, practiceModes) {
+    const symbols = getMode2TopSymbolicTerms(2);
+    const roleCandidates = getMode2RoleCandidatesFromResult(top3, lowerModules, practiceModes);
+    const roleJa = roleCandidates[0] || '観測者';
+    let aliasJa = '';
+    if (symbols.length >= 2) aliasJa = `${symbols[0]}${symbols[1]}の${roleJa}`;
+    else if (symbols.length === 1) aliasJa = `${symbols[0]}の${roleJa}`;
+    else aliasJa = '電脳路地裏の観測者';
+    const roleEn = MODE2_SYMBOLIC_ROLE_EN[roleJa] || 'Observer';
+    const symbolEn = symbols.slice(0, 2).join(' / ') || 'Cyber Alley';
+    return { ja: aliasJa, en: `${roleEn} of ${symbolEn}` };
+  }
+
+
   function splitMode2BilingualText(raw) {
     const text = mode2ValueToText(raw, '').trim();
     if (!text) return { ja: '', en: '' };
@@ -7537,8 +7871,18 @@ function buildMode2AiPrompt(payload) {
         return (MODE2_ATTR_EN[name] && MODE2_ATTR_EN[name].short) ? MODE2_ATTR_EN[name].short : name;
       }).filter(Boolean).join(' / ');
     }
+    const rawJa = (parsed.ja || '').trim();
+    const shouldFallback = !rawJa || rawJa.length < 6 || /Macintosh|Apple|iMac|iPod|iPhone|iPad|らき\s*\*?\s*すた|Lucky\s*Star|2ちゃんねる|ニコニコ動画|初音ミク|Pixiv|コミックマーケット|ガロ|ねじ式|Twin Peaks|ツイン・ピークス/i.test(rawJa);
+    if (shouldFallback) {
+      const result = window.lastMode2NormalizedResult || {};
+      const localAlias = buildMode2LocalAlias(top3, result.lowerModules || [], result.practiceModes || []);
+      return {
+        ja: localAlias.ja || '電脳路地裏の観測者',
+        en: localAlias.en || 'Observer of Cyber Alley'
+      };
+    }
     return {
-      ja: parsed.ja || '電脳路地裏の観測者',
+      ja: rawJa || '電脳路地裏の観測者',
       en: en || 'Observer of Cyber Alley'
     };
   }
