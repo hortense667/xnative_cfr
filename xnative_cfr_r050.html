@@ -6862,20 +6862,20 @@
     { key: 'oshi', labelJa: '推す', labelEn: 'Oshi / Support', weight: 1.35 }
   ];
   const MODE2_ATTRS = {
-    world: { ja: '世界観没入', en: 'World Immersion', short: '世界', desc: 'その世界に入れる感じで選ぶ属性です。' },
-    mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機構', desc: '道具や仕組みそのものに心が動く属性です。' },
-    future: { ja: '未来感受', en: 'Future Sense', short: '未来', desc: '次が始まる気配や時代の切り替わりに反応する属性です。' },
-    aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異形', desc: '少し危うく変なものに熱を感じる属性です。' },
-    daily: { ja: '日常浸透', en: 'Daily Affinity', short: '日常', desc: '生活に溶け込む手触りを長く愛する属性です。' },
-    crossing: { ja: '越境回遊', en: 'Crossing', short: '越境', desc: 'ジャンルや媒体の境界を軽やかにまたぐ属性です。' },
-    boyhood: { ja: '少年回路', en: 'Boyhood Circuit', short: '少年', desc: '冒険と発見の想像力に火がつく属性です。' },
-    girlhood: { ja: '少女回路', en: 'Girlhood Circuit', short: '少女', desc: '変身と関係性、内面の揺れに惹かれる属性です。' },
-    repeat: { ja: '反復愛着', en: 'Repeat Attachment', short: '反復', desc: '何度も戻ることで好きが深まる属性です。' },
-    author: { ja: '作者偏信', en: 'Author Bias', short: '作者', desc: '作り手の癖や姿勢まで含めて愛する属性です。' },
-    archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', desc: '好きなものを系譜や記録として抱える属性です。' }
+    world: { ja: '世界観没入', en: 'World Immersion', short: '世界', code: 'WI', desc: 'その世界に入れる感じで選ぶ属性です。' },
+    mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機構', code: 'ME', desc: '道具や仕組みそのものに心が動く属性です。' },
+    future: { ja: '未来感受', en: 'Future Sense', short: '未来', code: 'FU', desc: '次が始まる気配や時代の切り替わりに反応する属性です。' },
+    aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異形', code: 'AB', desc: '少し危うく変なものに熱を感じる属性です。' },
+    daily: { ja: '日常浸透', en: 'Daily Affinity', short: '日常', code: 'DY', desc: '生活に溶け込む手触りを長く愛する属性です。' },
+    crossing: { ja: '越境回遊', en: 'Crossing', short: '越境', code: 'CR', desc: 'ジャンルや媒体の境界を軽やかにまたぐ属性です。' },
+    boyhood: { ja: '少年回路', en: 'Boyhood Circuit', short: '少年', code: 'BH', desc: '冒険と発見の想像力に火がつく属性です。' },
+    girlhood: { ja: '少女回路', en: 'Girlhood Circuit', short: '少女', code: 'GH', desc: '変身と関係性、内面の揺れに惹かれる属性です。' },
+    repeat: { ja: '反復愛着', en: 'Repeat Attachment', short: '反復', code: 'RP', desc: '何度も戻ることで好きが深まる属性です。' },
+    author: { ja: '作者偏信', en: 'Author Bias', short: '作者', code: 'AU', desc: '作り手の癖や姿勢まで含めて愛する属性です。' },
+    archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', code: 'AR', desc: '好きなものを系譜や記録として抱える属性です。' }
   };
   const MODE2_ATTR_EN = Object.values(MODE2_ATTRS).reduce((acc, item) => {
-    acc[item.ja] = { label: item.en, short: item.en };
+    acc[item.ja] = { label: item.en, short: item.en, code: item.code || '' };
     return acc;
   }, {});
   const MODE2_SLOT_LABELS = {
@@ -7443,7 +7443,9 @@ function buildMode2AiPrompt(payload) {
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
         'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
+        'Make epithet clearly longer than epithetShort. Aim for about 8 to 16 words so it feels rich and specific.',
         'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
+        'For epithet wording, avoid harsh or negative terms such as "scrap", "junk", or "waste"; prefer neutral or poetic vocabulary such as "mechanism", "workshop", "circuit", and "transmutation".',
         'Set emblemCode to an English code only, such as GH-DY-RP.',
         'readingPoints must contain exactly 3 strings.',
         'summary should be in English, about 80 to 180 words.',
@@ -7478,7 +7480,9 @@ function buildMode2AiPrompt(payload) {
       '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
       '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。',
       'また、ユーザー固有の少し長めの異名を1つ作ってください。作品名・製品名・キャラクター名をそのまま異名に入れてはいけません。代わりに、それらを感じさせる象徴語・比喩語・断片語に変換してください。JSONの diagnostic.keywords がある項目では、その keywords を優先して使ってください。keywords がない場合も、媒体・文化圏・手触りを匂わせる抽象語に置き換え、直接名は避けてください。異名は戒名・家紋名・種族名のように、少し謎めいていても雰囲気が伝わるものにしてください。',
+      'epithet（長い異名）は epithetShort（短い異名）より明確に長くしてください。日本語では目安として16〜36文字程度で、象徴語を2〜3個つないだ厚みのある言い回しにしてください。',
       'あわせて、短い異名も1つ返してください。短い異名も同様に、直接的な固有名詞ではなく、象徴語ベースにしてください。',
+      '異名の語彙では「鉄屑」「ガラクタ」「廃材」などのネガティブ語を避け、「機巧」「機関」「工房」「回路」「錬成」など中立〜詩的な語を優先してください。',
       'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。右側の英語は短く自然な英語名にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
@@ -7851,13 +7855,14 @@ function buildMode2AiPrompt(payload) {
       ? top3.map(t => mode2ShortJa(mode2ValueToText(t && t.info && t.info.ja, ''))).filter(Boolean)
       : [];
     const jp = top3Ja.length ? top3Ja.join('・') : (parsed.ja || '');
-    let en = parsed.en || '';
-    if (!en && Array.isArray(top3)) {
-      en = top3.map(t => {
+    const canonicalEn = Array.isArray(top3)
+      ? top3.map(t => {
         const name = mode2ValueToText(t && t.info && t.info.ja, '');
         return (MODE2_ATTR_EN[name] && MODE2_ATTR_EN[name].code) ? MODE2_ATTR_EN[name].code : 'AT';
-      }).filter(Boolean).join('-');
-    }
+      }).filter(Boolean).join('-')
+      : '';
+    // AI返却の英字コードが属性名と不整合なことがあるため、top3由来の正規コードを優先する
+    const en = canonicalEn || parsed.en || '';
     return { ja: jp || '世界・機構・蒐集', en: en || 'WI-ME-AR' };
   }
 
@@ -7927,8 +7932,15 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
 
     const symbol = isEnglishUi() ? (symbolTexts.en || 'WI-ME-AR') : symbolTexts.ja;
     const symbolEn = isEnglishUi() ? symbolTexts.ja : symbolTexts.en;
-    const alias = isEnglishUi() ? (aliasTexts.en || aliasShortTexts.en || 'Observer of Cyber Alley') : aliasTexts.ja;
-    const aliasEn = isEnglishUi() ? (aliasTexts.ja || fallbackLocal.alias || '電脳路地裏の観測者') : aliasTexts.en;
+    let alias = isEnglishUi() ? (aliasTexts.en || aliasShortTexts.en || 'Observer of Cyber Alley') : aliasTexts.ja;
+    let aliasEn = isEnglishUi() ? (aliasTexts.ja || fallbackLocal.alias || '電脳路地裏の観測者') : aliasTexts.en;
+    if (!isEnglishUi()) {
+      const shortRolePattern = /の(観測者|司書|蒐集家|巡礼者|語り部|継ぎ手|編み手|使い手|開拓者|案内人|記録者|採集者|祀り手|旅人|組版師)$/;
+      const looksTooShort = !alias || alias.length < 12 || shortRolePattern.test(alias);
+      if (looksTooShort && fallbackLocal && fallbackLocal.alias) {
+        alias = fallbackLocal.alias;
+      }
+    }
     const aliasShort = isEnglishUi() ? (aliasShortTexts.en || aliasTexts.en || 'Observer of Cyber Alley') : (aliasShortTexts.ja || fallbackLocal.aliasShort || fallbackLocal.alias || '電脳路地裏の観測者');
     const aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
 
