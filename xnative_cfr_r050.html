@@ -6855,11 +6855,11 @@
 
   const MODE2_MEANING_DEFS = [
     { key: 'taste', labelJa: '好み', labelEn: 'Taste', weight: 1.0 },
+    { key: 'moe', labelJa: '萌え', labelEn: 'Moe', weight: 1.25 },
     { key: 'impact', labelJa: '影響', labelEn: 'Impact', weight: 1.45 },
     { key: 'repeat', labelJa: '繰り返し触れた', labelEn: 'Returned to', weight: 1.2 },
     { key: 'self', labelJa: '自分らしい', labelEn: 'Feels like me', weight: 1.55 },
-    { key: 'admiration', labelJa: '憧れ', labelEn: 'Admiration', weight: 1.2 },
-    { key: 'discovery', labelJa: '発見', labelEn: 'Discovery', weight: 1.3 }
+    { key: 'oshi', labelJa: '推す', labelEn: 'Oshi / Support', weight: 1.35 }
   ];
   const MODE2_ATTRS = {
     world: { ja: '世界観没入', en: 'World Immersion', short: '世界', desc: 'その世界に入れる感じで選ぶ属性です。' },
@@ -7307,7 +7307,6 @@ function buildMode2DiagnosisLocal() {
       ...(supplemental.practiceModes.length ? ['関わり方', ...(supplemental.practiceModes.map(m => `・${m.ja}`)), ''] : []),
       'あなたの記号', symbol, '',
       'あなたの異名', alias, '',
-      '短い異名', aliasShort, '',
       '濃く出たスロット', (topSlots.length ? topSlots.join(' / ') : '—'), '',
       '総合すると', summary
     ].join('\n');
@@ -7427,7 +7426,7 @@ function buildMode2AiPrompt(payload) {
         'You are a cultural diagnosis analyst.',
         'This is not a medical or psychological diagnosis. It is a grounded reading of cultural taste.',
         'You will receive a list of selected items and meaning tags for each item.',
-        'The six meaning tags are: Taste / Impact / Returned to / Feels like me / Admiration / Discovery.',
+        'The six meaning tags are: Taste / Moe / Impact / Returned to / Feels like me / Oshi / Support.',
         'Read the pattern of selections, crossings between genres and media, jumps across time periods, and the distribution of the meaning tags.',
         'Choose exactly three upper attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the names exactly as written in Japanese.',
         attrs.join(' / '),
@@ -7461,7 +7460,7 @@ function buildMode2AiPrompt(payload) {
       'あなたは、コンテンツ・製品・サービスの選択履歴から、その人の「感性属性」を読む文化的診断アナリストです。',
       'これは医療・心理診断ではなく、文化的嗜好の読み解きです。',
       '入力として、ユーザーが選んだ項目一覧と、各項目に対する意味づけタグが渡されます。',
-      'タグは次の6種類です: 好み / 影響 / 繰り返し触れた / 自分らしい / 憧れ / 発見',
+      'タグは次の6種類です: 好み / 萌え / 影響 / 繰り返し触れた / 自分らしい / 推す',
       '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
       '上位属性は必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
       attrs.join(' / '),
@@ -7717,11 +7716,11 @@ function buildMode2AiPrompt(payload) {
 
   function getMode2MeaningWeight(tag) {
     const t = String(tag || '');
-    if (t === '影響') return 4.0;
     if (t === '自分らしい') return 5.0;
+    if (t === '影響') return 4.0;
+    if (t === '推す') return 3.2;
     if (t === '繰り返し触れた' || t === '反復') return 3.0;
-    if (t === '憧れ') return 2.0;
-    if (t === '発見') return 1.8;
+    if (t === '萌え') return 2.2;
     if (t === '好み' || t === '好き') return 1.2;
     return 1.0;
   }
@@ -7949,7 +7948,6 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           'How You Engage', ...practiceModes.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), '',
           'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
           'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
-          'Short Epithet', `${aliasShort}${aliasShortEn ? ' (' + aliasShortEn + ')' : ''}`, '',
           'Why this name', epithetReason, '',
           'Overall', summary, '',
           'Reading of your selections', ...readingPoints.map(v => '- ' + v)
@@ -7961,7 +7959,6 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           '関わり方', ...practiceModes.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), '',
           'あなたの記号', symbol, '',
           'あなたの異名', alias, '',
-          '短い異名', aliasShort, '',
           'この名の由来', epithetReason, '',
           '総合すると', summary, '',
           '今回の読み解き', ...readingPoints.map(v => '・' + v)
@@ -7999,11 +7996,6 @@ function buildMode2ResultHtml(result) {
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
           <div style="font-size:22px; font-weight:700;">${escapeHtmlText(result.alias)}</div>
           <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasEn || '')}</div>
-        </div>
-        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('呼称', 'Call Sign')}</div>
-        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
-          <div style="font-size:18px; font-weight:700;">${escapeHtmlText(result.aliasShort || '')}</div>
-          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasShortEn || '')}</div>
         </div>
         <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('この名の由来', 'Why this name')}</div>
         <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.epithetReason || '')}</div>
