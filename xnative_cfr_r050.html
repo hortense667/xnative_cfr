@@ -7978,33 +7978,29 @@ function buildMode2ResultHtml(result) {
           <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(isEnglishUi() ? (t.info.ja || '') : (t.info.en || ''))}</div>
         </div>
         <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(t.info.desc || '')}</div>
-        ${t.reason ? `<div style="font-size:12px; line-height:1.8; color:#64748b; margin-top:8px;">${escapeHtmlText(t.reason)}</div>` : ''}
       </div>
     `).join('');
     const pickedHtml = result.selectedSummaries.length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.selectedSummaries.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
-    const readingHtml = (result.readingPoints || []).length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.readingPoints.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
     const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
     const moduleSectionTitle = result.lowerModuleLevel === 'general' ? t('惹かれやすい領域', 'Areas You Naturally Gravitate Toward') : t('濃い文化圏', 'Strong Cultural Modules');
-    const practiceHtml = (result.practiceModes || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.practiceModes.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
     return `
       <div style="font-size:20px; font-weight:700; margin-bottom:12px;">${t('あなたをつくる3つの感性属性', 'Three Sensibility Attributes That Shape You')}</div>
       <div style="display:grid; gap:12px;">${parts}</div>
-      ${(result.lowerModules || []).length || (result.practiceModes || []).length ? `<div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+      ${(result.lowerModules || []).length ? `<div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
         ${(result.lowerModules || []).length ? `<div style="font-size:13px; color:#64748b;">${moduleSectionTitle}</div>${moduleHtml}` : ``}
-        ${(result.practiceModes || []).length ? `<div style="font-size:13px; color:#64748b; margin-top:${(result.lowerModules || []).length ? '12px' : '0'};">${t('関わり方', 'How You Engage')}</div>${practiceHtml}` : ``}
       </div>` : ``}
       <div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
         <div style="font-size:13px; color:#64748b;">${t('あなたの記号', 'Your Emblem')}</div>
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
-          <div style="font-size:24px; font-weight:700;">${escapeHtmlText(result.symbol)}</div>
-          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.symbolEn || '')}</div>
+          <div style="font-size:24px; font-weight:700;">${escapeHtmlText(result.symbolEn || '')}</div>
+          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.symbol)}</div>
         </div>
         <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('あなたの異名', 'Your Epithet')}</div>
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
           <div style="font-size:22px; font-weight:700;">${escapeHtmlText(result.alias)}</div>
           <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasEn || '')}</div>
         </div>
-        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('短い異名', 'Short Epithet')}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('呼称', 'Call Sign')}</div>
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
           <div style="font-size:18px; font-weight:700;">${escapeHtmlText(result.aliasShort || '')}</div>
           <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasShortEn || '')}</div>
@@ -8013,10 +8009,6 @@ function buildMode2ResultHtml(result) {
         <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.epithetReason || '')}</div>
         <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('総合すると', 'Overall')}</div>
         <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.summary)}</div>
-      </div>
-      <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
-        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">${t('今回の読み解き', 'Reading of your selections')}</div>
-        ${readingHtml}
       </div>
       <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
         <div style="font-size:13px; color:#64748b; margin-bottom:6px;">${t('今回強く印を付けた項目', 'Items strongly marked this time')}</div>
