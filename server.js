@@ -2,11 +2,13 @@
  * Railway 用サーバー
  * - 静的ファイル（HTML等）を配信
  * - POST /api/gemini-diagnosis で Gemini API を呼び出し（APIキーはサーバー側の環境変数のみ使用）
+ * - POST /api/openai-diagnosis で OpenAI API を呼び出し（APIキーはサーバー側の環境変数のみ使用）
  * - POST /api/diagnostic-result でユーザーごとの生年・性別・チェックしたイベントを蓄積
  */
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
@@ -40,7 +42,7 @@ function getRateLimitFor(req) {
   ) {
     return RATE_LIMIT_POST_AI_PER_MIN;
   }
-  return 120; // /api/* のその他は緩めのデフォルト
+  return 120;
 }
 
 function apiRateLimit(req, res, next) {
@@ -73,7 +75,6 @@ function apiRateLimit(req, res, next) {
     });
   }
 
-  // 期限切れバケットを定期掃除（メモリ肥大化防止）
   if (rateLimitBuckets.size > 5000) {
     for (const [k, v] of rateLimitBuckets.entries()) {
       if (now >= v.resetAt) rateLimitBuckets.delete(k);
@@ -96,7 +97,6 @@ function validatePromptField(prompt) {
   return null;
 }
 
-// 蓄積データの保存先（Railway で永続化する場合は Volume を DATA_DIR にマウント推奨）
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DIAGNOSTIC_RESULTS_FILE = path.join(DATA_DIR, 'diagnostic-results.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
@@ -176,12 +176,10 @@ function writeDiagnosticResults(list) {
   fs.writeFileSync(DIAGNOSTIC_RESULTS_FILE, JSON.stringify(list, null, 2), 'utf8');
 }
 
-// 静的ファイル（カレントディレクトリ）を配信
 app.use(express.static(path.join(__dirname)));
 app.use(express.json({ limit: API_JSON_LIMIT }));
 app.use('/api', apiRateLimit);
 
-// ルートはメインHTMLへ
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'xnative_cfr_r050.html'));
 });
@@ -216,12 +214,10 @@ async function callGeminiWithRetry(url, prompt, maxRetries = 2, temperature = 0.
       if (!geminiRes.ok) {
         const msg = data?.error?.message || data?.error || `HTTP ${geminiRes.status}`;
         lastError = String(msg);
-        // 高負荷や一時的エラーと思われる場合はリトライ
         const retriable =
           geminiRes.status >= 500 ||
           geminiRes.status === 429 ||
-          (typeof lastError === 'string' &&
-            /high demand|please try again later/i.test(lastError));
+          (typeof lastError === 'string' && /high demand|please try again later/i.test(lastError));
         if (retriable && attempt < maxRetries) {
           await sleep(800 * (attempt + 1));
           continue;
@@ -240,7 +236,6 @@ async function callGeminiWithRetry(url, prompt, maxRetries = 2, temperature = 0.
     } catch (e) {
       const msg = (e && e.message) ? e.message : String(e);
       lastError = msg;
-      // 通信系の一時エラーはリトライ
       if (attempt < maxRetries) {
         await sleep(800 * (attempt + 1));
         continue;
@@ -270,11 +265,9 @@ async function callOpenAiWithRetry(prompt, maxRetries = 2, temperature = 0.9, op
     try {
       const body = {
         model,
-        messages: [
-          { role: 'user', content: prompt }
-        ],
+        messages: [{ role: 'user', content: prompt }],
         temperature: temp,
-        max_tokens: 1400
+        max_tokens: 1800
       };
       if (responseFormat) body.response_format = responseFormat;
 
@@ -367,8 +360,37 @@ function buildMode2DiagnosisResponseFormat() {
             },
             required: ['name', 'short', 'reason']
           },
+          lowerModules: {
+            type: 'array',
+            minItems: 2,
+            maxItems: 2,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                name: { type: 'string' },
+                reason: { type: 'string' }
+              },
+              required: ['name', 'reason']
+            }
+          },
+          practiceModes: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 2,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                name: { type: 'string' },
+                reason: { type: 'string' }
+              },
+              required: ['name', 'reason']
+            }
+          },
           emblemCode: { type: 'string' },
           epithet: { type: 'string' },
+          epithetShort: { type: 'string' },
           epithetReason: { type: 'string' },
           summary: { type: 'string' },
           readingPoints: {
@@ -383,8 +405,11 @@ function buildMode2DiagnosisResponseFormat() {
           'mainAttribute',
           'subAttribute',
           'hiddenAttribute',
+          'lowerModules',
+          'practiceModes',
           'emblemCode',
           'epithet',
+          'epithetShort',
           'epithetReason',
           'summary',
           'readingPoints',
@@ -397,7 +422,6 @@ function buildMode2DiagnosisResponseFormat() {
 
 const APOLOGY_MESSAGE = '申し訳ありません。現在、利用可能なAI（Gemini / OpenAI）がいずれも高負荷またはエラーのため診断結果を生成できませんでした。時間をおいてもう一度お試しください。';
 
-// Gemini 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/gemini-diagnosis', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || !apiKey.trim()) {
@@ -423,7 +447,6 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
       return res.json(primary);
     }
 
-    // Gemini が3回とも失敗した場合、OpenAI で再試行（キーがあれば）
     let fallbackError = primary.error;
     if (OPENAI_API_KEY && OPENAI_API_KEY.trim()) {
       const secondary = await callOpenAiWithRetry(prompt, 2, temp, {
@@ -445,7 +468,6 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
   }
 });
 
-// OpenAI 診断 API（APIキーはサーバー側の環境変数のみ参照・クライアントに一切渡さない）
 app.post('/api/openai-diagnosis', async (req, res) => {
   const { prompt, temperature, model, mode } = req.body || {};
   const promptError = validatePromptField(prompt);
@@ -460,7 +482,7 @@ app.post('/api/openai-diagnosis', async (req, res) => {
 
   const useStructuredOutput =
     String(mode || '') === '2' ||
-    /mainAttribute|subAttribute|hiddenAttribute|readingPoints/.test(prompt);
+    /mainAttribute|subAttribute|hiddenAttribute|readingPoints|lowerModules|practiceModes|epithetShort/.test(prompt);
 
   const responseFormat = useStructuredOutput ? buildMode2DiagnosisResponseFormat() : null;
 
@@ -473,7 +495,6 @@ app.post('/api/openai-diagnosis', async (req, res) => {
       return res.json(primary);
     }
 
-    // OpenAI が3回とも失敗した場合、Gemini で再試行（キーがあれば）
     let fallbackError = primary.error;
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey && apiKey.trim()) {
@@ -496,17 +517,14 @@ app.post('/api/openai-diagnosis', async (req, res) => {
   }
 });
 
-// 診断結果の蓄積（生年・性別・チェックしたイベントの年とイベント名）
 app.post('/api/diagnostic-result', (req, res) => {
   const record = req.body;
   if (!record || typeof record !== 'object') {
     return res.status(400).json({ ok: false, error: 'body が必要です。' });
   }
 
-  // 年表JSONのパスとファイル名
   const filePath = record.filePath != null ? String(record.filePath) : '';
 
-  // 選択されたイベント（ジャンルコードを配列で保持）
   const selections = Array.isArray(record.selections)
     ? record.selections.map(s => ({
         year: s.year != null ? s.year : null,
@@ -531,8 +549,8 @@ app.post('/api/diagnostic-result', (req, res) => {
     nickname: record.nickname != null ? String(record.nickname) : '',
     owner: record.owner != null ? String(record.owner) : '',
     repo: record.repo != null ? String(record.repo) : '',
+    testid: record.testid != null ? String(record.testid) : (record.testId != null ? String(record.testId) : ''),
     filePath,
-    timelineFileName: filePath ? path.basename(filePath) : '',
     selections,
     selectedGenres: Array.isArray(record.selectedGenres)
       ? record.selectedGenres.map(g => String(g))
@@ -550,18 +568,24 @@ app.post('/api/diagnostic-result', (req, res) => {
   }
 });
 
-// 蓄積一覧の取得（管理・表示用）
 app.get('/api/diagnostic-results', (req, res) => {
   try {
     const list = readDiagnosticResults();
-    return res.json({ ok: true, results: list, count: list.length });
+    const sanitized = list.map((r) => {
+      const rec = (r && typeof r === 'object') ? r : {};
+      const { timelineFileName, testId, ...rest } = rec;
+      return {
+        ...rest,
+        testid: rec.testid != null ? String(rec.testid) : (testId != null ? String(testId) : '')
+      };
+    });
+    return res.json({ ok: true, results: sanitized, count: sanitized.length });
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
     return res.status(500).json({ ok: false, error: msg });
   }
 });
 
-// JSONサイズ上限超過などをAPI向けに分かりやすく返す
 app.use((err, req, res, next) => {
   if (err && (err.type === 'entity.too.large' || err.status === 413)) {
     return res.status(413).json({

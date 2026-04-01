@@ -6645,6 +6645,7 @@
       birthYear: birthYear,
       owner: githubConfig.owner || '',
       repo: githubConfig.repo || '',
+      testid: githubConfig.testId || '',
       testId: githubConfig.testId || '',
       filePath: githubConfig.filePath || '',
       selections: kioskState.selections.map(s => {
@@ -8021,7 +8022,17 @@ function buildMode2ResultHtml(result) {
         <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(t.info.desc || '')}</div>
       </div>
     `).join('');
-    const pickedHtml = result.selectedSummaries.length ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${result.selectedSummaries.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>` : '';
+    const selectionStatusLines = (kioskState.selections || [])
+      .slice()
+      .sort((a, b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year)
+      .map(selection => {
+        const item = getKioskSourceItem(selection) || selection;
+        if (isEnglishUi()) return `${selection.year}: ${getPrimaryLabel(item)}`;
+        return `${selection.year}年: ${getPrimaryLabel(item)}`;
+      });
+    const selectionStatusHtml = selectionStatusLines.length
+      ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${selectionStatusLines.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>`
+      : `<div style="font-size:13px; color:#64748b;">${t('（選択なし）', '(No selection)')}</div>`;
     const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
     const moduleSectionTitle = result.lowerModuleLevel === 'general' ? t('惹かれやすい領域', 'Areas You Naturally Gravitate Toward') : t('濃い文化圏', 'Strong Cultural Modules');
     return `
@@ -8045,8 +8056,8 @@ function buildMode2ResultHtml(result) {
         <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.summary)}</div>
       </div>
       <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
-        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">${t('今回強く印を付けた項目', 'Items strongly marked this time')}</div>
-        ${pickedHtml}
+        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">${t('項目選択状況', 'Item Selection Status')}</div>
+        ${selectionStatusHtml}
       </div>
       ${result.fallbackError ? `<p style="margin-top:12px; font-size:12px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
       <div data-copy-exclude="1" style="margin-top:16px; display:flex; flex-wrap:wrap; gap:16px;">
