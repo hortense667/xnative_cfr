@@ -2511,6 +2511,13 @@
   }
   function updateProbeEventsPanel(year){
     if (!probeEventsPanel) return;
+    // キオスク導線では「上の〇」で生年を合わせるまで、チェックボックス付き一覧は表示しない
+    if (window.kioskMode && window.kioskState && !window.kioskState.eventYearMoved) {
+      probeEventsPanel.style.display = 'none';
+      probeEventsPanel.innerHTML = '';
+      lastProbeEventYear = null;
+      return;
+    }
     const y = Math.round(year);
     const allItems = events[y] || [];
     const items = allItems.filter(passesFilter);
@@ -6139,7 +6146,7 @@
         overlay.innerHTML = `
           <div class="inner">
             <div style="margin:12px 0; padding:10px 12px; border-radius:8px; background:#f8fafc; border:1px solid #e0e7ff; font-size:13px;">
-              <div style="margin-bottom:6px; font-size:18px;">${t('あなたの属性とニックネームを教えてください', 'Tell us your profile and nickname')}</div>
+              <div style="margin-bottom:6px; font-size:18px;">${t('あなたの性別とニックネームを教えてください', 'Tell us your gender and nickname')}</div>
               <div style="display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; font-size:18px;">
                 <div>
                   <span>${t('性別:', 'Gender:')}</span>
@@ -6199,13 +6206,13 @@
             ${t('※該当する項目の選択はチェックボックスで行ってください。', 'Use checkboxes to select matching items.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:red; font-weight:bold;">
-            ${t('※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（10個以上）。次画面で生年をセットしたあとに動かす〇マーカーは生年以前へも動かせます。', 'Check items you liked and were influenced by, even if not in real time (at least 10 items). The 〇 marker in the next screen after setting the birth year can be moved anywhere, including before birth year.')}
+            ${t('※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（5個以上、10～20個程度が適切です）。次画面で生年をセットしたあとに動かす〇マーカーは生年以前へも動かしてみてください。たとえば、ドラえもんはあなたが生まれるよりもはるかに前からある作品だったりしますよね。', 'Check items you liked and were influenced by, even if not in real time (at least 5 items, ideally 10-20 items). The 〇 marker in the next screen after setting the birth year can be moved anywhere, including before birth year. For example, Doraemon is an earlier work than you were born.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ${t('※地球マーク', 'The globe icon')}<span style="pointer-events:none;">🌐</span>${t('はホバー（スマホではタップ）するとWikipediaなどのページを表示します。必要に応じて内容を確認したり楽しみながらチェックしてください。', ' opens pages like Wikipedia. You can follow links to explore information. Check items while enjoying the content as needed.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ${t('※項目チェックの最中には「検索」や「ヘルプ」が使えます。項目が多すぎると感じた場合は「ジャンル選択」で絞ることができます。', 'During item checking, you can use "Search" and "Help". If you feel that the number of items is too many, you can narrow down the "genre" at any time from the buttons on the screen.')}
+            ${t('※項目チェックの最中には「検索」や「ヘルプ」が使えます。項目が多すぎると感じた場合は「ジャンル選択」で絞っることができます。', 'During item checking, you can use "Search" and "Help". If you feel that the number of items is too many, you can narrow down the "genre" at any time from the buttons on the screen.')}
           </div>
           <div class="actions">
             <button type="button" id="kioskStartBtn">${t('診断スタート', 'Start Diagnosis')}</button>
@@ -7442,6 +7449,7 @@ function buildMode2AiPrompt(payload) {
         'Return JSON only. No markdown. No code fences. No commentary outside JSON.',
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
         'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
+        'epithetReason must explain only the origin and intent of epithet (the long alias). Do not mention epithetShort in epithetReason.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
         'Make epithet clearly longer than epithetShort. Aim for about 8 to 16 words so it feels rich and specific.',
         'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
@@ -7486,6 +7494,7 @@ function buildMode2AiPrompt(payload) {
       'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。右側の英語は短く自然な英語名にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
+      'epithetReason（この名の由来）は、epithet（長い異名）の由来と意図だけを説明してください。epithetShort（短い異名）には触れないでください。',
       '制約:',
       '- 露骨な性格診断や病理的解釈をしない',
       '- 性別を決めつけない',
