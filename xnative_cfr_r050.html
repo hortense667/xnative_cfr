@@ -335,8 +335,10 @@
   #kioskHint.kiosk-hint-step3-compact .count { order: 3; margin-top: 0; font-size: 16px; color: #fff; }
   #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls { order: 4; display: flex !important; align-items: center; gap: 6px; }
   #kioskHint.kiosk-hint-step3-compact .kiosk-year-controls button { padding: 6px 10px; font-size: 14px; }
-  /* ステップ3: 診断ボタンと▼年+▲年－を1行に（PCでは右寄せ） */
-  #kioskHint .step3-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; width: 100%; flex-wrap: wrap; }
+  /* ステップ3: 診断ボタンと年移動ボタンを1行に配置 */
+  #kioskHint .step3-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; width: 100%; flex-wrap: nowrap; }
+  #kioskHint:not(.kiosk-hint-step3-compact) .step3-actions .kiosk-year-controls { margin-left: auto; display: flex !important; gap: 6px; }
+  #kioskHint:not(.kiosk-hint-step3-compact) .step3-actions button { margin-top: 0; }
   #kioskHint.kiosk-hint-step3-pc .step3-actions { justify-content: space-between; }
   #kioskHint.kiosk-hint-step3-pc .step3-actions .kiosk-year-controls { display: flex !important; gap: 6px; }
   #kioskHint.kiosk-hint-step3-pc .step3-actions .kiosk-year-controls button { padding: 6px 10px; font-size: 14px; }
@@ -995,6 +997,9 @@
     if (modalBox) {
       modalBox.scrollTop = 0;
       requestAnimationFrame(() => { modalBox.scrollTop = 0; });
+      if (isDiagnosisResultModalTitle(title)) {
+        setTimeout(() => { modalBox.scrollTop = 0; }, 50);
+      }
     }
     const footerMode = (options && options.footer) || 'default';
     if (modalFooter) {
@@ -1006,7 +1011,9 @@
         modalClose.classList.toggle('btn-primary', footerMode === 'next');
       }
     }
-    modalClose.focus();
+    if (!isDiagnosisResultModalTitle(title)) {
+      modalClose.focus();
+    }
   }
   function openModalText(title, text){
     const prevFocus = document.activeElement;
@@ -5264,6 +5271,7 @@
             window.kioskState.step3StartedOperating = true;
             updateKioskHint();
             updateKioskStepOverlay();
+            if (window.updateProbeEventsPanel) window.updateProbeEventsPanel(state.eventYear);
           } else if (window.kioskState.showLowerOverlay) {
             window.kioskState.showLowerOverlay = false;
             window.kioskState.step3StartedOperating = true;
@@ -5338,6 +5346,7 @@
           window.kioskState.showLowerOverlay = true;
           updateKioskHint();
           updateKioskStepOverlay();
+          if (window.updateProbeEventsPanel) window.updateProbeEventsPanel(state.eventYear);
         }
       }
       el.addEventListener('mousedown',e=>{ onDragStart(e.clientY); e.preventDefault(); e.stopPropagation(); });
@@ -5410,6 +5419,19 @@
       vp.scrollTop = targetScroll;
     } catch (_e) {}
   }
+  function scrollProbeBirthYearMarkerBelowHeader() {
+    try {
+      if (typeof probeBlue === 'undefined' || !vp) return;
+      const yBirth = yFromBirthYear(probeBlue.birthYear);
+      const vpH = vp.clientHeight || 0;
+      const maxScroll = Math.max(0, vp.scrollHeight - vpH);
+      if (vpH <= 0) return;
+      const offsetFromTop = 1 * PX_PER_YEAR;
+      let targetScroll = yBirth - offsetFromTop;
+      targetScroll = Math.max(0, Math.min(maxScroll, targetScroll));
+      vp.scrollTop = targetScroll;
+    } catch (_e) {}
+  }
   // 下の〇（イベント年）がヘッダより2年分下に来るようにスクロール（▼/▲用）
   function scrollProbeEventYearIntoView() {
     try {
@@ -5425,6 +5447,7 @@
     } catch (_e) {}
   }
   window.scrollProbeBirthYearIntoView = scrollProbeBirthYearIntoView;
+  window.scrollProbeBirthYearMarkerBelowHeader = scrollProbeBirthYearMarkerBelowHeader;
   window.scrollProbeEventYearIntoView = scrollProbeEventYearIntoView;
 
   vp.addEventListener('scroll', ()=>{
@@ -5643,8 +5666,8 @@
         <button type="button" id="kioskFinishBtn" style="display:none;"></button>
         <button type="button" id="kioskRestartBtn" style="display:none;"></button>
         <span class="kiosk-year-controls" id="kioskYearControls" style="display:none;">
-          <button type="button" id="kioskYearUpBtn" aria-label="Move to next year">▼Year +</button>
-          <button type="button" id="kioskYearDownBtn" aria-label="Move to previous year">▲Year -</button>
+          <button type="button" id="kioskYearUpBtn" aria-label="Move to next year">Year +</button>
+          <button type="button" id="kioskYearDownBtn" aria-label="Move to previous year">Year -</button>
         </span>
       </div>
     `;
@@ -5731,8 +5754,11 @@
         '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます',
         'Drag the upper circle (left side of the blue diagonal line) to your birth year. You can scroll upward to go back in time.'
       );
-      // 上の〇がメッセージの少し下に見える位置にスクロール（メッセージ top 72px + 高さ約40px + 10px）
-      if (typeof probeBlue !== 'undefined' && vp) {
+      if (isMobileLikeViewport()) {
+        // スマホ: 上の〇がヘッダ直下付近で確実に見える位置へ
+        scrollProbeBirthYearMarkerBelowHeader();
+      } else if (typeof probeBlue !== 'undefined' && vp) {
+        // 非モバイル: 従来どおり、ステップ案内文の少し下に上の〇が見える位置へ
         try {
           const yBirth = yFromBirthYear(probeBlue.birthYear);
           const msgTop = 72, msgH = 40, gap = 10;
@@ -5743,8 +5769,8 @@
       }
     } else if (kioskState.step === 3 && kioskState.showLowerOverlay) {
       text = t(
-        '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へも動かせます。',
-        'Move the lower circle (left side of the blue horizontal line). Your age for that year is shown above the blue vertical line. You can move to years before age 0.'
+        '下の〇（青い横線の左）を動かしてください。青い縦線の上にその年の年齢が表示されます。０歳以前へも動かせます。〇が見えない場合は「年+」「年-」ボタンを使用してください。',
+        'Move the lower circle (left side of the blue horizontal line). Your age for that year is shown above the blue vertical line. You can move to years before age 0. If the circle is hard to see, use the "Year +" and "Year -" buttons.'
       );
     }
     if (text) {
@@ -5774,11 +5800,11 @@
     countEl.style.display = '';
     if (yearControls) yearControls.style.display = 'none';
     if (yearUpBtn) {
-      yearUpBtn.textContent = t('▼年＋', '▼Year +');
+      yearUpBtn.textContent = t('年+', 'Year +');
       yearUpBtn.setAttribute('aria-label', t('年を1つ進める', 'Move to next year'));
     }
     if (yearDownBtn) {
-      yearDownBtn.textContent = t('▲年－', '▲Year -');
+      yearDownBtn.textContent = t('年-', 'Year -');
       yearDownBtn.setAttribute('aria-label', t('年を1つ戻す', 'Move to previous year'));
     }
     if (step3Actions) step3Actions.style.display = 'none';
@@ -5858,7 +5884,7 @@
         titleEl.style.display = '';
         bodyEl.style.display = '';
         box.classList.remove('kiosk-hint-step3-compact');
-        titleEl.textContent = t('ステップ3：チェックボックで選択', 'Step 3: Select events with checkboxes');
+        titleEl.textContent = t('ステップ3：チェックボックスで選択', 'Step 3: Select events with checkboxes');
         const desc = getLocalizedCfrPrompt('eventChecklistDescription');
         bodyEl.textContent = desc + (isEnglishUi() ? ' You can press "Diagnose" after checking ' + minCount + ' or more items.' : ' ' + minCount + '個以上チェックすると「診断」ボタンが押せるようになります。');
         countEl.textContent = isEnglishUi() ? ('Checked: ' + count + ' / ' + minCount) : ('チェックされた数: ' + count + ' / ' + minCount);
@@ -5875,9 +5901,9 @@
         }
         if (!isMobile) {
           box.classList.add('kiosk-hint-step3-pc');
-          if (yearControls) yearControls.style.display = 'flex';
         }
-        // スマホ: 画面のどこかを触ったらステップ3の説明を消して「▼年+」「▲年－」のコンパクト表示へ
+        if (yearControls) yearControls.style.display = 'flex';
+        // スマホ: 画面のどこかを触ったらステップ3の説明を消してコンパクト表示へ
         if (isMobile && !box.dataset.step3TouchListener) {
           box.dataset.step3TouchListener = '1';
           const goCompact = function() {
@@ -5911,6 +5937,9 @@
       kioskState.step3StartedOperating = false;
     }
     updateKioskHint();
+    if (isMobileLikeViewport() && typeof window.scrollProbeBirthYearMarkerBelowHeader === 'function') {
+      setTimeout(() => { window.scrollProbeBirthYearMarkerBelowHeader(); }, 80);
+    }
   }
   window.kioskOnGenresApplied = kioskOnGenresApplied;
 
@@ -6192,6 +6221,7 @@
             </div>
           </div>
         `;
+        overlay.scrollTop = 0;
         setupKioskNicknamePad(overlay);
         const nickInput = overlay.querySelector('#kioskNicknameInput');
         if (nickInput) {
@@ -6242,6 +6272,7 @@
           </div>
         </div>
       `;
+      overlay.scrollTop = 0;
       const startBtn = overlay.querySelector('#kioskStartBtn');
       if (startBtn) {
         startBtn.addEventListener('click', () => {
@@ -8599,7 +8630,7 @@ function buildMode2CompactQrReport(result) {
         <li><strong>診断スタート</strong> → 「診断スタート」で本編へ。</li>
         <li><strong>ステップ1：ジャンル</strong> → 関心のあるジャンルを選び「適用」。</li>
         <li><strong>ステップ2：生年</strong> → 青い<strong>上の〇</strong>をドラッグして生年に合わせる。</li>
-        <li><strong>ステップ3：イベント選択</strong> → <strong>下の〇</strong>で年を変え、一覧から10個以上チェック。スマホでは「▼年＋」「▲年－」で年を進め・戻せる。</li>
+        <li><strong>ステップ3：イベント選択</strong> → <strong>下の〇</strong>で年を変え、一覧から10個以上チェック。スマホでは「年+」「年-」で年を進め・戻せる。</li>
         <li><strong>診断</strong> → 「診断」を押すとAI診断が実行され、結果が表示される。</li>
       </ol>
       <h2>2. プローブの操作（使いかたの例：任天堂ファミコン）</h2>
@@ -8613,7 +8644,7 @@ function buildMode2CompactQrReport(result) {
       <li><strong>スクロール：</strong> ホイール／トラックパッド／矢印キー、スマホではタップなどの画面操作</li>
       <li><strong>検索：</strong> 検索欄にラベル（作品名・製品名）を入力し「検索」。ヒットすると<strong>下の〇</strong>がその年にセットされ、スマホでは下の〇がヘッダの下に来るようスクロール。「前」「次」で別のヒットに移動。</li>
       <li><strong>表示切替：</strong> 「ジャンル」でフィルタリングして表示。</li>
-      <li>スマホでは<strong>▼年＋</strong>と<strong>▲年－</strong>ボタンでチェックする年を変えていくことができます。</li>
+      <li>スマホでは<strong>年+</strong>と<strong>年-</strong>ボタンでチェックする年を変えていくことができます。</li>
       <li><strong>画面幅が足りない場合（PC）：</strong> タイムラインが横に収まりきらない場合は、自動的に左端から表示されます。必要に応じて左右にスクロールして閲覧できます。</li>
       </ul>
       <h2>4. チェックリストとウェブ表示</h2>
