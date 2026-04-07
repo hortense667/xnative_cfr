@@ -5754,11 +5754,8 @@
         '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます',
         'Drag the upper circle (left side of the blue diagonal line) to your birth year. You can scroll upward to go back in time.'
       );
-      if (isMobileLikeViewport()) {
-        // スマホ: 上の〇がヘッダ直下付近で確実に見える位置へ
-        scrollProbeBirthYearMarkerBelowHeader();
-      } else if (typeof probeBlue !== 'undefined' && vp) {
-        // 非モバイル: 従来どおり、ステップ案内文の少し下に上の〇が見える位置へ
+      if (typeof probeBlue !== 'undefined' && vp) {
+        // モバイル/非モバイル共通: ステップ案内文の少し下に上の〇が見える位置へ
         try {
           const yBirth = yFromBirthYear(probeBlue.birthYear);
           const msgTop = 72, msgH = 40, gap = 10;
@@ -5937,8 +5934,16 @@
       kioskState.step3StartedOperating = false;
     }
     updateKioskHint();
-    if (isMobileLikeViewport() && typeof window.scrollProbeBirthYearMarkerBelowHeader === 'function') {
-      setTimeout(() => { window.scrollProbeBirthYearMarkerBelowHeader(); }, 80);
+    if (isMobileLikeViewport() && typeof probeBlue !== 'undefined' && vp) {
+      setTimeout(() => {
+        try {
+          const yBirth = yFromBirthYear(probeBlue.birthYear);
+          const msgTop = 72, msgH = 40, gap = 10;
+          const targetY = msgTop + msgH + gap;
+          const maxScroll = Math.max(0, vp.scrollHeight - (vp.clientHeight || 0));
+          vp.scrollTop = Math.max(0, Math.min(maxScroll, yBirth - targetY));
+        } catch (_) {}
+      }, 80);
     }
   }
   window.kioskOnGenresApplied = kioskOnGenresApplied;
