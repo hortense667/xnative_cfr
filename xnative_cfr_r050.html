@@ -5271,13 +5271,16 @@
             window.kioskState.step3StartedOperating = true;
             updateKioskHint();
             updateKioskStepOverlay();
-            if (window.updateProbeEventsPanel) window.updateProbeEventsPanel(state.eventYear);
           } else if (window.kioskState.showLowerOverlay) {
             window.kioskState.showLowerOverlay = false;
             window.kioskState.step3StartedOperating = true;
             updateKioskStepOverlay();
             updateKioskHint();
           }
+        }
+        // 下の〇に触れた時点で、その年のチェックリストを表示（PC/モバイル共通）
+        if (color==='blue' && el===eh && window.updateProbeEventsPanel) {
+          window.updateProbeEventsPanel(state.eventYear);
         }
         if(color==='blue' && el===bh && window.updateProbeEventsPanel){
           const panel = document.getElementById('probeEventsPanel');
@@ -6156,6 +6159,28 @@
       gender: '',
       nickname: normalizeKioskNickname(kioskState.nickname || '')
     };
+    const proceedFromStep1 = () => {
+      wizard.step = 2;
+      renderStep();
+    };
+    const showMobileViewportAdvice = (onClose) => {
+      const html = `
+        <div style="font-size:18px; line-height:1.7; margin-bottom:14px;">
+          ${t('スマートフォンなど画面が小さい場合は表示を縮小したり、ツールバーを非表示にすることをお勧めします', 'On small screens such as smartphones, we recommend zooming out and hiding the toolbar.')}
+        </div>
+        <div style="text-align:right;">
+          <button type="button" id="kioskMobileAdviceCloseBtn" class="btn btn-primary">${t('閉じる', 'Close')}</button>
+        </div>
+      `;
+      openModal(t('ご案内', 'Notice'), html, { footer: 'none' });
+      const closeBtn = document.getElementById('kioskMobileAdviceCloseBtn');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          closeModal();
+          if (typeof onClose === 'function') onClose();
+        });
+      }
+    };
 
     const renderStep = () => {
       if (wizard.step === 1) {
@@ -6192,8 +6217,11 @@
         const nextBtn = overlay.querySelector('#kioskStep1NextBtn');
         if (nextBtn) {
           nextBtn.addEventListener('click', () => {
-            wizard.step = 2;
-            renderStep();
+            if (isMobileLikeViewport()) {
+              showMobileViewportAdvice(proceedFromStep1);
+              return;
+            }
+            proceedFromStep1();
           });
         }
         return;
