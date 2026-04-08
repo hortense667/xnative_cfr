@@ -2548,6 +2548,13 @@
       lastProbeEventYear = null;
       return;
     }
+    // キオスク導線では、下の〇の操作または年+ / 年- ボタン押下までは一覧を表示しない
+    if (window.kioskMode && window.kioskState && window.kioskState.step === 3 && !window.kioskState.step3ChecklistActivated) {
+      probeEventsPanel.style.display = 'none';
+      probeEventsPanel.innerHTML = '';
+      lastProbeEventYear = null;
+      return;
+    }
     const y = Math.round(year);
     const allItems = events[y] || [];
     const items = allItems.filter(passesFilter);
@@ -5264,6 +5271,7 @@
           pendingBirthYearRelease = true;
         }
         if (window.kioskMode && color==='blue' && el===eh && window.kioskState) {
+          window.kioskState.step3ChecklistActivated = true;
           if (!window.kioskState.eventYearMoved) {
             window.kioskState.eventYearMoved = true;
             window.kioskState.step = 3;
@@ -5347,9 +5355,9 @@
           window.kioskState.eventYearMoved = true;
           window.kioskState.step = 3;
           window.kioskState.showLowerOverlay = true;
+          window.kioskState.step3ChecklistActivated = false;
           updateKioskHint();
           updateKioskStepOverlay();
-          if (window.updateProbeEventsPanel) window.updateProbeEventsPanel(state.eventYear);
         }
       }
       el.addEventListener('mousedown',e=>{ onDragStart(e.clientY); e.preventDefault(); e.stopPropagation(); });
@@ -5649,7 +5657,8 @@
     selections: [],   // { year, label, genre, imp }
     selectionMeanings: {}, // { 'year__label': { taste, impact, repeat, self, admiration, discovery } }
     eventYearMoved: false,
-    showLowerOverlay: false
+    showLowerOverlay: false,
+    step3ChecklistActivated: false
   };
   window.kioskState = kioskState;
   let kioskModalPhase = null; // 'diag' | 'overall' | 'usage' | null
@@ -5935,6 +5944,7 @@
       kioskState.eventYearMoved = false;
       kioskState.showLowerOverlay = false;
       kioskState.step3StartedOperating = false;
+      kioskState.step3ChecklistActivated = false;
     }
     updateKioskHint();
     if (isMobileLikeViewport() && typeof probeBlue !== 'undefined' && vp) {
@@ -8566,6 +8576,7 @@ function buildMode2CompactQrReport(result) {
     kioskState.eventYearMoved = false;
     kioskState.showLowerOverlay = false;
     kioskState.step3StartedOperating = false;
+    kioskState.step3ChecklistActivated = false;
     document.body.classList.remove('kiosk-step3-compact-hint');
     // チェック状態クリア
     if (typeof probeCheckedKeys !== 'undefined' && probeCheckedKeys.clear) {
@@ -8631,6 +8642,7 @@ function buildMode2CompactQrReport(result) {
     if (yearUpBtn) {
       yearUpBtn.addEventListener('click', () => {
         if (typeof probeBlue === 'undefined') return;
+        if (window.kioskState) window.kioskState.step3ChecklistActivated = true;
         if (window.kioskState) { window.kioskState.showLowerOverlay = false; if (typeof window.updateKioskStepOverlay === 'function') window.updateKioskStepOverlay(); }
         probeBlue.eventYear = Math.min(YEAR_MAX, probeBlue.eventYear + 1);
         probeBlue.redraw();
@@ -8641,6 +8653,7 @@ function buildMode2CompactQrReport(result) {
     if (yearDownBtn) {
       yearDownBtn.addEventListener('click', () => {
         if (typeof probeBlue === 'undefined') return;
+        if (window.kioskState) window.kioskState.step3ChecklistActivated = true;
         if (window.kioskState) { window.kioskState.showLowerOverlay = false; if (typeof window.updateKioskStepOverlay === 'function') window.updateKioskStepOverlay(); }
         probeBlue.eventYear = Math.max(YEAR_MIN, probeBlue.eventYear - 1);
         probeBlue.redraw();
