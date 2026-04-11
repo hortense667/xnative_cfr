@@ -6176,7 +6176,7 @@
     const showMobileViewportAdvice = (onClose) => {
       const html = `
         <div style="font-size:18px; line-height:1.7; margin-bottom:14px;">
-          ${t('スマートフォンなど画面が小さい場合は表示を縮小したり、ツールバーを非表示にすることをお勧めします', 'On small screens such as smartphones, we recommend zooming out and hiding the toolbar.')}
+          ${t('スマートフォンなど画面が小さい場合は表示を縮小、ツールバーを非表示にすることをお勧めします', 'On small screens such as smartphones, we recommend zooming out and hiding the toolbar.')}
         </div>
         <div style="text-align:right;">
           <button type="button" id="kioskMobileAdviceCloseBtn" class="btn btn-primary">${t('閉じる', 'Close')}</button>
@@ -8086,12 +8086,25 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
   }
 
 function buildMode2ResultHtml(result) {
+    const symbolAlpha = mode2ValueToText(
+      ((result.top3 || [])
+        .slice(0, 3)
+        .map(t => mode2ValueToText(
+          (t && t.info && t.info.code) || (t && t.code && MODE2_ATTRS[t.code] && MODE2_ATTRS[t.code].code),
+          ''
+        ))
+        .filter(Boolean)
+        .join('-')) ||
+      result.symbolEn ||
+      result.symbol,
+      ''
+    );
     const parts = result.top3.map(t => `
-      <div style="padding:14px; border:1px solid #dbe4f0; border-radius:12px; background:#fff;">
-        <div style="font-size:13px; color:#64748b; margin-bottom:4px;">${escapeHtmlText(mode2RoleLabel(t.role))}</div>
-        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
-          <div style="font-size:22px; font-weight:700;">${escapeHtmlText(isEnglishUi() ? (t.info.en || t.info.ja) : t.info.ja)}</div>
-          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(isEnglishUi() ? (t.info.ja || '') : (t.info.en || ''))}</div>
+      <div style="padding:18px 20px; border:1px solid #d7dee8; border-radius:16px; background:#fff;">
+        <div style="font-size:18px; color:#8b97a8; margin-bottom:8px; font-weight:600; letter-spacing:0.01em;">${escapeHtmlText(mode2RoleLabel(t.role))}：</div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:8px;">
+          <div style="font-size:28px; font-weight:800; line-height:1.2; letter-spacing:0.01em;">${escapeHtmlText(isEnglishUi() ? (t.info.en || t.info.ja) : t.info.ja)}</div>
+          <div style="font-size:21px; color:#0f172a; font-weight:700; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (t.info.ja || '') : (t.info.en || ''))}</div>
         </div>
         <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(t.info.desc || '')}</div>
       </div>
@@ -8110,34 +8123,35 @@ function buildMode2ResultHtml(result) {
     const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
     const moduleSectionTitle = result.lowerModuleLevel === 'general' ? t('惹かれやすい領域', 'Areas You Naturally Gravitate Toward') : t('濃い文化圏', 'Strong Cultural Modules');
     return `
-      <div style="font-size:20px; font-weight:700; margin-bottom:12px;">${t('あなたをつくる3つの感性属性', 'Three Sensibility Attributes That Shape You')}</div>
-      <div style="display:grid; gap:12px;">${parts}</div>
-      ${(result.lowerModules || []).length ? `<div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
-        ${(result.lowerModules || []).length ? `<div style="font-size:13px; color:#64748b;">${moduleSectionTitle}</div>${moduleHtml}` : ``}
-      </div>` : ``}
-      <div style="margin-top:16px; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
-        <div style="font-size:13px; color:#64748b;">${t('あなたの記号', 'Your Emblem')}</div>
-        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
-          <div style="font-size:24px; font-weight:700;">${escapeHtmlText(result.symbolEn || '')}</div>
-          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.symbol)}</div>
+      <div data-diagnosis-report style="max-width:1040px; margin:0 auto; color:#0f172a;">
+        <div style="font-size:24px; font-weight:800; margin-bottom:6px; line-height:1.35;">${t('あなたをつくる3つの感性属性', 'Three Sensibility Attributes That Shape You')}</div>
+        <div style="display:grid; gap:14px;">${parts}</div>
+        ${(result.lowerModules || []).length ? `<div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
+          ${(result.lowerModules || []).length ? `<div style="font-size:13px; color:#7c8b9e; font-weight:600;">${moduleSectionTitle}</div>${moduleHtml}` : ``}
+        </div>` : ``}
+        <div style="margin-top:18px; padding:18px 20px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの記号', 'Your Emblem')}</div>
+          <div style="display:flex; justify-content:flex-start; align-items:baseline; gap:14px; margin-top:6px; flex-wrap:wrap;">
+            <div style="font-size:36px; font-weight:900; letter-spacing:0.03em; line-height:1.1;">${escapeHtmlText(symbolAlpha)}</div>
+          </div>
+          <div style="font-size:13px; color:#7c8b9e; margin-top:14px; font-weight:600;">${t('あなたの異名', 'Your Epithet')}</div>
+          <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; margin-top:6px; flex-wrap:wrap;">
+            <div style="font-size:31px; font-weight:800; line-height:1.25;">${escapeHtmlText(result.alias)}</div>
+            <div style="font-size:20px; color:#475569; font-weight:600; line-height:1.25;">${escapeHtmlText(result.aliasEn || '')}</div>
+          </div>
+          <div style="font-size:13px; color:#7c8b9e; margin-top:14px; font-weight:600;">${t('総合すると', 'Overall')}</div>
+          <div style="font-size:14px; line-height:1.85; margin-top:6px; color:#1e293b;">${escapeHtmlText(result.summary)}</div>
         </div>
-        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('あなたの異名', 'Your Epithet')}</div>
-        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:4px; flex-wrap:wrap;">
-          <div style="font-size:22px; font-weight:700;">${escapeHtmlText(result.alias)}</div>
-          <div style="font-size:13px; color:#64748b; font-weight:500;">${escapeHtmlText(result.aliasEn || '')}</div>
+        <div style="margin-top:18px; border-top:1px solid #e5e7eb; padding-top:14px;">
+          <div style="font-size:13px; color:#64748b; margin-bottom:8px; font-weight:600;">${t('項目選択状況', 'Item Selection Status')}</div>
+          ${selectionStatusHtml}
         </div>
-        <div style="font-size:13px; color:#64748b; margin-top:12px;">${t('総合すると', 'Overall')}</div>
-        <div style="font-size:14px; line-height:1.8; margin-top:4px;">${escapeHtmlText(result.summary)}</div>
+        ${result.fallbackError ? `<p style="margin-top:12px; font-size:14px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
+        <div data-copy-exclude="1" style="margin-top:18px; display:flex; flex-wrap:wrap; gap:16px;">
+          <div><button type="button" id="kioskQrPersonalBtn" style="padding:8px 14px; border-radius:10px; border:1px solid #d9e1f0; background:#f8fafc; color:#1e293b; cursor:pointer; font-size:15px; font-weight:600;">${t('個人レポートのQRを表示', 'Show QR for personal report')}</button></div>
+        </div>
+        <p data-copy-exclude="1" style="margin-top:14px; font-size:13px; color:#64748b;">${t('QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます。', 'Scanning the QR shows the checked item list and diagnosis text.')}</p>
       </div>
-      <div style="margin-top:16px; border-top:1px solid #e5e7eb; padding-top:12px;">
-        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">${t('項目選択状況', 'Item Selection Status')}</div>
-        ${selectionStatusHtml}
-      </div>
-      ${result.fallbackError ? `<p style="margin-top:12px; font-size:12px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
-      <div data-copy-exclude="1" style="margin-top:16px; display:flex; flex-wrap:wrap; gap:16px;">
-        <div><button type="button" id="kioskQrPersonalBtn" style="padding:6px 12px; border-radius:8px; border:1px solid #e0e7ff; background:#f8fafc; color:#1e293b; cursor:pointer;">${t('個人レポートのQRを表示', 'Show QR for personal report')}</button></div>
-      </div>
-      <p data-copy-exclude="1" style="margin-top:16px; font-size:12px; color:#666;">${t('QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます。', 'Scanning the QR shows the checked item list and diagnosis text.')}</p>
     `;
   }
 
