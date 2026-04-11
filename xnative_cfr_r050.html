@@ -8366,7 +8366,7 @@ function buildMode2CompactQrReport(result) {
           return;
         }
         closeModal();
-        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('GPT-5.4で3属性診断を生成しています。<br>しばらくお待ちください。', 'Generating your 3-attribute diagnosis with GPT-5.4...<br>Please wait.') + '</p></div>';
+        const loadingHtml = '<div class="kiosk-diagnosing"><div class="spinner"></div><p>' + t('AIで3属性診断を生成しています。<br>しばらくお待ちください。', 'Generating your 3-attribute diagnosis...<br>Please wait.') + '</p></div>';
         openModal(t('診断中', 'Diagnosing'), loadingHtml, { footer: 'none' });
         showKioskResultMode2();
       });
