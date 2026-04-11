@@ -1763,7 +1763,7 @@
     overallTitle: '総合結果',
     overallDescription: 'ここに「総合結果（ダミー）」を表示します。実際の実装では、複数人分の傾向や集計結果などを表示する予定です。',
     secondPromptHead: '',
-    usageTitle: '最終画面（ダミー）',
+    usageTitle: 'おつかれさまでした！',
     usageDescription: '下の「スタート」ボタンで最初の画面に戻ります。'
   };
   const DEFAULT_CFR_PROMPTS_EN = {
@@ -1777,7 +1777,7 @@
     overallTitle: 'Overall Result',
     overallDescription: 'This screen shows a dummy overall result. In production, this area can show trends and aggregates across multiple participants.',
     secondPromptHead: '',
-    usageTitle: 'Final Screen (Demo)',
+    usageTitle: 'Thank you for taking the test!',
     usageDescription: 'Press the Start button below to return to the first screen.'
   };
   let cfrPromptsConfig = null;   // cfr_prompts.json 全体
@@ -8570,7 +8570,7 @@ function buildMode2CompactQrReport(result) {
       </div>
     `;
     kioskModalPhase = 'usage';
-    const usageTitle = t('最終画面（ダミー）', 'Final Screen (Demo)');
+    const usageTitle = t('おつかれさまでした!', 'Thank you for taking the test!');
     openModal(usageTitle, html, { footer: 'none' });
     const startBtn = document.getElementById('kioskUsageStartBtn');
     if (startBtn) {
@@ -8754,7 +8754,7 @@ function buildMode2CompactQrReport(result) {
       </ul>
       <div class="credit">(c) 2026 Satoshi Endo / The timeline data for Xnative/Timeline is published under CC BY-SA 4.0.</div>
     `;
-    openModal(t('ヘルプ - ネイティブマップ', 'Help - Xnative/Timeline'), isEnglishUi() ? helpHtmlEn : helpHtmlJa);
+    openModal(t('ヘルプ - Xnative/Timeline', 'Help - Xnative/Timeline'), isEnglishUi() ? helpHtmlEn : helpHtmlJa);
   });
 
   // ===== スモークテスト =====
