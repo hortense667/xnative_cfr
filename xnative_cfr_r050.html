@@ -7418,8 +7418,9 @@ function buildMode2DiagnosisLocal() {
     const topMoodWord = (Object.entries(moodWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '偏愛';
     const topRoleWord = (Object.entries(roleWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '観測者';
     const supplemental = inferMode2Supplemental();
-    const fragments = supplemental.fragments || [];
-    const aliasLead = fragments.length ? fragments.join('と') + 'を抱えた' : '';
+    // ローカル異名では選択ラベル（作品名）を直接使わず、スロット由来の象徴語のみ使う
+    const symbolicLeadWords = topSlots.slice(0, 2).map(v => String(v || '').trim()).filter(Boolean);
+    const aliasLead = symbolicLeadWords.length ? symbolicLeadWords.join('と') + 'を抱えた' : '';
     const alias = `${aliasLead}${topWorldWords[0] || '電脳'}${topWorldWords[1] ? topWorldWords[1] + 'の' : 'の'}${topMoodWord}${topRoleWord}`;
     const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
@@ -8015,6 +8016,48 @@ function buildMode2AiPrompt(payload) {
     return out;
   }
 
+  function normalizeMode2TitleForCompare(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[「」『』【】\[\]\(\)<>]/g, '')
+      .replace(/[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+/g, '');
+  }
+
+  function extractMode2TitleFragments(title) {
+    const raw = String(title || '').trim();
+    if (!raw) return [];
+    return raw
+      .split(/[\/|・,，、。:：;；\-_\(\)\[\]「」『』【】\s]+/)
+      .map(s => s.trim())
+      .filter((s) => {
+        if (!s) return false;
+        const asciiOnly = /^[a-z0-9]+$/i.test(s);
+        return asciiOnly ? s.length >= 4 : s.length >= 2;
+      });
+  }
+
+  function containsMode2DirectTitleReference(text, titleCandidates) {
+    const normText = normalizeMode2TitleForCompare(text);
+    if (!normText) return false;
+    const titles = Array.isArray(titleCandidates) ? titleCandidates : [];
+    for (const title of titles) {
+      const normTitle = normalizeMode2TitleForCompare(title);
+      if (!normTitle) continue;
+      const asciiOnly = /^[a-z0-9]+$/i.test(normTitle);
+      const minLen = asciiOnly ? 5 : 3;
+      if (normTitle.length >= minLen && normText.includes(normTitle)) return true;
+      const fragments = extractMode2TitleFragments(title);
+      for (const frag of fragments) {
+        const normFrag = normalizeMode2TitleForCompare(frag);
+        if (!normFrag) continue;
+        const fragAscii = /^[a-z0-9]+$/i.test(normFrag);
+        const fragMin = fragAscii ? 5 : 3;
+        if (normFrag.length >= fragMin && normText.includes(normFrag)) return true;
+      }
+    }
+    return false;
+  }
+
 
   function splitMode2BilingualText(raw) {
     const text = mode2ValueToText(raw, '').trim();
@@ -8118,6 +8161,11 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     let aliasEn = isEnglishUi() ? (aliasTexts.ja || fallbackLocal.alias || '電脳路地裏の観測者') : aliasTexts.en;
     alias = stripMode2DirectTitleMentions(alias, titleCandidates);
     aliasEn = stripMode2DirectTitleMentions(aliasEn, titleCandidates);
+    const aliasHasTitleRef = containsMode2DirectTitleReference(alias, titleCandidates) || containsMode2DirectTitleReference(aliasEn, titleCandidates);
+    if (aliasHasTitleRef) {
+      alias = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (localAliasFallback.ja || '電脳路地裏の観測者');
+      aliasEn = isEnglishUi() ? (localAliasFallback.ja || '電脳路地裏の観測者') : (localAliasFallback.en || 'Observer of Cyber Alley');
+    }
     if (!alias || alias.length < 8) alias = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (localAliasFallback.ja || '電脳路地裏の観測者');
     if (!aliasEn || aliasEn.length < 6) aliasEn = isEnglishUi() ? (localAliasFallback.ja || '電脳路地裏の観測者') : (localAliasFallback.en || 'Observer of Cyber Alley');
     if (!isEnglishUi()) {
@@ -8131,6 +8179,11 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     let aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
     aliasShort = stripMode2DirectTitleMentions(aliasShort, titleCandidates);
     aliasShortEn = stripMode2DirectTitleMentions(aliasShortEn, titleCandidates);
+    const aliasShortHasTitleRef = containsMode2DirectTitleReference(aliasShort, titleCandidates) || containsMode2DirectTitleReference(aliasShortEn, titleCandidates);
+    if (aliasShortHasTitleRef) {
+      aliasShort = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (fallbackLocal.aliasShort || localAliasFallback.ja || '電脳路地裏の観測者');
+      aliasShortEn = isEnglishUi() ? (fallbackLocal.aliasShort || localAliasFallback.ja || '') : (localAliasFallback.en || '');
+    }
     if (!aliasShort) aliasShort = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (fallbackLocal.aliasShort || localAliasFallback.ja || '電脳路地裏の観測者');
     if (!aliasShortEn) aliasShortEn = isEnglishUi() ? (fallbackLocal.aliasShort || localAliasFallback.ja || '') : (localAliasFallback.en || '');
 
