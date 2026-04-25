@@ -7030,7 +7030,7 @@
     if (genres.includes('MOV') || genres.includes('TVP') || genres.includes('ANI')) { addAttr('world', 1.4); }
     if (genres.includes('MAN')) { addAttr('author', 0.8); addAttr('world', 0.8); }
     if (genres.includes('GAM')) { addAttr('boyhood', 1.4); addAttr('world', 1.0); addSlot('secretbase', 0.8); }
-    if (genres.length >= 2) { addAttr('crossing', 1.4); addSlot('media_cross', 1.0); }
+    if (genres.length >= 2) { addAttr('crossing', 1.2); addSlot('media_cross', 1.0); }
 
     if (selection && selection.year != null) {
       const year = Number(selection.year);
@@ -7046,7 +7046,7 @@
     if (has(['不条理','奇妙','グロ','残酷','地下','アングラ','異形','狂気','dark','bizarre'])) { addAttr('aberration', 2.1); addSlot('absurd', 1.2); addSlot('underground', 1.2); }
     if (has(['作者','監督','作家','編集','雑誌','連載','スタジオ','シリーズ'])) { addAttr('author', 1.8); addSlot('creator', 1.0); addSlot('edit', 1.0); }
     if (has(['雑誌','資料','アーカイブ','年表','記録','史','市場','文化'])) { addAttr('archive', 2.0); addSlot('magazine', 1.2); addSlot('archive', 1.0); }
-    if (has(['クロスオーバー','横断','ネットワーク','融合','multimedia'])) { addAttr('crossing', 1.8); addSlot('bridge', 1.0); }
+    if (has(['クロスオーバー','横断','ネットワーク','融合','multimedia'])) { addAttr('crossing', 1.55); addSlot('bridge', 1.0); }
     if (has(['名作','定番','long-running','代表','金字塔'])) { addAttr('repeat', 0.8); addSlot('classic', 1.0); }
     if (has(['新','初','先駆','勃興','話題','注目','landmark','pioneering'])) { addAttr('future', 1.4); addSlot('turning_point', 1.0); }
 
@@ -7551,6 +7551,7 @@ function buildMode2AiPrompt(payload) {
         'Read the pattern of selections, crossings between genres and media, jumps across time periods, and the distribution of the meaning tags.',
         'Choose exactly three upper attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the names exactly as written in Japanese.',
         attrs.join(' / '),
+        'For 越境回遊 specifically, choose it only when there is clear and repeated crossing evidence across multiple items, genres, or media.',
         'Then think about lower modules in this order.',
         'First, examine whether any DEEP lower modules clearly fit. Use them only when there is strong evidence in the selections and meaning tags.',
         'Deep lower modules:', deepLowerModules.join(' / '),
@@ -7588,6 +7589,7 @@ function buildMode2AiPrompt(payload) {
       '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
       '上位属性は必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
       attrs.join(' / '),
+      '「越境回遊」は、複数項目にまたがって明確なジャンル横断・媒体横断の根拠が繰り返し見える場合にのみ選んでください。',
       '下位モジュールは、まず「深いモジュール」が十分に当てはまるかを検討してください。十分な根拠があるときだけ採用してください。',
       '深いモジュール候補:',
       deepLowerModules.join(' / '),
