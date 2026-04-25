@@ -6302,7 +6302,7 @@
             ${t('※該当する項目の選択はチェックボックスで行ってください。', 'Use checkboxes to select matching items.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:red; font-weight:bold;">
-            ${t('※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（5～10個程、20個くらいまで）。次画面で生年をセットしたあとに動かす〇マーカーは生年以前へも動かしてみてください。たとえば、ドラえもんはあなたが生まれるよりもはるかに前からある作品だったりしますよね。たとえば、1～3年に1～2個の頻度を目安とするとよいでしょう。', 'Check items you liked and were influenced by, even if not in real time (at least 5 items, ideally 10-20 items). The 〇 marker in the next screen after setting the birth year can be moved anywhere, including before birth year. For example, Doraemon is an earlier work than you were born. We recommend selecting one or two items every 1-3 years.')}
+            ${t('※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（5個～10個程度、多くても20個くらいまで）。次画面で生年をセットしたあとに動かす〇マーカーは生年以前へも動かしてみてください。たとえば、ドラえもんはあなたが生まれるよりもはるかに前からある作品だったりしますよね。時期的に偏っても大丈夫です。', 'Check items you liked and were influenced by, even if not in real time (at least 5 items, ideally 10-20 items). The 〇 marker in the next screen after setting the birth year can be moved anywhere, including before birth year. For example, Doraemon is an earlier work than you were born. We recommend selecting one or two items every 1-3 years.')}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ${t('※地球マーク', 'The globe icon')}<span style="pointer-events:none;">🌐</span>${t('はホバー（スマホではタップ）するとWikipediaなどのページを表示します。必要に応じて内容を確認したり楽しみながらチェックしてください。', ' opens pages like Wikipedia. You can follow links to explore information. Check items while enjoying the content as needed.')}
@@ -7000,7 +7000,6 @@
   function inferMode2Profile(selection) {
     const item = getKioskSourceItem(selection) || {};
     const genres = Array.isArray(item.genre) ? item.genre.map(g => String(g || '').toUpperCase()) : (item.genre ? [String(item.genre).toUpperCase()] : []);
-    const uniqueGenres = [...new Set(genres)];
     const note = String(item.note || item.note_en || '').toLowerCase();
     const label = String(item.label || item.label_en || selection.label || '').toLowerCase();
     const text = (label + ' ' + note);
@@ -7015,13 +7014,7 @@
     if (genres.includes('MOV') || genres.includes('TVP') || genres.includes('ANI')) { addAttr('world', 1.4); }
     if (genres.includes('MAN')) { addAttr('author', 0.8); addAttr('world', 0.8); }
     if (genres.includes('GAM')) { addAttr('boyhood', 1.4); addAttr('world', 1.0); addSlot('secretbase', 0.8); }
-    // 「少しまたいだだけ」で越境回遊に寄り過ぎないよう、条件を強める
-    const hasContentGenre = uniqueGenres.some(g => ['MAN', 'ANI', 'MOV', 'TVP', 'GAM'].includes(g));
-    const hasTechGenre = uniqueGenres.some(g => ['NET', 'HAR', 'SOF'].includes(g));
-    if (uniqueGenres.length >= 3 || (hasContentGenre && hasTechGenre)) {
-      addAttr('crossing', 0.95);
-      addSlot('media_cross', 0.8);
-    }
+    if (genres.length >= 2) { addAttr('crossing', 1.4); addSlot('media_cross', 1.0); }
 
     if (selection && selection.year != null) {
       const year = Number(selection.year);
@@ -7037,7 +7030,7 @@
     if (has(['不条理','奇妙','グロ','残酷','地下','アングラ','異形','狂気','dark','bizarre'])) { addAttr('aberration', 2.1); addSlot('absurd', 1.2); addSlot('underground', 1.2); }
     if (has(['作者','監督','作家','編集','雑誌','連載','スタジオ','シリーズ'])) { addAttr('author', 1.8); addSlot('creator', 1.0); addSlot('edit', 1.0); }
     if (has(['雑誌','資料','アーカイブ','年表','記録','史','市場','文化'])) { addAttr('archive', 2.0); addSlot('magazine', 1.2); addSlot('archive', 1.0); }
-    if (has(['クロスオーバー','横断','ネットワーク','融合','multimedia'])) { addAttr('crossing', 1.25); addSlot('bridge', 0.9); }
+    if (has(['クロスオーバー','横断','ネットワーク','融合','multimedia'])) { addAttr('crossing', 1.8); addSlot('bridge', 1.0); }
     if (has(['名作','定番','long-running','代表','金字塔'])) { addAttr('repeat', 0.8); addSlot('classic', 1.0); }
     if (has(['新','初','先駆','勃興','話題','注目','landmark','pioneering'])) { addAttr('future', 1.4); addSlot('turning_point', 1.0); }
 
@@ -7388,19 +7381,6 @@ function buildMode2DiagnosisLocal() {
     });
 
     const rankedAttrs = Object.entries(attrScores).sort((a,b) => b[1] - a[1]);
-    // 越境回遊は「主属性」に限って一段高い確信度を要求する（副属性/裏属性はそのまま）
-    if (rankedAttrs.length >= 2 && rankedAttrs[0][0] === 'crossing') {
-      const topScore = Number(rankedAttrs[0][1] || 0);
-      const secondScore = Number(rankedAttrs[1][1] || 0);
-      const crossingPrimaryNeedsLead = 1.18; // 少なくとも2位に18%程度の差をつける
-      const crossingPrimaryNeedsDiff = 0.85; // かつ絶対差も最低限確保
-      const enoughLead = topScore >= (secondScore * crossingPrimaryNeedsLead) && (topScore - secondScore) >= crossingPrimaryNeedsDiff;
-      if (!enoughLead) {
-        const keepCrossing = rankedAttrs[0];
-        rankedAttrs[0] = rankedAttrs[1];
-        rankedAttrs[1] = keepCrossing;
-      }
-    }
     const top3 = rankedAttrs.slice(0,3).map(([code, score], idx) => ({
       code,
       score,
@@ -7418,9 +7398,8 @@ function buildMode2DiagnosisLocal() {
     const topMoodWord = (Object.entries(moodWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '偏愛';
     const topRoleWord = (Object.entries(roleWordScores).sort((a,b) => b[1] - a[1])[0] || [null])[0] || '観測者';
     const supplemental = inferMode2Supplemental();
-    // ローカル異名では選択ラベル（作品名）を直接使わず、スロット由来の象徴語のみ使う
-    const symbolicLeadWords = topSlots.slice(0, 2).map(v => String(v || '').trim()).filter(Boolean);
-    const aliasLead = symbolicLeadWords.length ? symbolicLeadWords.join('と') + 'を抱えた' : '';
+    const fragments = supplemental.fragments || [];
+    const aliasLead = fragments.length ? fragments.join('と') + 'を抱えた' : '';
     const alias = `${aliasLead}${topWorldWords[0] || '電脳'}${topWorldWords[1] ? topWorldWords[1] + 'の' : 'の'}${topMoodWord}${topRoleWord}`;
     const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
@@ -7547,11 +7526,6 @@ function buildMode2AiPrompt(payload) {
     const generalLowerModules = MODE2_GENERAL_LOWER_MODULES.map(m => m.ja);
     const allLowerModules = getMode2AllLowerModules().map(m => m.ja);
     const practiceModes = MODE2_PRACTICE_MODES.map(m => m.ja);
-    const selectedTitleHints = (payload && Array.isArray(payload.selectedItems) ? payload.selectedItems : [])
-      .map(it => String((it && it.label) || '').trim())
-      .filter(Boolean)
-      .slice(0, 60);
-    const bannedTitleList = selectedTitleHints.length ? selectedTitleHints.join(' / ') : '(none)';
     if (isEnglishUi()) {
       return [
         'You are a cultural diagnosis analyst.',
@@ -7575,8 +7549,6 @@ function buildMode2AiPrompt(payload) {
         'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
         'epithetReason must explain only the origin and intent of epithet (the long alias). Do not mention epithetShort in epithetReason.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
-        'Never include exact strings from selected item titles in epithet or epithetShort. Rewrite them into associative words (motif, atmosphere, medium, era texture).',
-        'Selected titles to avoid direct reuse:', bannedTitleList,
         'Make epithet clearly longer than epithetShort. Aim for about 8 to 16 words so it feels rich and specific.',
         'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
         'For epithet wording, avoid harsh or negative terms such as "scrap", "junk", or "waste"; prefer neutral or poetic vocabulary such as "mechanism", "workshop", "circuit", and "transmutation".',
@@ -7614,9 +7586,6 @@ function buildMode2AiPrompt(payload) {
       '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
       '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。',
       'また、ユーザー固有の少し長めの異名を1つ作ってください。作品名・製品名・キャラクター名をそのまま異名に入れてはいけません。代わりに、それらを感じさせる象徴語・比喩語・断片語に変換してください。JSONの diagnostic.keywords がある項目では、その keywords を優先して使ってください。keywords がない場合も、媒体・文化圏・手触りを匂わせる抽象語に置き換え、直接名は避けてください。異名は戒名・家紋名・種族名のように、少し謎めいていても雰囲気が伝わるものにしてください。',
-      'epithet / epithetShort には、selectedItems.label の文字列をそのまま入れてはいけません。必ず連想語（モチーフ・時代感・媒体感・空気感）に言い換えてください。',
-      '今回の selectedItems.label（直接再利用禁止）:',
-      bannedTitleList,
       'epithet（長い異名）は epithetShort（短い異名）より明確に長くしてください。日本語では目安として16〜36文字程度で、象徴語を2〜3個つないだ厚みのある言い回しにしてください。',
       'あわせて、短い異名も1つ返してください。短い異名も同様に、直接的な固有名詞ではなく、象徴語ベースにしてください。',
       '異名の語彙では「鉄屑」「ガラクタ」「廃材」などのネガティブ語を避け、「機巧」「機関」「工房」「回路」「錬成」など中立〜詩的な語を優先してください。',
@@ -7974,90 +7943,6 @@ function buildMode2AiPrompt(payload) {
     return { ja: aliasJa, en: `${roleEn} of ${symbolEn}` };
   }
 
-  function escapeMode2Regex(text) {
-    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  function getMode2SelectedTitleCandidates() {
-    const out = [];
-    const selections = (kioskState && Array.isArray(kioskState.selections)) ? kioskState.selections : [];
-    selections.forEach((selection) => {
-      const item = getKioskSourceItem(selection) || {};
-      [item.label, item.label_en, selection && selection.label].forEach((raw) => {
-        const v = String(raw || '').trim();
-        if (!v || v.length < 2) return;
-        out.push(v);
-        const noSpace = v.replace(/\s+/g, '');
-        if (noSpace && noSpace.length >= 2 && noSpace !== v) out.push(noSpace);
-      });
-    });
-    return mode2UniqueStrings(out).sort((a, b) => b.length - a.length);
-  }
-
-  function stripMode2DirectTitleMentions(text, titleCandidates) {
-    let out = String(text || '').trim();
-    if (!out) return out;
-    const titles = Array.isArray(titleCandidates) ? titleCandidates : [];
-    titles.forEach((title) => {
-      const t = String(title || '').trim();
-      if (!t || t.length < 2) return;
-      const hasAscii = /[A-Za-z0-9]/.test(t);
-      out = out.replace(new RegExp(escapeMode2Regex(t), hasAscii ? 'gi' : 'g'), '');
-      const compact = t.replace(/\s+/g, '');
-      if (compact && compact !== t && compact.length >= 2) {
-        out = out.replace(new RegExp(escapeMode2Regex(compact), hasAscii ? 'gi' : 'g'), '');
-      }
-    });
-    out = out
-      .replace(/[「」『』【】\[\]\(\)<>]/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .replace(/^[\s,.:;|\/\-・]+|[\s,.:;|\/\-・]+$/g, '')
-      .trim();
-    return out;
-  }
-
-  function normalizeMode2TitleForCompare(text) {
-    return String(text || '')
-      .toLowerCase()
-      .replace(/[「」『』【】\[\]\(\)<>]/g, '')
-      .replace(/[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+/g, '');
-  }
-
-  function extractMode2TitleFragments(title) {
-    const raw = String(title || '').trim();
-    if (!raw) return [];
-    return raw
-      .split(/[\/|・,，、。:：;；\-_\(\)\[\]「」『』【】\s]+/)
-      .map(s => s.trim())
-      .filter((s) => {
-        if (!s) return false;
-        const asciiOnly = /^[a-z0-9]+$/i.test(s);
-        return asciiOnly ? s.length >= 4 : s.length >= 2;
-      });
-  }
-
-  function containsMode2DirectTitleReference(text, titleCandidates) {
-    const normText = normalizeMode2TitleForCompare(text);
-    if (!normText) return false;
-    const titles = Array.isArray(titleCandidates) ? titleCandidates : [];
-    for (const title of titles) {
-      const normTitle = normalizeMode2TitleForCompare(title);
-      if (!normTitle) continue;
-      const asciiOnly = /^[a-z0-9]+$/i.test(normTitle);
-      const minLen = asciiOnly ? 5 : 3;
-      if (normTitle.length >= minLen && normText.includes(normTitle)) return true;
-      const fragments = extractMode2TitleFragments(title);
-      for (const frag of fragments) {
-        const normFrag = normalizeMode2TitleForCompare(frag);
-        if (!normFrag) continue;
-        const fragAscii = /^[a-z0-9]+$/i.test(normFrag);
-        const fragMin = fragAscii ? 5 : 3;
-        if (normFrag.length >= fragMin && normText.includes(normFrag)) return true;
-      }
-    }
-    return false;
-  }
-
 
   function splitMode2BilingualText(raw) {
     const text = mode2ValueToText(raw, '').trim();
@@ -8098,8 +7983,7 @@ function buildMode2AiPrompt(payload) {
       }).filter(Boolean).join(' / ');
     }
     const rawJa = (parsed.ja || '').trim();
-    // ここでは極端に短い場合のみフォールバックし、まずはAI由来の異名を優先する
-    const shouldFallback = !rawJa || rawJa.length < 6;
+    const shouldFallback = !rawJa || rawJa.length < 6 || /Macintosh|Apple|iMac|iPod|iPhone|iPad|らき\s*\*?\s*すた|Lucky\s*Star|2ちゃんねる|ニコニコ動画|初音ミク|Pixiv|コミックマーケット|ガロ|ねじ式|Twin Peaks|ツイン・ピークス/i.test(rawJa);
     if (shouldFallback) {
       const result = window.lastMode2NormalizedResult || {};
       const localAlias = buildMode2LocalAlias(top3, result.lowerModules || [], result.practiceModes || []);
@@ -8152,22 +8036,11 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const symbolTexts = buildMode2SymbolTexts(symbolRaw, normTop3);
     const aliasTexts = buildMode2AliasTexts(aliasRaw, normTop3);
     const aliasShortTexts = buildMode2AliasTexts(aliasShortRaw, normTop3);
-    const titleCandidates = getMode2SelectedTitleCandidates();
-    const localAliasFallback = buildMode2LocalAlias(normTop3, lowerModules, practiceModes);
 
     const symbol = isEnglishUi() ? (symbolTexts.en || 'WI-ME-AR') : symbolTexts.ja;
     const symbolEn = isEnglishUi() ? symbolTexts.ja : symbolTexts.en;
     let alias = isEnglishUi() ? (aliasTexts.en || aliasShortTexts.en || 'Observer of Cyber Alley') : aliasTexts.ja;
     let aliasEn = isEnglishUi() ? (aliasTexts.ja || fallbackLocal.alias || '電脳路地裏の観測者') : aliasTexts.en;
-    alias = stripMode2DirectTitleMentions(alias, titleCandidates);
-    aliasEn = stripMode2DirectTitleMentions(aliasEn, titleCandidates);
-    const aliasHasTitleRef = containsMode2DirectTitleReference(alias, titleCandidates) || containsMode2DirectTitleReference(aliasEn, titleCandidates);
-    if (aliasHasTitleRef) {
-      alias = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (localAliasFallback.ja || '電脳路地裏の観測者');
-      aliasEn = isEnglishUi() ? (localAliasFallback.ja || '電脳路地裏の観測者') : (localAliasFallback.en || 'Observer of Cyber Alley');
-    }
-    if (!alias || alias.length < 8) alias = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (localAliasFallback.ja || '電脳路地裏の観測者');
-    if (!aliasEn || aliasEn.length < 6) aliasEn = isEnglishUi() ? (localAliasFallback.ja || '電脳路地裏の観測者') : (localAliasFallback.en || 'Observer of Cyber Alley');
     if (!isEnglishUi()) {
       const shortRolePattern = /の(観測者|司書|蒐集家|巡礼者|語り部|継ぎ手|編み手|使い手|開拓者|案内人|記録者|採集者|祀り手|旅人|組版師)$/;
       const looksTooShort = !alias || alias.length < 12 || shortRolePattern.test(alias);
@@ -8175,17 +8048,8 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
         alias = fallbackLocal.alias;
       }
     }
-    let aliasShort = isEnglishUi() ? (aliasShortTexts.en || aliasTexts.en || 'Observer of Cyber Alley') : (aliasShortTexts.ja || fallbackLocal.aliasShort || fallbackLocal.alias || '電脳路地裏の観測者');
-    let aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
-    aliasShort = stripMode2DirectTitleMentions(aliasShort, titleCandidates);
-    aliasShortEn = stripMode2DirectTitleMentions(aliasShortEn, titleCandidates);
-    const aliasShortHasTitleRef = containsMode2DirectTitleReference(aliasShort, titleCandidates) || containsMode2DirectTitleReference(aliasShortEn, titleCandidates);
-    if (aliasShortHasTitleRef) {
-      aliasShort = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (fallbackLocal.aliasShort || localAliasFallback.ja || '電脳路地裏の観測者');
-      aliasShortEn = isEnglishUi() ? (fallbackLocal.aliasShort || localAliasFallback.ja || '') : (localAliasFallback.en || '');
-    }
-    if (!aliasShort) aliasShort = isEnglishUi() ? (localAliasFallback.en || 'Observer of Cyber Alley') : (fallbackLocal.aliasShort || localAliasFallback.ja || '電脳路地裏の観測者');
-    if (!aliasShortEn) aliasShortEn = isEnglishUi() ? (fallbackLocal.aliasShort || localAliasFallback.ja || '') : (localAliasFallback.en || '');
+    const aliasShort = isEnglishUi() ? (aliasShortTexts.en || aliasTexts.en || 'Observer of Cyber Alley') : (aliasShortTexts.ja || fallbackLocal.aliasShort || fallbackLocal.alias || '電脳路地裏の観測者');
+    const aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
 
     const epithetReason = sanitizeMode2Text(parsed && parsed.epithetReason, isEnglishUi() ? 'This epithet was built from the pattern of your selections and their meanings.' : '選択された項目の並びと意味づけから組み立てられた異名です。');
     const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Several attributes overlap in the pattern and meanings of your selections.' : '選択の並びと意味づけから、複数の属性が重なって見えました。'));
