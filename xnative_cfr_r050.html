@@ -5317,6 +5317,10 @@
       }
       function onDragMove(clientY){
         if(!dragging) return;
+        if (window.kioskMode && color==='blue' && el===bh && window.kioskState && window.kioskState.step === 2 && !window.kioskState.step2StartedOperating) {
+          window.kioskState.step2StartedOperating = true;
+          updateKioskStepOverlay();
+        }
         // マウス（またはタッチ）位置をコンテンツ座標に変換し、その位置の年で〇を更新。スクロールしても〇がポインタからずれない
         if(vp){
           const vpRect = vp.getBoundingClientRect();
@@ -5667,6 +5671,7 @@
   window.kioskMode = true;
   const kioskState = {
     step: 0,          // 0: スタート前, 1: ジャンル選択, 2: 生年セット, 3: イベント選択中, 4: 診断表示
+    step2StartedOperating: false, // ステップ2で上の〇を動かし始めたら案内を消す
     step3StartedOperating: false, // スマホでステップ3の説明を消しコンパクト表示にするフラグ
     gender: '',       // スタート時アンケートの性別
     nickname: '',     // スタート時アンケートのニックネーム（保存しない）
@@ -5777,7 +5782,7 @@
     let text = '';
     if (kioskState.step === 1) {
       text = t('１～数個のジャンルを選んでください。', 'Please select one or more genres.');
-    } else if (kioskState.step === 2 && !kioskState.eventYearMoved) {
+    } else if (kioskState.step === 2 && !kioskState.eventYearMoved && !kioskState.step2StartedOperating) {
       text = t(
         '上の〇（青い斜め線の左にある）を生年にあわせてください。スクロールして遡ることもできます',
         'Drag the upper circle (left side of the blue diagonal line) to your birth year. You can scroll upward to go back in time.'
@@ -5958,6 +5963,7 @@
     if (kioskState.step < 3) {
       kioskState.step = 2;
       kioskState.eventYearMoved = false;
+      kioskState.step2StartedOperating = false;
       kioskState.showLowerOverlay = false;
       kioskState.step3StartedOperating = false;
       kioskState.step3ChecklistActivated = false;
@@ -8606,6 +8612,7 @@ function buildMode2CompactQrReport(result) {
     kioskState.selectionMeanings = {};
     kioskState.nickname = '';
     kioskState.eventYearMoved = false;
+    kioskState.step2StartedOperating = false;
     kioskState.showLowerOverlay = false;
     kioskState.step3StartedOperating = false;
     kioskState.step3ChecklistActivated = false;
