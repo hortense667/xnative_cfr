@@ -431,7 +431,8 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
     });
   }
 
-  const { prompt, model, temperature } = req.body || {};
+  const { prompt, model, temperature, debug } = req.body || {};
+  const debugMode = !!debug;
   const promptError = validatePromptField(prompt);
   if (promptError) {
     return res.status(400).json({ ok: false, error: promptError });
@@ -444,6 +445,10 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
   try {
     const primary = await callGeminiWithRetry(url, prompt, 2, temp);
     if (primary.ok) {
+      if (debugMode) {
+        res.setHeader('X-AI-Provider-Used', 'gemini');
+        return res.json({ ...primary, providerUsed: 'gemini', fallbackUsed: false });
+      }
       return res.json(primary);
     }
 
@@ -453,6 +458,15 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
         model: process.env.OPENAI_MODEL || 'gpt-5.4'
       });
       if (secondary.ok) {
+        if (debugMode) {
+          res.setHeader('X-AI-Provider-Used', 'openai-fallback');
+          return res.json({
+            ...secondary,
+            providerUsed: 'openai-fallback',
+            fallbackUsed: true,
+            primaryError: fallbackError || ''
+          });
+        }
         return res.json(secondary);
       }
       fallbackError = secondary.error || fallbackError;
@@ -469,7 +483,8 @@ app.post('/api/gemini-diagnosis', async (req, res) => {
 });
 
 app.post('/api/openai-diagnosis', async (req, res) => {
-  const { prompt, temperature, model, mode } = req.body || {};
+  const { prompt, temperature, model, mode, debug } = req.body || {};
+  const debugMode = !!debug;
   const promptError = validatePromptField(prompt);
   if (promptError) {
     return res.status(400).json({ ok: false, error: promptError });
@@ -492,6 +507,15 @@ app.post('/api/openai-diagnosis', async (req, res) => {
       responseFormat
     });
     if (primary.ok) {
+      if (debugMode) {
+        res.setHeader('X-AI-Provider-Used', 'openai');
+        return res.json({
+          ...primary,
+          providerUsed: 'openai',
+          fallbackUsed: false,
+          requestedModel
+        });
+      }
       return res.json(primary);
     }
 
@@ -502,6 +526,16 @@ app.post('/api/openai-diagnosis', async (req, res) => {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
       const secondary = await callGeminiWithRetry(url, prompt, 2, temp);
       if (secondary.ok) {
+        if (debugMode) {
+          res.setHeader('X-AI-Provider-Used', 'gemini-fallback');
+          return res.json({
+            ...secondary,
+            providerUsed: 'gemini-fallback',
+            fallbackUsed: true,
+            requestedModel,
+            primaryError: fallbackError || ''
+          });
+        }
         return res.json(secondary);
       }
       fallbackError = secondary.error || fallbackError;
