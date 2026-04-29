@@ -267,7 +267,7 @@ async function callOpenAiWithRetry(prompt, maxRetries = 2, temperature = 0.9, op
         model,
         messages: [{ role: 'user', content: prompt }],
         temperature: temp,
-        max_tokens: 1800
+        max_completion_tokens: 1800
       };
       if (responseFormat) body.response_format = responseFormat;
 
