@@ -299,7 +299,8 @@ async function callOpenAiWithRetry(prompt, maxRetries = 2, temperature = 0.9, op
 
       const text = data?.choices?.[0]?.message?.content;
       if (typeof text === 'string' && text.trim()) {
-        return { ok: true, text: text.trim(), model };
+        const usage = data?.usage || null;
+        return { ok: true, text: text.trim(), model, usage };
       }
 
       return {
