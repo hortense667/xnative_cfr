@@ -1769,6 +1769,9 @@
 
   // ===== CFR プロンプト設定 =====
   const DEFAULT_CFR_PROMPTS = {
+    aiProvider: 'gemini',
+    openaiModel: 'gpt-5.4',
+    geminiModel: 'gemini-2.5-flash-lite',
     temperature: 0.9,
     initialBirthYear: 1990,
     initialEventYear: 2010,
@@ -1783,6 +1786,9 @@
     usageDescription: '下の「スタート」ボタンで最初の画面に戻ります。'
   };
   const DEFAULT_CFR_PROMPTS_EN = {
+    aiProvider: 'gemini',
+    openaiModel: 'gpt-5.4',
+    geminiModel: 'gemini-2.5-flash-lite',
     temperature: 0.9,
     initialBirthYear: 1990,
     initialEventYear: 2010,
@@ -6544,8 +6550,22 @@
       ? (head + `Nickname: ${nickname}\nGender: ${gender}\nBirth year: ${birthYear}\n\nSelected content (year: event):\n${lines}`)
       : (head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`);
   }
-  const GEMINI_MODEL = 'gemini-2.5-flash-lite';
-  const MODE2_OPENAI_MODEL = 'gpt-5.4';
+  const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite';
+  const DEFAULT_OPENAI_MODEL = 'gpt-5.4';
+  function getConfiguredAiProvider() {
+    const cfr = getCfrPrompts();
+    return ((cfr.aiProvider || DEFAULT_CFR_PROMPTS.aiProvider || 'gemini') + '').toLowerCase();
+  }
+  function getConfiguredGeminiModel(modelOverride) {
+    if (modelOverride && String(modelOverride).trim()) return String(modelOverride).trim();
+    const cfr = getCfrPrompts();
+    return String(cfr.geminiModel || DEFAULT_CFR_PROMPTS.geminiModel || DEFAULT_GEMINI_MODEL);
+  }
+  function getConfiguredOpenAiModel(modelOverride) {
+    if (modelOverride && String(modelOverride).trim()) return String(modelOverride).trim();
+    const cfr = getCfrPrompts();
+    return String(cfr.openaiModel || DEFAULT_CFR_PROMPTS.openaiModel || DEFAULT_OPENAI_MODEL);
+  }
   function getTemperature() {
     const cfr = getCfrPrompts();
     const t = cfr.temperature ?? DEFAULT_CFR_PROMPTS.temperature ?? 0.9;
@@ -6554,8 +6574,8 @@
   }
 
   // Cloudflare / Netlify などのサーバ側で環境変数を使って呼び出す場合のバックエンド経由呼び出し
-  async function callGeminiViaBackend(prompt) {
-    const payload = { prompt, model: GEMINI_MODEL, temperature: getTemperature() };
+  async function callGeminiViaBackend(prompt, modelOverride) {
+    const payload = { prompt, model: getConfiguredGeminiModel(modelOverride), temperature: getTemperature() };
     const endpoints = [
       '/api/gemini-diagnosis',                 // Cloudflare Pages Functions 等で /api/ 以下に配置した場合
       '/.netlify/functions/gemini-diagnosis'   // Netlify Functions
@@ -6595,7 +6615,7 @@
   async function callOpenAiViaBackend(prompt, modelOverride) {
     try {
       const payload = { prompt, temperature: getTemperature() };
-      if (modelOverride) payload.model = modelOverride;
+      payload.model = getConfiguredOpenAiModel(modelOverride);
       const res = await fetch('/api/openai-diagnosis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6617,15 +6637,17 @@
   async function fetchGeminiDiagnosis(headOverride) {
     const prompt = buildGeminiPrompt(headOverride);
     const cfr = getCfrPrompts();
-    const provider = ((cfr.aiProvider || DEFAULT_CFR_PROMPTS.aiProvider || 'gemini') + '').toLowerCase();
+    const provider = getConfiguredAiProvider();
+    const geminiModel = getConfiguredGeminiModel(cfr.geminiModel);
+    const openAiModel = getConfiguredOpenAiModel(cfr.openaiModel);
 
     // 共通のリトライヘルパー（指定プロバイダを maxAttempts 回まで試行）
     const retryProvider = async (which, maxAttempts) => {
       let lastError = '';
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const result = which === 'gemini'
-          ? await callGeminiViaBackend(prompt)
-          : await callOpenAiViaBackend(prompt);
+          ? await callGeminiViaBackend(prompt, geminiModel)
+          : await callOpenAiViaBackend(prompt, openAiModel);
         const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
         if (hasText) return result;
 
@@ -7506,10 +7528,15 @@ function buildMode2DiagnosisLocal() {
     const opts = options || {};
     const mode2OpenAiOnly = !!opts.mode2OpenAiOnly;
     const openAiModel = opts.openAiModel || '';
+    const geminiModel = opts.geminiModel || '';
+    const cfr = getCfrPrompts();
+    const configuredProvider = getConfiguredAiProvider();
+    const configuredOpenAiModel = getConfiguredOpenAiModel(openAiModel || cfr.openaiModel);
+    const configuredGeminiModel = getConfiguredGeminiModel(geminiModel || cfr.geminiModel);
     if (mode2OpenAiOnly) {
       let lastError = '';
       for (let attempt = 1; attempt <= 2; attempt++) {
-        const result = await callOpenAiViaBackend(prompt, openAiModel || MODE2_OPENAI_MODEL);
+        const result = await callOpenAiViaBackend(prompt, configuredOpenAiModel);
         const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
         if (hasText) return result;
         if (result && result.error) lastError = result.error;
@@ -7517,12 +7544,13 @@ function buildMode2DiagnosisLocal() {
       }
       return { ok: false, error: lastError || 'OpenAI backend failed' };
     }
-    const cfr = getCfrPrompts();
-    const provider = ((cfr.aiProvider || DEFAULT_CFR_PROMPTS.aiProvider || 'gemini') + '').toLowerCase();
+    const provider = configuredProvider;
     const retryProvider = async (which, maxAttempts) => {
       let lastError = '';
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const result = which === 'gemini' ? await callGeminiViaBackend(prompt) : await callOpenAiViaBackend(prompt);
+        const result = which === 'gemini'
+          ? await callGeminiViaBackend(prompt, configuredGeminiModel)
+          : await callOpenAiViaBackend(prompt, configuredOpenAiModel);
         const hasText = !!(result && result.ok && typeof result.text === 'string' && result.text.trim());
         if (hasText) return result;
         if (result && result.error) lastError = result.error;
@@ -8316,7 +8344,7 @@ function buildMode2CompactQrReport(result) {
       submitDiagnosticResultToBackend(buildDiagnosticBackendRecord(true));
       const payload = buildMode2Payload();
       const prompt = buildMode2AiPrompt(payload);
-      const aiResult = await fetchDiagnosisFromConfiguredProvider(prompt, { mode2OpenAiOnly: true, openAiModel: MODE2_OPENAI_MODEL });
+      const aiResult = await fetchDiagnosisFromConfiguredProvider(prompt);
       if (!aiResult || !aiResult.ok || !aiResult.text || !String(aiResult.text).trim()) {
         throw new Error((aiResult && aiResult.error) ? aiResult.error : 'AI diagnosis returned empty response');
       }
