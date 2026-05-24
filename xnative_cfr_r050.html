@@ -7474,16 +7474,25 @@ function buildMode2DiagnosisLocal() {
         rankedAttrs = [rankedAttrs[0], rankedAttrs[1], rankedAttrs[altIdx], ...rankedAttrs.slice(2, altIdx), ...rankedAttrs.slice(altIdx + 1)];
       }
     }
-    const top3 = rankedAttrs.slice(0,3).map(([code, score], idx) => ({
+    const top3Entries = [];
+    const seenAttrCodes = new Set();
+    for (let i = 0; i < rankedAttrs.length && top3Entries.length < 3; i++) {
+      const entry = rankedAttrs[i];
+      if (seenAttrCodes.has(entry[0])) continue;
+      seenAttrCodes.add(entry[0]);
+      top3Entries.push(entry);
+    }
+    while (top3Entries.length < 3) {
+      const fallbackCode = Object.keys(MODE2_ATTRS).find(code => !seenAttrCodes.has(code)) || 'world';
+      seenAttrCodes.add(fallbackCode);
+      top3Entries.push([fallbackCode, 0]);
+    }
+    const top3 = top3Entries.map(([code, score], idx) => ({
       code,
       score,
       role: idx === 0 ? '主属性' : idx === 1 ? '副属性' : '裏属性',
       info: MODE2_ATTRS[code]
     }));
-    while (top3.length < 3) {
-      const fallbackCode = Object.keys(MODE2_ATTRS)[top3.length] || 'world';
-      top3.push({ code: fallbackCode, score: 0, role: top3.length === 0 ? '主属性' : top3.length === 1 ? '副属性' : '裏属性', info: MODE2_ATTRS[fallbackCode] });
-    }
     top3.forEach(t => (roleByAttr[t.code] || []).forEach(w => boostWord(roleWordScores, w, t.score || 0.1)));
 
     const topSlots = Object.entries(slotScores).sort((a,b) => b[1] - a[1]).slice(0,3).map(([code]) => MODE2_SLOT_LABELS[code] || code);
@@ -7496,8 +7505,8 @@ function buildMode2DiagnosisLocal() {
     const aliasEn = localAlias.en;
     const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
-    const summary = `今回の選択では「${top3[0].info.ja}」がいちばん強く出ました。ほかに「${top3[1].info.ja}」「${top3[2].info.ja}」の属性も混じっています。`;
-    const epithetReason = '選んだ項目の象徴語と意味づけから組み立てた異名です。';
+    const summary = `今回の選択では「${top3[0].info.ja}」が中心に見えました。`;
+    const epithetReason = `「${alias}」と「${aliasEn}」は、選んだ項目の象徴語から組み立てた対になる異名です。`;
     const localModuleTitle = supplemental.lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏';
     const resultText = [
       'あなたの選択の読み解き','',
@@ -7655,7 +7664,11 @@ function buildMode2AiPrompt(payload) {
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
         'mainAttribute.reason should be the strongest evidence-based explanation. subAttribute.reason and hiddenAttribute.reason should be shorter and softer, as traces rather than equal claims.',
         'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
-        'epithetReason must explain only the origin and intent of epithet (the long alias). Do not mention epithetShort in epithetReason. If the English epithet uses symbolic language, explain that English line clearly.',
+        'epithet must be one string in the form "Japanese epithet || English alias". Japanese and English must be translations of the same epithet, not separate images.',
+        'epithetReason must explain both the Japanese and English epithet together as a paired name, not the English line alone.',
+        'mainAttribute, subAttribute, and hiddenAttribute must be three different attribute names. Do not repeat the same attribute.',
+        'In summary, do not re-list every attribute name that will appear below. Keep it centered on the main attribute.',
+        'readingPoints must not repeat media examples already used in mainAttribute.reason or summary.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
         'Make epithet clearly longer than epithetShort. Aim for about 8 to 16 words so it feels rich and specific.',
         'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
@@ -7703,9 +7716,12 @@ function buildMode2AiPrompt(payload) {
       'あわせて、短い異名も1つ返してください。短い異名も同様に、直接的な固有名詞ではなく、象徴語ベースにしてください。',
       '異名の語彙では「鉄屑」「ガラクタ」「廃材」などのネガティブ語を避け、「機巧」「機関」「工房」「回路」「錬成」など中立〜詩的な語を優先してください。',
       'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
-      'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。右側の英語は短く自然な英語名にしてください。',
+      'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。日本語と英語は別々のイメージではなく、同じ異名の対訳にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
-      'epithetReason（この名の由来）は、epithet（長い異名）の由来と意図だけを説明してください。epithetShort（短い異名）には触れないでください。英語の異名が象徴語中心の場合は、その英語行が何を指すかをはっきり説明してください。',
+      'epithetReason（この名の由来）は、日本語の異名と英語の異名の両方を説明してください。英語だけ、日本語だけの説明にしないでください。同じ象徴イメージの対訳であることを示してください。',
+      'mainAttribute, subAttribute, hiddenAttribute は必ず3つとも異なる属性名にしてください。同じ属性を2回以上使わないでください。',
+      'summary では、下に出る属性名をすべて列挙し直さないでください。主属性を中心にした総評に留めてください。',
+      'readingPoints は3件ですが、mainAttribute.reason や summary で既に触れた作品・例を繰り返さないでください。別角度の読みだけを書いてください。',
       '制約:',
       '- 露骨な性格診断や病理的解釈をしない',
       '- 性別を決めつけない',
@@ -7771,6 +7787,53 @@ function buildMode2AiPrompt(payload) {
       return localAlias.ja || '電脳路地裏の観測者';
     }
     return ja;
+  }
+
+  function mode2EpithetLooksValid(text, minLen) {
+    const s = String(text || '').trim();
+    if (!s || s.length < (minLen || 8)) return false;
+    if (mode2EpithetContainsDirectTitles(s)) return false;
+    if (/の(観測者|司書|蒐集家|巡礼者|語り部|継ぎ手|編み手|使い手|開拓者|案内人|記録者|採集者|祀り手|旅人|組版師)$/.test(s)) return false;
+    return true;
+  }
+
+  function buildMode2EpithetPair(parsedRaw, top3, lowerModules, practiceModes) {
+    const localAlias = buildMode2LocalAlias(top3, lowerModules, practiceModes);
+    const parsed = splitMode2BilingualText(parsedRaw);
+    const rawJa = String(parsed.ja || '').trim();
+    const rawEn = String(parsed.en || '').trim();
+    if (mode2EpithetLooksValid(rawJa, 8) && mode2EpithetLooksValid(rawEn, 8)) {
+      return { ja: rawJa, en: rawEn };
+    }
+    return {
+      ja: localAlias.ja || '電脳路地裏の観測者',
+      en: localAlias.en || 'Observer of Cyber Alley'
+    };
+  }
+
+  function dedupeMode2NormTop3(normTop3, fallbackTop3) {
+    const seen = new Set();
+    const pool = (Array.isArray(fallbackTop3) ? fallbackTop3 : []).map(t => ({
+      ja: t.info.ja,
+      en: t.info.en || mode2AttrLabelEn(t.info.ja),
+      desc: t.info.desc || getMode2AttrDescJa(t.info.ja)
+    }));
+    return (Array.isArray(normTop3) ? normTop3 : []).map((item, idx) => {
+      let name = String(item && item.info && item.info.ja ? item.info.ja : '').trim();
+      if (!name || seen.has(name)) {
+        const alt = pool.find(p => p.ja && !seen.has(p.ja));
+        if (alt) {
+          seen.add(alt.ja);
+          return {
+            role: item.role || (idx === 0 ? '主属性' : idx === 1 ? '副属性' : '裏属性'),
+            info: { ja: alt.ja, en: alt.en, desc: alt.desc },
+            reason: idx === 0 ? (item.reason || '') : ''
+          };
+        }
+      }
+      seen.add(name);
+      return idx === 0 ? item : { ...item, reason: '' };
+    });
   }
 
   const MODE2_ATTR_SHORT_JA = {
@@ -8132,29 +8195,7 @@ function buildMode2AiPrompt(payload) {
   }
 
   function buildMode2AliasTexts(parsedAlias, top3, lowerModules, practiceModes) {
-    const parsed = splitMode2BilingualText(parsedAlias);
-    let en = parsed.en || '';
-    if (!en && Array.isArray(top3)) {
-      en = top3.map(t => {
-        const name = mode2ValueToText(t && t.info && t.info.ja, '');
-        return (MODE2_ATTR_EN[name] && MODE2_ATTR_EN[name].short) ? MODE2_ATTR_EN[name].short : name;
-      }).filter(Boolean).join(' / ');
-    }
-    const rawJa = (parsed.ja || '').trim();
-    const modules = lowerModules || [];
-    const practices = practiceModes || [];
-    const ja = sanitizeMode2EpithetJa(rawJa, top3, modules, practices);
-    if (!rawJa || rawJa.length < 6 || mode2EpithetContainsDirectTitles(rawJa)) {
-      const localAlias = buildMode2LocalAlias(top3, modules, practices);
-      return {
-        ja: ja,
-        en: en || localAlias.en || 'Observer of Cyber Alley'
-      };
-    }
-    return {
-      ja: ja,
-      en: en || 'Observer of Cyber Alley'
-    };
+    return buildMode2EpithetPair(parsedAlias, top3, lowerModules, practiceModes);
   }
 
 
@@ -8170,11 +8211,12 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const mainName = normalizeMode2AttrName(main.name, mainFallback);
     const subName = normalizeMode2AttrName(sub.name, subFallback);
     const hiddenName = normalizeMode2AttrName(hidden.name, hiddenFallback);
-    const normTop3 = [
+    let normTop3 = [
       { role: '主属性', info: { ja: mainName, en: mode2AttrLabelEn(mainName), desc: getMode2AttrDescJa(mainName || '世界観没入') }, reason: sanitizeMode2Text(main.reason, '') },
       { role: '副属性', info: { ja: subName, en: mode2AttrLabelEn(subName), desc: getMode2AttrDescJa(subName || '機構偏愛') }, reason: sanitizeMode2Text(sub.reason, '') },
       { role: '裏属性', info: { ja: hiddenName, en: mode2AttrLabelEn(hiddenName), desc: getMode2AttrDescJa(hiddenName || '記録蒐集') }, reason: sanitizeMode2Text(hidden.reason, '') }
     ];
+    normTop3 = dedupeMode2NormTop3(normTop3, fallbackLocal.top3);
     const lowerModulesRaw = Array.isArray(parsed && parsed.lowerModules) ? parsed.lowerModules : [];
     const practiceModesRaw = Array.isArray(parsed && parsed.practiceModes) ? parsed.practiceModes : [];
     const lowerModules = (lowerModulesRaw.length ? lowerModulesRaw : (fallbackLocal.lowerModules || [])).slice(0,2).map(v => {
@@ -8193,32 +8235,28 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const aliasRaw = sanitizeMode2Text(parsed && parsed.epithet, '');
     const aliasShortRaw = sanitizeMode2Text(parsed && parsed.epithetShort, '');
     const symbolTexts = buildMode2SymbolTexts(symbolRaw, normTop3);
-    const aliasTexts = buildMode2AliasTexts(aliasRaw, normTop3, lowerModules, practiceModes);
-    const aliasShortTexts = buildMode2AliasTexts(aliasShortRaw, normTop3, lowerModules, practiceModes);
-
     const symbol = isEnglishUi() ? (symbolTexts.en || 'WI-ME-AR') : symbolTexts.ja;
     const symbolEn = isEnglishUi() ? symbolTexts.ja : symbolTexts.en;
-    let aliasJa = aliasTexts.ja || '電脳路地裏の観測者';
-    let aliasEnLine = aliasTexts.en || 'Observer of Cyber Alley';
-    let alias = isEnglishUi() ? (aliasEnLine || aliasShortTexts.en || 'Observer of Cyber Alley') : aliasJa;
+    const epithetPair = buildMode2EpithetPair(aliasRaw, normTop3, lowerModules, practiceModes);
+    const aliasShortPair = buildMode2EpithetPair(aliasShortRaw, normTop3, lowerModules, practiceModes);
+    let aliasJa = epithetPair.ja || '電脳路地裏の観測者';
+    let aliasEnLine = epithetPair.en || 'Observer of Cyber Alley';
+    let alias = isEnglishUi() ? aliasEnLine : aliasJa;
     let aliasEn = isEnglishUi() ? aliasJa : aliasEnLine;
-    if (!isEnglishUi()) {
-      const shortRolePattern = /の(観測者|司書|蒐集家|巡礼者|語り部|継ぎ手|編み手|使い手|開拓者|案内人|記録者|採集者|祀り手|旅人|組版師)$/;
-      const looksTooShort = !aliasJa || aliasJa.length < 12 || shortRolePattern.test(aliasJa);
-      if (looksTooShort && fallbackLocal && fallbackLocal.alias) {
-        aliasJa = fallbackLocal.alias;
-        alias = aliasJa;
-      }
-      if (mode2EpithetContainsDirectTitles(aliasJa)) {
-        aliasJa = sanitizeMode2EpithetJa('', normTop3, lowerModules, practiceModes);
-        alias = aliasJa;
-      }
-    }
-    const aliasShort = isEnglishUi() ? (aliasShortTexts.en || aliasTexts.en || 'Observer of Cyber Alley') : (aliasShortTexts.ja || fallbackLocal.aliasShort || fallbackLocal.alias || '電脳路地裏の観測者');
-    const aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
+    const aliasShort = isEnglishUi() ? (aliasShortPair.en || aliasEnLine) : (aliasShortPair.ja || aliasJa);
+    const aliasShortEn = isEnglishUi() ? (aliasShortPair.ja || aliasJa) : (aliasShortPair.en || aliasEnLine);
 
-    const epithetReason = sanitizeMode2Text(parsed && parsed.epithetReason, isEnglishUi() ? 'This epithet was built from the pattern of your selections and their meanings.' : '選択された項目の並びと意味づけから組み立てられた異名です。');
-    const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Your selections this time were read with one strongest attribute at the center, and a few softer attributes mixed in.' : '今回の選択は、いちばん強い属性を軸に、ほかにもにじむ属性を読み取りました。'));
+    let epithetReason = sanitizeMode2Text(parsed && parsed.epithetReason, '');
+    if (!epithetReason) {
+      epithetReason = isEnglishUi()
+        ? `The Japanese epithet "${aliasJa}" and the English "${aliasEnLine}" are paired names built from the same symbolic image in your selections.`
+        : `「${aliasJa}」と「${aliasEnLine}」は、今回の選択から浮かんだ同じ象徴イメージの異名です。`;
+    } else if (!isEnglishUi() && !/[\u3040-\u30ff\u3400-\u9fff]/.test(epithetReason)) {
+      epithetReason = `「${aliasJa}」と「${aliasEnLine}」は、今回の選択から浮かんだ同じ象徴イメージの異名です。`;
+    } else if (epithetReason.indexOf(aliasJa) < 0 && epithetReason.indexOf(aliasEnLine.split(',')[0].trim()) < 0) {
+      epithetReason = `「${aliasJa}」／${aliasEnLine} — ${epithetReason}`;
+    }
+    const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Your selections this time centered on one strongest attribute.' : `今回の選択では「${normTop3[0].info.ja}」が中心に見えました。`));
     const readingPoints = Array.isArray(parsed && parsed.readingPoints)
       ? parsed.readingPoints.slice(0,3).map(v => sanitizeMode2Text(v, '')).filter(Boolean)
       : [];
@@ -8258,7 +8296,8 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
 function buildMode2ResultHtml(result) {
     const top3 = Array.isArray(result.top3) ? result.top3 : [];
     const mainAttr = top3[0] || null;
-    const secondaryAttrs = top3.slice(1);
+    const mainAttrJa = mainAttr && mainAttr.info && mainAttr.info.ja;
+    const secondaryAttrs = top3.slice(1).filter(item => item && item.info && item.info.ja && item.info.ja !== mainAttrJa);
     const symbolAlpha = mode2ValueToText(
       (top3
         .slice(0, 3)
@@ -8288,9 +8327,8 @@ function buildMode2ResultHtml(result) {
         <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${escapeHtmlText(mode2BleedingAttrsSectionLabel())}</div>
         <div style="display:flex; flex-wrap:wrap; gap:8px;">
           ${secondaryAttrs.map(item => `
-            <span style="display:inline-flex; flex-direction:column; gap:4px; max-width:100%; padding:10px 14px; border-radius:14px; border:1px solid #dbe3ee; background:#fff; font-size:13px; line-height:1.45;">
-              <strong style="font-size:14px;">${escapeHtmlText(isEnglishUi() ? (item.info.en || item.info.ja) : item.info.ja)}</strong>
-              ${item.reason ? `<span style="color:#64748b; font-size:12px; white-space:normal;">${escapeHtmlText(item.reason)}</span>` : `<span style="color:#94a3b8; font-size:12px;">${escapeHtmlText(mode2RoleLabel(item.role))}</span>`}
+            <span style="display:inline-flex; align-items:center; padding:8px 14px; border-radius:999px; border:1px solid #dbe3ee; background:#fff; font-size:14px; line-height:1.4;">
+              <strong>${escapeHtmlText(isEnglishUi() ? (item.info.en || item.info.ja) : item.info.ja)}</strong>
             </span>
           `).join('')}
         </div>
