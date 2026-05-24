@@ -7027,6 +7027,24 @@
     acc[item.ja] = { label: item.en, short: item.en, code: item.code || '' };
     return acc;
   }, {});
+  const MODE2_ATTR_BY_JA = Object.fromEntries(
+    Object.entries(MODE2_ATTRS).map(([code, info]) => [info.ja, code])
+  );
+  const MODE2_GENRE_FAMILIES = {
+    narrative: ['ANI', 'ANM', 'MOV', 'TVP', 'TV', 'MAN', 'MNG'],
+    game: ['GAM', 'GM'],
+    tech: ['HAR', 'HW', 'SOF', 'SW', 'SFT', 'NET', 'WEB'],
+    music: ['MUS'],
+    print: ['MAG', 'BOO', 'NOV', 'BK'],
+    life: ['FAS', 'FOO', 'TOY', 'IDL', 'PHE']
+  };
+  function mode2GenreFamily(genreCode) {
+    const g = String(genreCode || '').toUpperCase();
+    for (const [family, codes] of Object.entries(MODE2_GENRE_FAMILIES)) {
+      if (codes.includes(g)) return family;
+    }
+    return 'other';
+  }
   const MODE2_SLOT_LABELS = {
     future_city: '未来都市', school: '学園', frontier: '辺境',
     device: '道具', screen: '画面', machine: '装置',
@@ -7058,7 +7076,6 @@
     if (genres.includes('MOV') || genres.includes('TVP') || genres.includes('ANI')) { addAttr('world', 1.4); }
     if (genres.includes('MAN')) { addAttr('author', 0.8); addAttr('world', 0.8); }
     if (genres.includes('GAM')) { addAttr('boyhood', 1.4); addAttr('world', 1.0); addSlot('secretbase', 0.8); }
-    if (genres.length >= 2) { addAttr('crossing', 1.2); addSlot('media_cross', 1.0); }
 
     if (selection && selection.year != null) {
       const year = Number(selection.year);
@@ -7078,7 +7095,7 @@
     if (has(['名作','定番','long-running','代表','金字塔'])) { addAttr('repeat', 0.8); addSlot('classic', 1.0); }
     if (has(['新','初','先駆','勃興','話題','注目','landmark','pioneering'])) { addAttr('future', 1.4); addSlot('turning_point', 1.0); }
 
-    if (!Object.keys(attr).length) addAttr('world', 1.0);
+    if (!Object.keys(attr).length) addAttr('world', 0.7);
     return { item, attr, slots };
   }
 
@@ -7397,7 +7414,8 @@ function buildMode2DiagnosisLocal() {
       HAR: ['電脳','機関','机上'], SW: ['画面','電脳','机上'], SOF: ['画面','電脳','机上'], SFT: ['画面','電脳','机上'], NET: ['回線','電脳','未来'], GM: ['放課後','秘密基地','冒険'], GAM: ['放課後','秘密基地','冒険'],
       MOV: ['銀幕','世界','街角'], TV: ['居間','放課後','街角'], TVP: ['居間','放課後','街角'], ANM: ['学園','世界','夢'], ANI: ['学園','世界','夢'], MNG: ['路地裏','書架','紙上'], MAN: ['路地裏','書架','紙上']
     };
-    const moodByMeaning = { taste: '偏愛', impact: '感化', repeat: '反復', self: '同型', admiration: '憧憬', discovery: '発見' };
+    const moodByMeaning = { taste: '偏愛', impact: '感化', repeat: '反復', self: '同型', oshi: '憧憬', moe: '萌え' };
+    const genreFamilies = new Set();
 
     (kioskState.selections || []).forEach((selection) => {
       const meaning = getKioskMeaningState(selection);
@@ -7411,7 +7429,13 @@ function buildMode2DiagnosisLocal() {
         Object.keys(slots).forEach(code => { slotScores[code] = (slotScores[code] || 0) + slots[code] * def.weight; });
         boostWord(moodWordScores, moodByMeaning[def.key], def.weight);
       });
+      if (meaning.repeat) attrScores.repeat = (attrScores.repeat || 0) + 0.9 * totalMeaningWeight;
+      if (meaning.moe) attrScores.girlhood = (attrScores.girlhood || 0) + 1.0 * totalMeaningWeight;
+      if (meaning.oshi) attrScores.author = (attrScores.author || 0) + 0.9 * totalMeaningWeight;
+      if (meaning.self) attrScores.daily = (attrScores.daily || 0) + 0.6 * totalMeaningWeight;
+      if (meaning.impact) attrScores.future = (attrScores.future || 0) + 0.5 * totalMeaningWeight;
       const genres = Array.isArray(item && item.genre) ? item.genre.map(g => String(g || '').toUpperCase()) : [];
+      genres.forEach(g => genreFamilies.add(mode2GenreFamily(g)));
       if (genres.length) {
         genres.forEach(g => (worldBySignal[g] || []).forEach(w => boostWord(worldWordScores, w, totalMeaningWeight / Math.max(1, genres.length))));
       } else {
@@ -7424,7 +7448,32 @@ function buildMode2DiagnosisLocal() {
       if (genres.includes('MOV') || genres.includes('ANM') || genres.includes('ANI') || genres.includes('MNG') || genres.includes('MAN')) roleByAttr.world.forEach(w => boostWord(roleWordScores, w, totalMeaningWeight / 5));
     });
 
-    const rankedAttrs = Object.entries(attrScores).sort((a,b) => b[1] - a[1]);
+    const genreFamilyCount = genreFamilies.size;
+    if (genreFamilyCount >= 4) {
+      attrScores.crossing = (attrScores.crossing || 0) + 6;
+      slotScores.media_cross = (slotScores.media_cross || 0) + genreFamilyCount;
+    } else if (genreFamilyCount === 3) {
+      attrScores.crossing = (attrScores.crossing || 0) + 3;
+      slotScores.media_cross = (slotScores.media_cross || 0) + 2;
+    } else if (genreFamilyCount === 2) {
+      attrScores.crossing = (attrScores.crossing || 0) + 0.8;
+    }
+
+    let rankedAttrs = Object.entries(attrScores).sort((a, b) => b[1] - a[1]);
+    if (rankedAttrs.length >= 2 && rankedAttrs[0][0] === 'crossing') {
+      const topScore = Number(rankedAttrs[0][1] || 0);
+      const secondScore = Number(rankedAttrs[1][1] || 0);
+      if (topScore < secondScore * 1.18 || (topScore - secondScore) < 0.85) {
+        rankedAttrs = [rankedAttrs[1], rankedAttrs[0], ...rankedAttrs.slice(2)];
+      }
+    }
+    const commonQuad = new Set(['world', 'mechanism', 'crossing', 'boyhood']);
+    if (rankedAttrs.length >= 4 && rankedAttrs.slice(0, 3).every(([code]) => commonQuad.has(code))) {
+      const altIdx = rankedAttrs.findIndex(([code], idx) => idx >= 3 && !commonQuad.has(code));
+      if (altIdx >= 0) {
+        rankedAttrs = [rankedAttrs[0], rankedAttrs[1], rankedAttrs[altIdx], ...rankedAttrs.slice(2, altIdx), ...rankedAttrs.slice(altIdx + 1)];
+      }
+    }
     const top3 = rankedAttrs.slice(0,3).map(([code, score], idx) => ({
       code,
       score,
@@ -7586,6 +7635,7 @@ function buildMode2AiPrompt(payload) {
         'Choose exactly three upper attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the names exactly as written in Japanese.',
         attrs.join(' / '),
         'For 越境回遊 specifically, choose it only when there is clear and repeated crossing evidence across multiple items, genres, or media.',
+        'Avoid giving everyone the same four attributes (世界観没入 / 機構偏愛 / 越境回遊 / 少年回路). Prefer a distinctive mix, and use 反復愛着 / 少女回路 / 作者偏信 / 日常浸透 / 異形親和 / 記録蒐集 when the selections support them.',
         'Then think about lower modules in this order.',
         'First, examine whether any DEEP lower modules clearly fit. Use them only when there is strong evidence in the selections and meaning tags.',
         'Deep lower modules:', deepLowerModules.join(' / '),
@@ -7624,6 +7674,7 @@ function buildMode2AiPrompt(payload) {
       '上位属性は必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
       attrs.join(' / '),
       '「越境回遊」は、複数項目にまたがって明確なジャンル横断・媒体横断の根拠が繰り返し見える場合にのみ選んでください。',
+      '世界観没入・機構偏愛・越境回遊・少年回路の4つだけに偏らないでください。反復愛着・少女回路・作者偏信・日常浸透・異形親和・記録蒐集も同等に検討し、その人らしい組み合わせを選んでください。',
       '下位モジュールは、まず「深いモジュール」が十分に当てはまるかを検討してください。十分な根拠があるときだけ採用してください。',
       '深いモジュール候補:',
       deepLowerModules.join(' / '),
@@ -7737,8 +7788,10 @@ function buildMode2AiPrompt(payload) {
     const fb = String(fallbackName || '').trim();
     const candidate = sanitizeMode2Text(rawValue, fb).trim();
     if (!candidate) return fb;
-    // 上位属性名は固定リスト外を許可しない（文字化けや予期しない出力を抑止）
-    if (Object.prototype.hasOwnProperty.call(MODE2_ATTRS, candidate)) return candidate;
+    if (MODE2_ATTR_BY_JA[candidate]) return candidate;
+    if (Object.prototype.hasOwnProperty.call(MODE2_ATTRS, candidate) && MODE2_ATTRS[candidate]) {
+      return MODE2_ATTRS[candidate].ja || fb;
+    }
     return fb;
   }
 
