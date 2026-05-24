@@ -7496,11 +7496,13 @@ function buildMode2DiagnosisLocal() {
     const alias = `${aliasLead}${topWorldWords[0] || '電脳'}${topWorldWords[1] ? topWorldWords[1] + 'の' : 'の'}${topMoodWord}${topRoleWord}`;
     const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
-    const summary = `あなたは「${top3[0].info.ja}」を中心に、「${top3[1].info.ja}」で好みの幅を持ち、「${top3[2].info.ja}」が深いところで効いているタイプです。`;
+    const summary = `今回の選択では「${top3[0].info.ja}」がいちばん強く出ました。ほかに「${top3[1].info.ja}」「${top3[2].info.ja}」の手触りも混じっています。`;
     const localModuleTitle = supplemental.lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏';
     const resultText = [
-      'あなたをつくる3つの感性属性','',
-      ...top3.flatMap(t => [`${t.role}｜${t.info.ja}`, t.info.desc, '']),
+      'あなたの選択の読み解き','',
+      'あなたの異名', alias, '',
+      '今回いちばん強かった感性', `${top3[0].role}｜${top3[0].info.ja}`, top3[0].info.desc, '',
+      'にじむ感性', `${top3[1].info.ja} / ${top3[2].info.ja}`, '',
       ...(supplemental.lowerModules.length ? [localModuleTitle, ...(supplemental.lowerModules.map(m => `・${m.ja}`)), ''] : []),
       ...(supplemental.practiceModes.length ? ['関わり方', ...(supplemental.practiceModes.map(m => `・${m.ja}`)), ''] : []),
       'あなたの記号', symbol, '',
@@ -7633,9 +7635,12 @@ function buildMode2AiPrompt(payload) {
         'The six meaning tags are: Taste / Moe / Impact / Returned to / Feels like me / Oshi / Support.',
         'Read the pattern of selections, crossings between genres and media, jumps across time periods, and the distribution of the meaning tags.',
         'Choose exactly three upper attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the names exactly as written in Japanese.',
+        'Treat mainAttribute as the single anchor of the reading. subAttribute and hiddenAttribute are softer traces that bleed through; do not present all three as equally strong personality pillars.',
         attrs.join(' / '),
         'For 越境回遊 specifically, choose it only when there is clear and repeated crossing evidence across multiple items, genres, or media.',
-        'Avoid giving everyone the same four attributes (世界観没入 / 機構偏愛 / 越境回遊 / 少年回路). Prefer a distinctive mix, and use 反復愛着 / 少女回路 / 作者偏信 / 日常浸透 / 異形親和 / 記録蒐集 when the selections support them.',
+        'Avoid giving everyone the same four attributes (世界観没入 / 機構偏愛 / 越境回遊 / 少年回路). Prefer a distinctive mix when supported, but do not force variety if the evidence is weak.',
+        'Write summary and readingPoints around the mainAttribute first, then mention lowerModules, practiceModes, meaning tags, and specific selection patterns for personal flavor.',
+        'In summary, do not claim that three attributes are equally defining. Say what was strongest this time, and what else subtly mixed in.',
         'Then think about lower modules in this order.',
         'First, examine whether any DEEP lower modules clearly fit. Use them only when there is strong evidence in the selections and meaning tags.',
         'Deep lower modules:', deepLowerModules.join(' / '),
@@ -7647,6 +7652,7 @@ function buildMode2AiPrompt(payload) {
         practiceModes.join(' / '),
         'Return JSON only. No markdown. No code fences. No commentary outside JSON.',
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
+        'mainAttribute.reason should be the strongest evidence-based explanation. subAttribute.reason and hiddenAttribute.reason should be shorter and softer, as traces rather than equal claims.',
         'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
         'epithetReason must explain only the origin and intent of epithet (the long alias). Do not mention epithetShort in epithetReason.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
@@ -7671,10 +7677,13 @@ function buildMode2AiPrompt(payload) {
       '入力として、ユーザーが選んだ項目一覧と、各項目に対する意味づけタグが渡されます。',
       'タグは次の6種類です: 好み / 萌え / 影響 / 繰り返し触れた / 自分らしい / 推す',
       '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
-      '上位属性は必ず次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
+      '上位属性は次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
+      '主属性を今回の読み解きの軸にしてください。副属性・裏属性は「にじむ感性」「背景の感性」として、主属性ほど強く語らないでください。3つを対等な性格タイプのように描写してはいけません。',
       attrs.join(' / '),
       '「越境回遊」は、複数項目にまたがって明確なジャンル横断・媒体横断の根拠が繰り返し見える場合にのみ選んでください。',
-      '世界観没入・機構偏愛・越境回遊・少年回路の4つだけに偏らないでください。反復愛着・少女回路・作者偏信・日常浸透・異形親和・記録蒐集も同等に検討し、その人らしい組み合わせを選んでください。',
+      '世界観没入・機構偏愛・越境回遊・少年回路に偏りやすいことは自然です。無理に散らさず、主属性を軸に、その人の選択内容・意味タグ・下位モジュールで個性を出してください。',
+      'summary と readingPoints は、主属性を中心に書いてください。選択項目の並び、意味タグ、下位モジュール、関わり方から、その人だけの手触りを具体的に語ってください。',
+      'summary では「3属性が対等にあなたを定義する」とは書かず、「今回いちばん強かった感性」と「ほかに混じる手触り」という温度差を保ってください。',
       '下位モジュールは、まず「深いモジュール」が十分に当てはまるかを検討してください。十分な根拠があるときだけ採用してください。',
       '深いモジュール候補:',
       deepLowerModules.join(' / '),
@@ -7687,7 +7696,7 @@ function buildMode2AiPrompt(payload) {
       'また、実践モードは次の固定リストから1〜2つ選んでください。',
       practiceModes.join(' / '),
       '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
-      '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。',
+      '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。主属性の reason は最も根拠を厚くし、副属性・裏属性の reason は短く控えめにしてください。',
       'また、ユーザー固有の少し長めの異名を1つ作ってください。作品名・製品名・キャラクター名をそのまま異名に入れてはいけません。代わりに、それらを感じさせる象徴語・比喩語・断片語に変換してください。JSONの diagnostic.keywords がある項目では、その keywords を優先して使ってください。keywords がない場合も、媒体・文化圏・手触りを匂わせる抽象語に置き換え、直接名は避けてください。異名は戒名・家紋名・種族名のように、少し謎めいていても雰囲気が伝わるものにしてください。',
       'epithet（長い異名）は epithetShort（短い異名）より明確に長くしてください。日本語では目安として16〜36文字程度で、象徴語を2〜3個つないだ厚みのある言い回しにしてください。',
       'あわせて、短い異名も1つ返してください。短い異名も同様に、直接的な固有名詞ではなく、象徴語ベースにしてください。',
@@ -7716,8 +7725,22 @@ function buildMode2AiPrompt(payload) {
   }
 
   function mode2RoleLabel(roleJa) {
-    if (!isEnglishUi()) return roleJa;
-    return ({ '主属性': 'Main Attribute', '副属性': 'Sub Attribute', '裏属性': 'Hidden Attribute' })[roleJa] || roleJa;
+    if (!isEnglishUi()) {
+      return ({
+        '主属性': '今回いちばん強かった感性',
+        '副属性': 'にじむ感性',
+        '裏属性': '背景の感性'
+      })[roleJa] || roleJa;
+    }
+    return ({
+      '主属性': 'Strongest Sensibility This Time',
+      '副属性': 'Bleeding Through',
+      '裏属性': 'Background Trace'
+    })[roleJa] || roleJa;
+  }
+
+  function mode2ResultPageTitle() {
+    return t('あなたの選択の読み解き', 'Reading of Your Selections');
   }
 
   const MODE2_ATTR_SHORT_JA = {
@@ -8157,7 +8180,7 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const aliasShortEn = isEnglishUi() ? (aliasShortTexts.ja || fallbackLocal.aliasShort || '') : (aliasShortTexts.en || aliasTexts.en || '');
 
     const epithetReason = sanitizeMode2Text(parsed && parsed.epithetReason, isEnglishUi() ? 'This epithet was built from the pattern of your selections and their meanings.' : '選択された項目の並びと意味づけから組み立てられた異名です。');
-    const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Several attributes overlap in the pattern and meanings of your selections.' : '選択の並びと意味づけから、複数の属性が重なって見えました。'));
+    const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Your selections this time were read with one strongest sensibility at the center, and a few softer traces mixed in.' : '今回の選択は、いちばん強い感性を軸に、ほかにもにじむ手触りを読み取りました。'));
     const readingPoints = Array.isArray(parsed && parsed.readingPoints)
       ? parsed.readingPoints.slice(0,3).map(v => sanitizeMode2Text(v, '')).filter(Boolean)
       : [];
@@ -8166,23 +8189,27 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
 
     const resultText = isEnglishUi()
       ? [
-          'Three Sensibility Attributes That Shape You','',
-          ...normTop3.flatMap(t => [ `${mode2RoleLabel(t.role)} | ${t.info.en}`, t.info.desc, t.reason ? `Reason: ${t.reason}` : '', '' ]),
-          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
-          'How You Engage', ...practiceModes.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), '',
-          'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
+          'Reading of Your Selections','',
           'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
+          'Strongest Sensibility This Time', `${normTop3[0].info.en}`, normTop3[0].info.desc, normTop3[0].reason ? `Reason: ${normTop3[0].reason}` : '', '',
+          'Bleeding Through', `${normTop3[1].info.en}${normTop3[2].info.en ? ' / ' + normTop3[2].info.en : ''}`, '',
+          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
+          ...(practiceModes.length ? ['How You Engage', ...practiceModes.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
+          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['Strong Slots', fallbackLocal.topSlots.join(' / '), ''] : []),
+          'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
           'Why this name', epithetReason, '',
           'Overall', summary, '',
           'Reading of your selections', ...readingPoints.map(v => '- ' + v)
         ].filter(Boolean).join('\n')
       : [
-          'あなたをつくる3つの感性属性','',
-          ...normTop3.flatMap(t => [ `${t.role}｜${t.info.ja}`, t.info.desc, t.reason ? `理由: ${t.reason}` : '', '' ]),
-          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏'), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
-          '関わり方', ...practiceModes.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), '',
-          'あなたの記号', symbol, '',
+          'あなたの選択の読み解き','',
           'あなたの異名', alias, '',
+          '今回いちばん強かった感性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, normTop3[0].reason ? `理由: ${normTop3[0].reason}` : '', '',
+          'にじむ感性', `${normTop3[1].info.ja} / ${normTop3[2].info.ja}`, '',
+          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏'), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
+          ...(practiceModes.length ? ['関わり方', ...practiceModes.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
+          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['濃く出た手触り', fallbackLocal.topSlots.join(' / '), ''] : []),
+          'あなたの記号', symbol, '',
           'この名の由来', epithetReason, '',
           '総合すると', summary, '',
           '今回の読み解き', ...readingPoints.map(v => '・' + v)
@@ -8191,8 +8218,11 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
   }
 
 function buildMode2ResultHtml(result) {
+    const top3 = Array.isArray(result.top3) ? result.top3 : [];
+    const mainAttr = top3[0] || null;
+    const secondaryAttrs = top3.slice(1);
     const symbolAlpha = mode2ValueToText(
-      ((result.top3 || [])
+      (top3
         .slice(0, 3)
         .map(t => mode2ValueToText(
           (t && t.info && t.info.code) || (t && t.code && MODE2_ATTRS[t.code] && MODE2_ATTRS[t.code].code),
@@ -8204,16 +8234,47 @@ function buildMode2ResultHtml(result) {
       result.symbol,
       ''
     );
-    const parts = result.top3.map(t => `
-      <div style="padding:18px 20px; border:1px solid #d7dee8; border-radius:16px; background:#fff;">
-        <div style="font-size:18px; color:#8b97a8; margin-bottom:8px; font-weight:600; letter-spacing:0.01em;">${escapeHtmlText(mode2RoleLabel(t.role))}：</div>
-        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:8px;">
-          <div style="font-size:28px; font-weight:800; line-height:1.2; letter-spacing:0.01em;">${escapeHtmlText(isEnglishUi() ? (t.info.en || t.info.ja) : t.info.ja)}</div>
-          <div style="font-size:21px; color:#0f172a; font-weight:700; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (t.info.ja || '') : (t.info.en || ''))}</div>
+    const mainCardHtml = mainAttr ? `
+      <div style="padding:20px 22px; border:1px solid #c7d2fe; border-radius:18px; background:linear-gradient(180deg,#ffffff 0%,#f8faff 100%);">
+        <div style="font-size:13px; color:#64748b; margin-bottom:10px; font-weight:600; letter-spacing:0.02em;">${escapeHtmlText(mode2RoleLabel(mainAttr.role))}</div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:10px;">
+          <div style="font-size:32px; font-weight:800; line-height:1.15; letter-spacing:0.01em;">${escapeHtmlText(isEnglishUi() ? (mainAttr.info.en || mainAttr.info.ja) : mainAttr.info.ja)}</div>
+          <div style="font-size:20px; color:#475569; font-weight:700; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (mainAttr.info.ja || '') : (mainAttr.info.en || ''))}</div>
         </div>
-        <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(t.info.desc || '')}</div>
+        <div style="font-size:14px; line-height:1.75; color:#334155;">${escapeHtmlText(mainAttr.info.desc || '')}</div>
+        ${mainAttr.reason ? `<div style="margin-top:12px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:13px; line-height:1.7; color:#475569;">${escapeHtmlText(isEnglishUi() ? ('Reason: ' + mainAttr.reason) : ('理由: ' + mainAttr.reason))}</div>` : ''}
       </div>
-    `).join('');
+    ` : '';
+    const secondaryChipsHtml = secondaryAttrs.length ? `
+      <div style="margin-top:14px;">
+        <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${t('にじむ感性', 'Bleeding Through')}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          ${secondaryAttrs.map(item => `
+            <span style="display:inline-flex; flex-direction:column; gap:4px; max-width:100%; padding:10px 14px; border-radius:14px; border:1px solid #dbe3ee; background:#fff; font-size:13px; line-height:1.45;">
+              <strong style="font-size:14px;">${escapeHtmlText(isEnglishUi() ? (item.info.en || item.info.ja) : item.info.ja)}</strong>
+              ${item.reason ? `<span style="color:#64748b; font-size:12px; white-space:normal;">${escapeHtmlText(item.reason)}</span>` : `<span style="color:#94a3b8; font-size:12px;">${escapeHtmlText(mode2RoleLabel(item.role))}</span>`}
+            </span>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+    const readingPointsHtml = (Array.isArray(result.readingPoints) && result.readingPoints.length)
+      ? `<ul style="margin:10px 0 0 18px; font-size:14px; line-height:1.8; color:#334155;">${result.readingPoints.map(v => `<li>${escapeHtmlText(v)}</li>`).join('')}</ul>`
+      : '';
+    const slotsHtml = (Array.isArray(result.topSlots) && result.topSlots.length) ? `
+      <div style="margin-top:16px;">
+        <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${t('濃く出た手触り', 'Strongest Textures')}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">${result.topSlots.map(v => `<span style="padding:6px 10px; border-radius:999px; border:1px solid #dbe3ee; background:#fff; font-size:13px;">${escapeHtmlText(v)}</span>`).join('')}</div>
+      </div>
+    ` : '';
+    const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
+    const moduleSectionTitle = result.lowerModuleLevel === 'general' ? t('惹かれやすい領域', 'Areas You Naturally Gravitate Toward') : t('濃い文化圏', 'Strong Cultural Modules');
+    const practiceHtml = (result.practiceModes || []).length ? `
+      <div style="margin-top:16px;">
+        <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${t('関わり方', 'How You Engage')}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">${result.practiceModes.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong></span>`).join('')}</div>
+      </div>
+    ` : '';
     const selectionStatusLines = (kioskState.selections || [])
       .slice()
       .sort((a, b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year)
@@ -8225,27 +8286,32 @@ function buildMode2ResultHtml(result) {
     const selectionStatusHtml = selectionStatusLines.length
       ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${selectionStatusLines.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>`
       : `<div style="font-size:13px; color:#64748b;">${t('（選択なし）', '(No selection)')}</div>`;
-    const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
-    const moduleSectionTitle = result.lowerModuleLevel === 'general' ? t('惹かれやすい領域', 'Areas You Naturally Gravitate Toward') : t('濃い文化圏', 'Strong Cultural Modules');
     return `
       <div data-diagnosis-report style="max-width:1040px; margin:0 auto; color:#0f172a;">
-        <div style="font-size:24px; font-weight:800; margin-bottom:6px; line-height:1.35;">${t('あなたをつくる3つの感性属性', 'Three Sensibility Attributes That Shape You')}</div>
-        <div style="display:grid; gap:14px;">${parts}</div>
-        ${(result.lowerModules || []).length ? `<div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
-          ${(result.lowerModules || []).length ? `<div style="font-size:13px; color:#7c8b9e; font-weight:600;">${moduleSectionTitle}</div>${moduleHtml}` : ``}
-        </div>` : ``}
-        <div style="margin-top:18px; padding:18px 20px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
-          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの記号', 'Your Emblem')}</div>
-          <div style="display:flex; justify-content:flex-start; align-items:baseline; gap:14px; margin-top:6px; flex-wrap:wrap;">
-            <div style="font-size:36px; font-weight:900; letter-spacing:0.03em; line-height:1.1;">${escapeHtmlText(symbolAlpha)}</div>
-          </div>
-          <div style="font-size:13px; color:#7c8b9e; margin-top:14px; font-weight:600;">${t('あなたの異名', 'Your Epithet')}</div>
-          <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; margin-top:6px; flex-wrap:wrap;">
+        <div style="font-size:24px; font-weight:800; margin-bottom:14px; line-height:1.35;">${escapeHtmlText(mode2ResultPageTitle())}</div>
+        <div style="padding:20px 22px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:18px;">
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの異名', 'Your Epithet')}</div>
+          <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; margin-top:8px; flex-wrap:wrap;">
             <div style="font-size:31px; font-weight:800; line-height:1.25;">${escapeHtmlText(result.alias)}</div>
             <div style="font-size:20px; color:#475569; font-weight:600; line-height:1.25;">${escapeHtmlText(result.aliasEn || '')}</div>
           </div>
-          <div style="font-size:13px; color:#7c8b9e; margin-top:14px; font-weight:600;">${t('総合すると', 'Overall')}</div>
-          <div style="font-size:14px; line-height:1.85; margin-top:6px; color:#1e293b;">${escapeHtmlText(result.summary)}</div>
+          <div style="font-size:13px; color:#7c8b9e; margin-top:16px; font-weight:600;">${t('総合すると', 'Overall')}</div>
+          <div style="font-size:15px; line-height:1.85; margin-top:6px; color:#1e293b;">${escapeHtmlText(result.summary)}</div>
+          ${readingPointsHtml ? `<div style="margin-top:14px;"><div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('今回の読み解き', 'Reading of Your Selections')}</div>${readingPointsHtml}</div>` : ''}
+        </div>
+        <div style="margin-top:18px;">${mainCardHtml}${secondaryChipsHtml}</div>
+        ${((result.lowerModules || []).length || (result.practiceModes || []).length || (result.topSlots || []).length) ? `<div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
+          ${(result.lowerModules || []).length ? `<div style="font-size:13px; color:#7c8b9e; font-weight:600;">${moduleSectionTitle}</div>${moduleHtml}` : ''}
+          ${practiceHtml}
+          ${slotsHtml}
+        </div>` : ''}
+        <div style="margin-top:18px; padding:16px 18px; background:#fff; border:1px solid #e2e8f0; border-radius:16px;">
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの記号', 'Your Emblem')}</div>
+          <div style="display:flex; justify-content:flex-start; align-items:baseline; gap:14px; margin-top:8px; flex-wrap:wrap;">
+            <div style="font-size:34px; font-weight:900; letter-spacing:0.04em; line-height:1.1;">${escapeHtmlText(symbolAlpha)}</div>
+            ${result.symbol && result.symbol !== symbolAlpha ? `<div style="font-size:14px; color:#64748b;">${escapeHtmlText(result.symbol)}</div>` : ''}
+          </div>
+          ${result.epithetReason ? `<div style="font-size:13px; color:#7c8b9e; margin-top:14px; font-weight:600;">${t('この名の由来', 'Why this name')}</div><div style="font-size:13px; line-height:1.75; margin-top:6px; color:#475569;">${escapeHtmlText(result.epithetReason)}</div>` : ''}
         </div>
         <div style="margin-top:18px; border-top:1px solid #e5e7eb; padding-top:14px;">
           <div style="font-size:13px; color:#64748b; margin-bottom:8px; font-weight:600;">${t('項目選択状況', 'Item Selection Status')}</div>
@@ -8263,19 +8329,26 @@ function buildMode2ResultHtml(result) {
 function buildMode2CompactQrReport(result) {
     if (!result || typeof result !== 'object') return '';
     const top3 = Array.isArray(result.top3) ? result.top3 : [];
+    const main = top3[0] || null;
+    const secondary = top3.slice(1);
     const compactLines = [
-      'あなたをつくる3つの感性属性',
-      ...top3.slice(0, 3).map(t => `${t.role}｜${mode2ValueToText(t && t.info && t.info.ja, '—')}`),
+      mode2ResultPageTitle(),
       '',
-      'あなたの記号',
-      [mode2ValueToText(result.emblemCode || result.symbol, '—'), mode2ValueToText(result.symbolEn, '')].filter(Boolean).join(' / '),
-      '',
-      'あなたの異名',
+      t('あなたの異名', 'Your Epithet'),
       [mode2ValueToText(result.epithet || result.alias, '—'), mode2ValueToText(result.aliasEn, '')].filter(Boolean).join(' / '),
       '',
-      '総合すると',
+      t('今回いちばん強かった感性', 'Strongest Sensibility This Time'),
+      main ? mode2ValueToText(isEnglishUi() ? (main.info && main.info.en) : (main.info && main.info.ja), '—') : '—',
+      '',
+      t('にじむ感性', 'Bleeding Through'),
+      secondary.map(tItem => mode2ValueToText(isEnglishUi() ? (tItem.info && tItem.info.en) : (tItem.info && tItem.info.ja), '')).filter(Boolean).join(' / ') || '—',
+      '',
+      t('あなたの記号', 'Your Emblem'),
+      [mode2ValueToText(result.emblemCode || result.symbol, '—'), mode2ValueToText(result.symbolEn, '')].filter(Boolean).join(' / '),
+      '',
+      t('総合すると', 'Overall'),
       mode2ValueToText(result.shareText || result.summary, '')
-    ].filter(Boolean);
+    ].filter((line, idx, arr) => !(line === '' && arr[idx - 1] === ''));
     return compactLines.join('\n');
   }
 
