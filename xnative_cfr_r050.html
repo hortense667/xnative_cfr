@@ -7506,7 +7506,7 @@ function buildMode2DiagnosisLocal() {
     const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
     const summary = `今回の選択では「${top3[0].info.ja}」が中心に見えました。`;
-    const epithetReason = `「${alias}」と「${aliasEn}」は、選んだ項目の象徴語から組み立てた対になる異名です。`;
+    const epithetReason = buildMode2LocalEpithetReason(alias, aliasEn);
     const localModuleTitle = supplemental.lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏';
     const resultText = [
       'あなたの選択の読み解き','',
@@ -7666,6 +7666,7 @@ function buildMode2AiPrompt(payload) {
         'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
         'epithet must be one string in the form "Japanese epithet || English alias". Japanese and English must be translations of the same epithet, not separate images.',
         'epithetReason must explain both the Japanese and English epithet together as a paired name, not the English line alone.',
+        'In epithetReason, explain only the symbolic words inside the epithet itself. Do not mention the eleven attribute names (such as Boyhood Circuit, Crossing, Mechanism Love, etc.). Those appear later in the report.',
         'mainAttribute, subAttribute, and hiddenAttribute must be three different attribute names. Do not repeat the same attribute.',
         'In summary, do not re-list every attribute name that will appear below. Keep it centered on the main attribute.',
         'readingPoints must not repeat media examples already used in mainAttribute.reason or summary.',
@@ -7719,6 +7720,7 @@ function buildMode2AiPrompt(payload) {
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。日本語と英語は別々のイメージではなく、同じ異名の対訳にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
       'epithetReason（この名の由来）は、日本語の異名と英語の異名の両方を説明してください。英語だけ、日本語だけの説明にしないでください。同じ象徴イメージの対訳であることを示してください。',
+      'epithetReason では、異名に含まれる象徴語・役割語だけを説明してください。11属性の名称（少年回路・越境回遊・機構偏愛など）は使わないでください。属性名はこのあと別セクションで初めて出ます。',
       'mainAttribute, subAttribute, hiddenAttribute は必ず3つとも異なる属性名にしてください。同じ属性を2回以上使わないでください。',
       'summary では、下に出る属性名をすべて列挙し直さないでください。主属性を中心にした総評に留めてください。',
       'readingPoints は3件ですが、mainAttribute.reason や summary で既に触れた作品・例を繰り返さないでください。別角度の読みだけを書いてください。',
@@ -8164,6 +8166,41 @@ function buildMode2AiPrompt(payload) {
     return { ja: aliasJa, en: `${roleEn} of ${symbolEn}` };
   }
 
+  function mode2EpithetReasonUsesAttrTerms(text) {
+    const s = String(text || '');
+    if (!s) return false;
+    return Object.values(MODE2_ATTRS).some(info =>
+      (info.ja && s.indexOf(info.ja) >= 0) || (info.en && s.indexOf(info.en) >= 0)
+    );
+  }
+
+  function buildMode2LocalEpithetReason(aliasJa, aliasEnLine) {
+    const ja = String(aliasJa || '').trim();
+    const en = String(aliasEnLine || '').trim();
+    const parts = ja.split('の');
+    const symbolPart = parts.length >= 2 ? parts.slice(0, -1).join('の') : ja;
+    const rolePart = parts.length >= 2 ? parts[parts.length - 1] : '';
+    if (isEnglishUi()) {
+      if (rolePart && symbolPart) {
+        return `"${symbolPart}" captures the symbolic mood from your selections, and "${rolePart}" hints at how you tend to carry that mood. The English line "${en}" is the same image in paired form.`;
+      }
+      return `The Japanese epithet "${ja}" and the English "${en}" are paired names built from the same symbolic image in your selections.`;
+    }
+    if (rolePart && symbolPart) {
+      return `「${symbolPart}」は、選んだ項目から浮かんだ象徴の手触りです。「${rolePart}」は、その手触りをどう抱えていくかを示す役割語です。英語の「${en}」も同じイメージの対訳です。`;
+    }
+    return `「${ja}」と「${en}」は、今回の選択から浮かんだ同じ象徴イメージの対になる異名です。`;
+  }
+
+  function resolveMode2EpithetReason(rawReason, aliasJa, aliasEnLine) {
+    const epithetReason = sanitizeMode2Text(rawReason, '');
+    const local = () => buildMode2LocalEpithetReason(aliasJa, aliasEnLine);
+    if (!epithetReason) return local();
+    if (!isEnglishUi() && !/[\u3040-\u30ff\u3400-\u9fff]/.test(epithetReason)) return local();
+    if (mode2EpithetReasonUsesAttrTerms(epithetReason)) return local();
+    return epithetReason;
+  }
+
 
   function splitMode2BilingualText(raw) {
     const text = mode2ValueToText(raw, '').trim();
@@ -8246,16 +8283,7 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const aliasShort = isEnglishUi() ? (aliasShortPair.en || aliasEnLine) : (aliasShortPair.ja || aliasJa);
     const aliasShortEn = isEnglishUi() ? (aliasShortPair.ja || aliasJa) : (aliasShortPair.en || aliasEnLine);
 
-    let epithetReason = sanitizeMode2Text(parsed && parsed.epithetReason, '');
-    if (!epithetReason) {
-      epithetReason = isEnglishUi()
-        ? `The Japanese epithet "${aliasJa}" and the English "${aliasEnLine}" are paired names built from the same symbolic image in your selections.`
-        : `「${aliasJa}」と「${aliasEnLine}」は、今回の選択から浮かんだ同じ象徴イメージの異名です。`;
-    } else if (!isEnglishUi() && !/[\u3040-\u30ff\u3400-\u9fff]/.test(epithetReason)) {
-      epithetReason = `「${aliasJa}」と「${aliasEnLine}」は、今回の選択から浮かんだ同じ象徴イメージの異名です。`;
-    } else if (epithetReason.indexOf(aliasJa) < 0 && epithetReason.indexOf(aliasEnLine.split(',')[0].trim()) < 0) {
-      epithetReason = `「${aliasJa}」／${aliasEnLine} — ${epithetReason}`;
-    }
+    const epithetReason = resolveMode2EpithetReason(parsed && parsed.epithetReason, aliasJa, aliasEnLine);
     const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Your selections this time centered on one strongest attribute.' : `今回の選択では「${normTop3[0].info.ja}」が中心に見えました。`));
     const readingPoints = Array.isArray(parsed && parsed.readingPoints)
       ? parsed.readingPoints.slice(0,3).map(v => sanitizeMode2Text(v, '')).filter(Boolean)
