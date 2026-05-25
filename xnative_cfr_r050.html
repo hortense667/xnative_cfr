@@ -83,6 +83,7 @@
 
   /* モーダル */
   .modalOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; z-index:2000; align-items:center; justify-content:center; }
+  #mode2OtakuAttrsGuideOverlay{ z-index:2200; display:flex; padding:16px; }
   .modal{ background:#fff; width:min(880px, calc(100% - 32px)); max-height:84vh; overflow:auto; border-radius:12px; box-shadow:0 24px 80px rgba(0,0,0,.25); }
   /* スマホ・キオスク時：ジャンル選択モーダルを青メッセージ（kioskStepOverlay）の下に表示 */
   @media (max-width: 768px) {
@@ -1018,6 +1019,7 @@
       }
     }
     const footerMode = (options && options.footer) || 'default';
+    modal.dataset.footerMode = footerMode;
     if (modalFooter) {
       if (footerMode === 'none') {
         modalFooter.style.display = 'none';
@@ -1215,7 +1217,14 @@
   }
   modalClose.addEventListener('click', closeModal);
   modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
-  window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal.style.display==='flex') closeModal(); });
+  window.addEventListener('keydown', (e)=>{
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('mode2OtakuAttrsGuideOverlay')) {
+      closeMode2OtakuAttrsGuide();
+      return;
+    }
+    if (modal.style.display === 'flex') closeModal();
+  });
   function showError(title, errors){
     const text = Array.isArray(errors) ? errors.join('\n') : String(errors||'');
     openModalText(title, text);
@@ -7783,14 +7792,44 @@ function buildMode2AiPrompt(payload) {
     </div>`;
   }
 
+  function closeMode2OtakuAttrsGuide() {
+    const overlay = document.getElementById('mode2OtakuAttrsGuideOverlay');
+    if (!overlay) return;
+    overlay.remove();
+    const btn = document.getElementById('mode2OtakuAttrsGuideBtn');
+    if (btn) btn.focus();
+  }
+
   function openMode2OtakuAttrsGuide() {
-    openModal(mode2OtakuAttrsGuideButtonLabel(), buildMode2OtakuAttrsGuideHtml(), { footer: 'none' });
+    closeMode2OtakuAttrsGuide();
+    const overlay = document.createElement('div');
+    overlay.id = 'mode2OtakuAttrsGuideOverlay';
+    overlay.className = 'modalOverlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    const closeLabel = t('閉じる', 'Close');
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:760px; width:min(760px, 100%); max-height:min(90vh, 900px); overflow:auto;">
+        <header><h3>${escapeHtmlText(mode2OtakuAttrsGuideButtonLabel())}</h3></header>
+        <div class="content">${buildMode2OtakuAttrsGuideHtml()}</div>
+        <footer style="display:flex; justify-content:flex-end; padding:12px 16px; border-top:1px solid #e5e7eb;">
+          <button type="button" class="btn" id="mode2OtakuAttrsGuideCloseBtn">${escapeHtmlText(closeLabel)}</button>
+        </footer>
+      </div>
+    `;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeMode2OtakuAttrsGuide();
+    });
+    const closeBtn = overlay.querySelector('#mode2OtakuAttrsGuideCloseBtn');
+    if (closeBtn) closeBtn.addEventListener('click', closeMode2OtakuAttrsGuide);
+    document.body.appendChild(overlay);
+    if (closeBtn) closeBtn.focus();
   }
 
   function attachMode2OtakuAttrsGuideButton() {
     const btn = document.getElementById('mode2OtakuAttrsGuideBtn');
     if (!btn) return;
-    btn.addEventListener('click', openMode2OtakuAttrsGuide);
+    btn.onclick = openMode2OtakuAttrsGuide;
   }
 
   function mode2EpithetContainsDirectTitles(text) {
@@ -8583,6 +8622,7 @@ function buildMode2CompactQrReport(result) {
       lastProbeEventYear = null;
     }
     window.lastDiagnosisExecutedAt = new Date().toISOString();
+    window.lastMode2DiagnosisResult = result;
     kioskModalPhase = 'diag2';
     openModal(t('診断結果', 'Diagnosis Result'), buildMode2ResultHtml(result), { footer: 'next' });
     attachKioskPersonalQrButton(result);
