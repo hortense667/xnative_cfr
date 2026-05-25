@@ -8436,10 +8436,10 @@ function buildMode2ResultHtml(result) {
     `;
     return `
       <div data-diagnosis-report style="max-width:1040px; margin:0 auto; color:#0f172a;">
-        <div style="margin-bottom:12px;">
-          <button type="button" id="mode2OtakuAttrsGuideBtn" data-copy-exclude="1" style="padding:8px 14px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; color:#475569; cursor:pointer; font-size:13px; font-weight:600;">${escapeHtmlText(mode2OtakuAttrsGuideButtonLabel())}</button>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+          <div style="font-size:24px; font-weight:800; line-height:1.35; flex:1 1 280px;">${escapeHtmlText(mode2ResultPageTitle())}</div>
+          <button type="button" id="mode2OtakuAttrsGuideBtn" data-copy-exclude="1" style="flex:0 0 auto; padding:8px 14px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; color:#475569; cursor:pointer; font-size:13px; font-weight:600; white-space:nowrap;">${escapeHtmlText(mode2OtakuAttrsGuideButtonLabel())}</button>
         </div>
-        <div style="font-size:24px; font-weight:800; line-height:1.35; margin-bottom:14px;">${escapeHtmlText(mode2ResultPageTitle())}</div>
         <div style="padding:20px 22px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:18px;">
           <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの異名', 'Your Epithet')}</div>
           ${epithetBodyHtml}
