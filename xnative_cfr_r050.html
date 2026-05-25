@@ -7649,7 +7649,7 @@ function buildMode2AiPrompt(payload) {
         attrs.join(' / '),
         'For 越境回遊 specifically, choose it only when there is clear and repeated crossing evidence across multiple items, genres, or media.',
         'Avoid giving everyone the same four attributes (世界観没入 / 機構偏愛 / 越境回遊 / 少年回路). Prefer a distinctive mix when supported, but do not force variety if the evidence is weak.',
-        'Write summary and readingPoints around the mainAttribute first, then mention lowerModules, practiceModes, meaning tags, and specific selection patterns for personal flavor.',
+        'Write summary around the mainAttribute first, then mention lowerModules, practiceModes, meaning tags, and specific selection patterns for personal flavor. Put item-level evidence mainly in mainAttribute.reason.',
         'In summary, do not claim that three attributes are equally defining. Say what was strongest this time, and what else subtly mixed in.',
         'Then think about lower modules in this order.',
         'First, examine whether any DEEP lower modules clearly fit. Use them only when there is strong evidence in the selections and meaning tags.',
@@ -7663,22 +7663,20 @@ function buildMode2AiPrompt(payload) {
         'Return JSON only. No markdown. No code fences. No commentary outside JSON.',
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
         'mainAttribute.reason should be the strongest evidence-based explanation. subAttribute.reason and hiddenAttribute.reason should be shorter and softer, as traces rather than equal claims.',
-        'Write module reasons, practice reasons, summary, readingPoints, epithetReason, and shareText in English.',
+        'Write module reasons, practice reasons, summary, epithetReason, and shareText in English.',
         'epithet must be one string in the form "Japanese epithet || English alias". Japanese and English must be translations of the same epithet, not separate images.',
         'epithetReason must explain both the Japanese and English epithet together as a paired name, not the English line alone.',
         'In epithetReason, explain only the symbolic words inside the epithet itself. Do not mention the eleven attribute names (such as Boyhood Circuit, Crossing, Mechanism Love, etc.). Those appear later in the report.',
         'mainAttribute, subAttribute, and hiddenAttribute must be three different attribute names. Do not repeat the same attribute.',
         'In summary, do not re-list every attribute name that will appear below. Keep it centered on the main attribute.',
-        'readingPoints must not repeat media examples already used in mainAttribute.reason or summary.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
         'Make epithet clearly longer than epithetShort. Aim for about 8 to 16 words so it feels rich and specific.',
         'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
         'For epithet wording, avoid harsh or negative terms such as "scrap", "junk", or "waste"; prefer neutral or poetic vocabulary such as "mechanism", "workshop", "circuit", and "transmutation".',
         'Set emblemCode to an English code only, such as GH-DY-RP.',
-        'readingPoints must contain exactly 3 strings.',
         'summary should be in English, about 80 to 180 words.',
         'shareText should be in English and within 120 characters.',
-        'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, readingPoints, shareText.',
+        'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, shareText.',
         'Each attribute object must contain name, short, and reason.',
         'lowerModules may be an empty array, or an array of 1 to 2 objects, each with name and reason. Keep name in Japanese.',
         'practiceModes must be an array of 1 or 2 objects, each with name and reason. Keep name in Japanese.',
@@ -7697,7 +7695,7 @@ function buildMode2AiPrompt(payload) {
       attrs.join(' / '),
       '「越境回遊」は、複数項目にまたがって明確なジャンル横断・媒体横断の根拠が繰り返し見える場合にのみ選んでください。',
       '世界観没入・機構偏愛・越境回遊・少年回路に偏りやすいことは自然です。無理に散らさず、主属性を軸に、その人の選択内容・意味タグ・下位モジュールで個性を出してください。',
-      'summary と readingPoints は、主属性を中心に書いてください。選択項目の並び、意味タグ、下位モジュール、関わり方から、その人だけの手触りを具体的に語ってください。',
+      'summary は、主属性を中心に書いてください。選択項目の並び、意味タグ、下位モジュール、関わり方から、その人だけの手触りを具体的に語ってください。作品別の根拠は mainAttribute.reason に厚く書いてください。',
       'summary では「3属性が対等にあなたを定義する」とは書かず、「今回いちばん強かった属性」と「ほかに混じる属性」という温度差を保ってください。',
       '下位モジュールは、まず「深いモジュール」が十分に当てはまるかを検討してください。十分な根拠があるときだけ採用してください。',
       '深いモジュール候補:',
@@ -7723,7 +7721,6 @@ function buildMode2AiPrompt(payload) {
       'epithetReason では、異名に含まれる象徴語・役割語だけを説明してください。11属性の名称（少年回路・越境回遊・機構偏愛など）は使わないでください。属性名はこのあと別セクションで初めて出ます。',
       'mainAttribute, subAttribute, hiddenAttribute は必ず3つとも異なる属性名にしてください。同じ属性を2回以上使わないでください。',
       'summary では、下に出る属性名をすべて列挙し直さないでください。主属性を中心にした総評に留めてください。',
-      'readingPoints は3件ですが、mainAttribute.reason や summary で既に触れた作品・例を繰り返さないでください。別角度の読みだけを書いてください。',
       '制約:',
       '- 露骨な性格診断や病理的解釈をしない',
       '- 性別を決めつけない',
@@ -7731,10 +7728,9 @@ function buildMode2AiPrompt(payload) {
       '- 選択内容に根拠のある範囲で解釈する',
       '- lowerModules は空配列、または1〜2件の配列にする',
       '- practiceModes は1〜2件の配列にする',
-      '- readingPoints は3件ちょうど返す',
       '- summary は日本語で120〜220字程度',
       '- shareText は日本語で80字以内',
-      'JSONは必ず次のキーを含めてください: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, readingPoints, shareText',
+      'JSONは必ず次のキーを含めてください: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, shareText',
       'mainAttribute, subAttribute, hiddenAttribute は、それぞれ name, short, reason を含むオブジェクトです。',
       'lowerModules の各要素は name と reason を含むオブジェクトです。',
       'practiceModes の各要素は name と reason を含むオブジェクトです。',
@@ -8285,10 +8281,6 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
 
     const epithetReason = resolveMode2EpithetReason(parsed && parsed.epithetReason, aliasJa, aliasEnLine);
     const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Your selections this time centered on one strongest attribute.' : `今回の選択では「${normTop3[0].info.ja}」が中心に見えました。`));
-    const readingPoints = Array.isArray(parsed && parsed.readingPoints)
-      ? parsed.readingPoints.slice(0,3).map(v => sanitizeMode2Text(v, '')).filter(Boolean)
-      : [];
-    while (readingPoints.length < 3) readingPoints.push(isEnglishUi() ? 'Your meaning tags reveal a few especially strong shelves of interest.' : '選択された項目の意味づけから、濃い関心の棚が見えます。');
     const shareText = sanitizeMode2Text(parsed && parsed.shareText, isEnglishUi() ? `My type is "${aliasShort}". ${symbol}.` : `私は『${aliasShort}』タイプ。${symbol}。`);
 
     const resultText = isEnglishUi()
@@ -8302,8 +8294,7 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
           ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
           ...(practiceModes.length ? ['How You Engage', ...practiceModes.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
-          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['Strongest Textures', fallbackLocal.topSlots.join(' / '), ''] : []),
-          'Reading of your selections', ...readingPoints.map(v => '- ' + v)
+          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['Strongest Textures', fallbackLocal.topSlots.join(' / '), ''] : [])
         ].filter(Boolean).join('\n')
       : [
           'あなたの選択の読み解き','',
@@ -8315,10 +8306,9 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           'あなたの記号', symbol, '',
           ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏'), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
           ...(practiceModes.length ? ['関わり方', ...practiceModes.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
-          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['濃く出た手触り', fallbackLocal.topSlots.join(' / '), ''] : []),
-          '今回の読み解き', ...readingPoints.map(v => '・' + v)
+          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['濃く出た手触り', fallbackLocal.topSlots.join(' / '), ''] : [])
         ].filter(Boolean).join('\n');
-    return { top3: normTop3, symbol, symbolEn, alias, aliasEn, aliasShort, aliasShortEn, epithetReason, summary, readingPoints, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '', lowerModules, lowerModuleLevel, practiceModes };
+    return { top3: normTop3, symbol, symbolEn, alias, aliasEn, aliasShort, aliasShortEn, epithetReason, summary, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '', lowerModules, lowerModuleLevel, practiceModes };
   }
 
 function buildMode2ResultHtml(result) {
@@ -8362,9 +8352,6 @@ function buildMode2ResultHtml(result) {
         </div>
       </div>
     ` : '';
-    const readingPointsHtml = (Array.isArray(result.readingPoints) && result.readingPoints.length)
-      ? `<ul style="margin:10px 0 0 18px; font-size:14px; line-height:1.8; color:#334155;">${result.readingPoints.map(v => `<li>${escapeHtmlText(v)}</li>`).join('')}</ul>`
-      : '';
     const slotsHtml = (Array.isArray(result.topSlots) && result.topSlots.length) ? `
       <div style="margin-top:16px;">
         <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${t('濃く出た手触り', 'Strongest Textures')}</div>
@@ -8426,7 +8413,6 @@ function buildMode2ResultHtml(result) {
           ${epithetBodyHtml}
           <div style="font-size:13px; color:#7c8b9e; margin-top:16px; font-weight:600;">${t('総合すると', 'Overall')}</div>
           <div style="font-size:15px; line-height:1.85; margin-top:6px; color:#1e293b;">${escapeHtmlText(result.summary)}</div>
-          ${readingPointsHtml ? `<div style="margin-top:14px;"><div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('今回の読み解き', 'Reading of Your Selections')}</div>${readingPointsHtml}</div>` : ''}
         </div>
         <div style="margin-top:18px;">${mainCardHtml}${secondaryChipsHtml}${emblemHtml}</div>
         ${((result.lowerModules || []).length || (result.practiceModes || []).length || (result.topSlots || []).length) ? `<div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
