@@ -7011,17 +7011,17 @@
     { key: 'oshi', labelJa: '推す', labelEn: 'Oshi / Support', weight: 1.35 }
   ];
   const MODE2_ATTRS = {
-    world: { ja: '世界観没入', en: 'World Immersion', short: '世界', code: 'WI', desc: 'その世界に入れる感じで選ぶ属性です。' },
-    mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機構', code: 'ME', desc: '道具や仕組みそのものに心が動く属性です。' },
-    future: { ja: '未来感受', en: 'Future Sense', short: '未来', code: 'FU', desc: '次が始まる気配や時代の切り替わりに反応する属性です。' },
-    aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異形', code: 'AB', desc: '少し危うく変なものに熱を感じる属性です。' },
-    daily: { ja: '日常浸透', en: 'Daily Affinity', short: '日常', code: 'DY', desc: '生活に溶け込む手触りを長く愛する属性です。' },
-    crossing: { ja: '越境回遊', en: 'Crossing', short: '越境', code: 'CR', desc: 'ジャンルや媒体の境界を軽やかにまたぐ属性です。' },
-    boyhood: { ja: '少年回路', en: 'Boyhood Circuit', short: '少年', code: 'BH', desc: '冒険と発見の想像力に火がつく属性です。' },
-    girlhood: { ja: '少女回路', en: 'Girlhood Circuit', short: '少女', code: 'GH', desc: '変身と関係性、内面の揺れに惹かれる属性です。' },
-    repeat: { ja: '反復愛着', en: 'Repeat Attachment', short: '反復', code: 'RP', desc: '何度も戻ることで好きが深まる属性です。' },
-    author: { ja: '作者偏信', en: 'Author Bias', short: '作者', code: 'AU', desc: '作り手の癖や姿勢まで含めて愛する属性です。' },
-    archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', code: 'AR', desc: '好きなものを系譜や記録として抱える属性です。' }
+    world: { ja: '世界観没入', en: 'World Immersion', short: '世界', code: 'WI', desc: 'その世界に入れる感じで選ぶ属性です。', descEn: 'You choose through the feeling of entering a world.' },
+    mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機構', code: 'ME', desc: '道具や仕組みそのものに心が動く属性です。', descEn: 'Tools and systems themselves move your heart.' },
+    future: { ja: '未来感受', en: 'Future Sense', short: '未来', code: 'FU', desc: '次が始まる気配や時代の切り替わりに反応する属性です。', descEn: 'You respond to the breath of what comes next and shifts in era.' },
+    aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異形', code: 'AB', desc: '少し危うく変なものに熱を感じる属性です。', descEn: 'You feel heat for things slightly dangerous and strange.' },
+    daily: { ja: '日常浸透', en: 'Daily Affinity', short: '日常', code: 'DY', desc: '生活に溶け込む手触りを長く愛する属性です。', descEn: 'You love textures that melt into everyday life for a long time.' },
+    crossing: { ja: '越境回遊', en: 'Crossing', short: '越境', code: 'CR', desc: 'ジャンルや媒体の境界を軽やかにまたぐ属性です。', descEn: 'You cross genre and media boundaries with ease.' },
+    boyhood: { ja: '少年回路', en: 'Boyhood Circuit', short: '少年', code: 'BH', desc: '冒険と発見の想像力に火がつく属性です。', descEn: 'Adventure and the imagination of discovery ignite you.' },
+    girlhood: { ja: '少女回路', en: 'Girlhood Circuit', short: '少女', code: 'GH', desc: '変身と関係性、内面の揺れに惹かれる属性です。', descEn: 'You are drawn to transformation, relationships, and inner sway.' },
+    repeat: { ja: '反復愛着', en: 'Repeat Attachment', short: '反復', code: 'RP', desc: '何度も戻ることで好きが深まる属性です。', descEn: 'Returning again and again deepens your affection.' },
+    author: { ja: '作者偏信', en: 'Author Bias', short: '作者', code: 'AU', desc: '作り手の癖や姿勢まで含めて愛する属性です。', descEn: 'You love the maker\'s habits and stance, not just the work.' },
+    archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', code: 'AR', desc: '好きなものを系譜や記録として抱える属性です。', descEn: 'You hold what you love as lineage and record.' }
   };
   const MODE2_ATTR_EN = Object.values(MODE2_ATTRS).reduce((acc, item) => {
     acc[item.ja] = { label: item.en, short: item.en, code: item.code || '' };
@@ -7506,12 +7506,10 @@ function buildMode2DiagnosisLocal() {
     const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
     const summary = `今回の選択では「${top3[0].info.ja}」が中心に見えました。`;
-    const epithetReason = buildMode2LocalEpithetReason(alias, aliasEn);
     const localModuleTitle = supplemental.lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏';
     const resultText = [
-      'あなたの選択の読み解き','',
+      'あなたの選択の読み解いた"otaku"属性','',
       'あなたの異名', alias, aliasEn, '',
-      'この名の由来', epithetReason, '',
       '総合すると', summary, '',
       '今回いちばん強かった属性', `${top3[0].info.ja}`, top3[0].info.desc, '',
       mode2BleedingAttrsSectionLabel(), `${top3[1].info.ja} / ${top3[2].info.ja}`, '',
@@ -7520,7 +7518,7 @@ function buildMode2DiagnosisLocal() {
       ...(supplemental.practiceModes.length ? ['関わり方', ...(supplemental.practiceModes.map(m => `・${m.ja}`)), ''] : []),
       ...(topSlots.length ? ['濃く出た手触り', topSlots.join(' / '), ''] : [])
     ].join('\n');
-    return { top3, topSlots, alias, aliasEn, aliasShort, symbol, summary, epithetReason, resultText, selectedSummaries, lowerModules: supplemental.lowerModules, lowerModuleLevel: supplemental.lowerModuleLevel, practiceModes: supplemental.practiceModes };
+    return { top3, topSlots, alias, aliasEn, aliasShort, symbol, summary, resultText, selectedSummaries, lowerModules: supplemental.lowerModules, lowerModuleLevel: supplemental.lowerModuleLevel, practiceModes: supplemental.practiceModes };
   }
 
   function buildMode2SelectedSummaries() {
@@ -7552,20 +7550,19 @@ function buildMode2DiagnosisLocal() {
   }
 
   function getMode2AttrDescJa(name) {
-    const map = {
-      '世界観没入': 'その世界に入れる感じで選ぶ属性です。',
-      '機構偏愛': '道具や仕組みそのものに心が動く属性です。',
-      '未来感受': '次が始まる気配や時代の切り替わりに反応する属性です。',
-      '異形親和': '少し危うく変なものに熱を感じる属性です。',
-      '日常浸透': '生活に溶け込む手触りを長く愛する属性です。',
-      '越境回遊': 'ジャンルや媒体の境界を軽やかにまたぐ属性です。',
-      '少年回路': '冒険と発見の想像力に火がつく属性です。',
-      '少女回路': '変身と関係性、内面の揺れに惹かれる属性です。',
-      '反復愛着': '何度も戻ることで好きが深まる属性です。',
-      '作者偏信': '作り手の癖や姿勢まで含めて愛する属性です。',
-      '記録蒐集': '好きなものを系譜や記録として抱える属性です。'
-    };
-    return map[name] || '選択の並び方から立ち上がった属性です。';
+    const key = String(name || '').trim();
+    for (const info of Object.values(MODE2_ATTRS)) {
+      if (info.ja === key) return info.desc;
+    }
+    return '選択の並び方から立ち上がった属性です。';
+  }
+
+  function getMode2AttrDesc(name) {
+    const key = String(name || '').trim();
+    for (const info of Object.values(MODE2_ATTRS)) {
+      if (info.ja === key) return isEnglishUi() ? (info.descEn || info.desc) : info.desc;
+    }
+    return isEnglishUi() ? 'An attribute inferred from how your selections are arranged.' : getMode2AttrDescJa(name);
   }
 
   function stripCodeFences(s) {
@@ -7663,10 +7660,8 @@ function buildMode2AiPrompt(payload) {
         'Return JSON only. No markdown. No code fences. No commentary outside JSON.',
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
         'mainAttribute.reason should be the strongest evidence-based explanation. subAttribute.reason and hiddenAttribute.reason should be shorter and softer, as traces rather than equal claims.',
-        'Write module reasons, practice reasons, summary, epithetReason, and shareText in English.',
+        'Write module reasons, practice reasons, summary, and shareText in English.',
         'epithet must be one string in the form "Japanese epithet || English alias". Japanese and English must be translations of the same epithet, not separate images.',
-        'epithetReason must explain both the Japanese and English epithet together as a paired name, not the English line alone.',
-        'In epithetReason, explain only the symbolic words inside the epithet itself. Do not mention the eleven attribute names (such as Boyhood Circuit, Crossing, Mechanism Love, etc.). Those appear later in the report.',
         'mainAttribute, subAttribute, and hiddenAttribute must be three different attribute names. Do not repeat the same attribute.',
         'In summary, do not re-list every attribute name that will appear below. Keep it centered on the main attribute.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
@@ -7676,7 +7671,7 @@ function buildMode2AiPrompt(payload) {
         'Set emblemCode to an English code only, such as GH-DY-RP.',
         'summary should be in English, about 80 to 180 words.',
         'shareText should be in English and within 120 characters.',
-        'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, shareText.',
+        'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, summary, shareText.',
         'Each attribute object must contain name, short, and reason.',
         'lowerModules may be an empty array, or an array of 1 to 2 objects, each with name and reason. Keep name in Japanese.',
         'practiceModes must be an array of 1 or 2 objects, each with name and reason. Keep name in Japanese.',
@@ -7717,8 +7712,6 @@ function buildMode2AiPrompt(payload) {
       'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。日本語と英語は別々のイメージではなく、同じ異名の対訳にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
-      'epithetReason（この名の由来）は、日本語の異名と英語の異名の両方を説明してください。英語だけ、日本語だけの説明にしないでください。同じ象徴イメージの対訳であることを示してください。',
-      'epithetReason では、異名に含まれる象徴語・役割語だけを説明してください。11属性の名称（少年回路・越境回遊・機構偏愛など）は使わないでください。属性名はこのあと別セクションで初めて出ます。',
       'mainAttribute, subAttribute, hiddenAttribute は必ず3つとも異なる属性名にしてください。同じ属性を2回以上使わないでください。',
       'summary では、下に出る属性名をすべて列挙し直さないでください。主属性を中心にした総評に留めてください。',
       '制約:',
@@ -7730,7 +7723,7 @@ function buildMode2AiPrompt(payload) {
       '- practiceModes は1〜2件の配列にする',
       '- summary は日本語で120〜220字程度',
       '- shareText は日本語で80字以内',
-      'JSONは必ず次のキーを含めてください: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, epithetReason, summary, shareText',
+      'JSONは必ず次のキーを含めてください: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, summary, shareText',
       'mainAttribute, subAttribute, hiddenAttribute は、それぞれ name, short, reason を含むオブジェクトです。',
       'lowerModules の各要素は name と reason を含むオブジェクトです。',
       'practiceModes の各要素は name と reason を含むオブジェクトです。',
@@ -7759,7 +7752,45 @@ function buildMode2AiPrompt(payload) {
   }
 
   function mode2ResultPageTitle() {
-    return t('あなたの選択の読み解き', 'Reading of Your Selections');
+    return t('あなたの選択の読み解いた"otaku"属性', 'The "otaku" attributes read from your selections');
+  }
+
+  function mode2OtakuAttrsGuideButtonLabel() {
+    return t('"otaku"属性とは', 'What are "otaku" attributes?');
+  }
+
+  function buildMode2OtakuAttrsGuideHtml() {
+    const intro = t(
+      'この診断で使う11の「otaku」属性の一覧です。医療・性格診断ではなく、あなたが選んだ項目と意味づけタグから読み取った、文化的嗜好のラベルです。',
+      'These eleven "otaku" attributes are used in this diagnosis. They are cultural taste labels read from your selections and meaning tags—not medical or personality typing.'
+    );
+    const items = Object.values(MODE2_ATTRS).map(info => {
+      const name = isEnglishUi() ? info.en : info.ja;
+      const sub = isEnglishUi() ? info.ja : info.en;
+      const desc = isEnglishUi() ? (info.descEn || info.desc) : info.desc;
+      return `<div style="padding:14px 16px; border:1px solid #e2e8f0; border-radius:14px; background:#fff;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
+          <strong style="font-size:16px; color:#0f172a;">${escapeHtmlText(name)}</strong>
+          <span style="font-size:12px; color:#94a3b8; letter-spacing:0.04em;">${escapeHtmlText(info.code)}</span>
+        </div>
+        <div style="font-size:13px; color:#64748b; margin-bottom:4px;">${escapeHtmlText(sub)}</div>
+        <div style="font-size:14px; line-height:1.7; color:#334155;">${escapeHtmlText(desc)}</div>
+      </div>`;
+    }).join('');
+    return `<div style="max-width:720px; color:#0f172a;">
+      <p style="font-size:14px; line-height:1.8; color:#475569; margin:0 0 16px;">${escapeHtmlText(intro)}</p>
+      <div style="display:grid; gap:10px;">${items}</div>
+    </div>`;
+  }
+
+  function openMode2OtakuAttrsGuide() {
+    openModal(mode2OtakuAttrsGuideButtonLabel(), buildMode2OtakuAttrsGuideHtml(), { footer: 'none' });
+  }
+
+  function attachMode2OtakuAttrsGuideButton() {
+    const btn = document.getElementById('mode2OtakuAttrsGuideBtn');
+    if (!btn) return;
+    btn.addEventListener('click', openMode2OtakuAttrsGuide);
   }
 
   function mode2EpithetContainsDirectTitles(text) {
@@ -8162,42 +8193,6 @@ function buildMode2AiPrompt(payload) {
     return { ja: aliasJa, en: `${roleEn} of ${symbolEn}` };
   }
 
-  function mode2EpithetReasonUsesAttrTerms(text) {
-    const s = String(text || '');
-    if (!s) return false;
-    return Object.values(MODE2_ATTRS).some(info =>
-      (info.ja && s.indexOf(info.ja) >= 0) || (info.en && s.indexOf(info.en) >= 0)
-    );
-  }
-
-  function buildMode2LocalEpithetReason(aliasJa, aliasEnLine) {
-    const ja = String(aliasJa || '').trim();
-    const en = String(aliasEnLine || '').trim();
-    const parts = ja.split('の');
-    const symbolPart = parts.length >= 2 ? parts.slice(0, -1).join('の') : ja;
-    const rolePart = parts.length >= 2 ? parts[parts.length - 1] : '';
-    if (isEnglishUi()) {
-      if (rolePart && symbolPart) {
-        return `"${symbolPart}" captures the symbolic mood from your selections, and "${rolePart}" hints at how you tend to carry that mood. The English line "${en}" is the same image in paired form.`;
-      }
-      return `The Japanese epithet "${ja}" and the English "${en}" are paired names built from the same symbolic image in your selections.`;
-    }
-    if (rolePart && symbolPart) {
-      return `「${symbolPart}」は、選んだ項目から浮かんだ象徴の手触りです。「${rolePart}」は、その手触りをどう抱えていくかを示す役割語です。英語の「${en}」も同じイメージの対訳です。`;
-    }
-    return `「${ja}」と「${en}」は、今回の選択から浮かんだ同じ象徴イメージの対になる異名です。`;
-  }
-
-  function resolveMode2EpithetReason(rawReason, aliasJa, aliasEnLine) {
-    const epithetReason = sanitizeMode2Text(rawReason, '');
-    const local = () => buildMode2LocalEpithetReason(aliasJa, aliasEnLine);
-    if (!epithetReason) return local();
-    if (!isEnglishUi() && !/[\u3040-\u30ff\u3400-\u9fff]/.test(epithetReason)) return local();
-    if (mode2EpithetReasonUsesAttrTerms(epithetReason)) return local();
-    return epithetReason;
-  }
-
-
   function splitMode2BilingualText(raw) {
     const text = mode2ValueToText(raw, '').trim();
     if (!text) return { ja: '', en: '' };
@@ -8279,15 +8274,13 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const aliasShort = isEnglishUi() ? (aliasShortPair.en || aliasEnLine) : (aliasShortPair.ja || aliasJa);
     const aliasShortEn = isEnglishUi() ? (aliasShortPair.ja || aliasJa) : (aliasShortPair.en || aliasEnLine);
 
-    const epithetReason = resolveMode2EpithetReason(parsed && parsed.epithetReason, aliasJa, aliasEnLine);
     const summary = sanitizeMode2Text(parsed && parsed.summary, fallbackLocal.summary || (isEnglishUi() ? 'Your selections this time centered on one strongest attribute.' : `今回の選択では「${normTop3[0].info.ja}」が中心に見えました。`));
     const shareText = sanitizeMode2Text(parsed && parsed.shareText, isEnglishUi() ? `My type is "${aliasShort}". ${symbol}.` : `私は『${aliasShort}』タイプ。${symbol}。`);
 
     const resultText = isEnglishUi()
       ? [
-          'Reading of Your Selections','',
+          'The "otaku" attributes read from your selections','',
           'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
-          'Why this name', epithetReason, '',
           'Overall', summary, '',
           'Strongest Attribute This Time', `${normTop3[0].info.en}`, normTop3[0].info.desc, normTop3[0].reason ? `Reason: ${normTop3[0].reason}` : '', '',
           'Bleeding Through Attributes', `${normTop3[1].info.en}${normTop3[2].info.en ? ' / ' + normTop3[2].info.en : ''}`, '',
@@ -8297,9 +8290,8 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['Strongest Textures', fallbackLocal.topSlots.join(' / '), ''] : [])
         ].filter(Boolean).join('\n')
       : [
-          'あなたの選択の読み解き','',
+          'あなたの選択の読み解いた"otaku"属性','',
           'あなたの異名', alias, aliasEn, '',
-          'この名の由来', epithetReason, '',
           '総合すると', summary, '',
           '今回いちばん強かった属性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, normTop3[0].reason ? `理由: ${normTop3[0].reason}` : '', '',
           mode2BleedingAttrsSectionLabel(), `${normTop3[1].info.ja} / ${normTop3[2].info.ja}`, '',
@@ -8308,7 +8300,7 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           ...(practiceModes.length ? ['関わり方', ...practiceModes.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
           ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['濃く出た手触り', fallbackLocal.topSlots.join(' / '), ''] : [])
         ].filter(Boolean).join('\n');
-    return { top3: normTop3, symbol, symbolEn, alias, aliasEn, aliasShort, aliasShortEn, epithetReason, summary, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '', lowerModules, lowerModuleLevel, practiceModes };
+    return { top3: normTop3, symbol, symbolEn, alias, aliasEn, aliasShort, aliasShortEn, summary, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '', lowerModules, lowerModuleLevel, practiceModes };
   }
 
 function buildMode2ResultHtml(result) {
@@ -8336,7 +8328,7 @@ function buildMode2ResultHtml(result) {
           <div style="font-size:32px; font-weight:800; line-height:1.15; letter-spacing:0.01em;">${escapeHtmlText(isEnglishUi() ? (mainAttr.info.en || mainAttr.info.ja) : mainAttr.info.ja)}</div>
           <div style="font-size:20px; color:#475569; font-weight:700; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (mainAttr.info.ja || '') : (mainAttr.info.en || ''))}</div>
         </div>
-        <div style="font-size:14px; line-height:1.75; color:#334155;">${escapeHtmlText(mainAttr.info.desc || '')}</div>
+        <div style="font-size:14px; line-height:1.75; color:#334155;">${escapeHtmlText(getMode2AttrDesc(mainAttr.info.ja))}</div>
         ${mainAttr.reason ? `<div style="margin-top:12px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:13px; line-height:1.7; color:#475569;">${escapeHtmlText(isEnglishUi() ? ('Reason: ' + mainAttr.reason) : ('理由: ' + mainAttr.reason))}</div>` : ''}
       </div>
     ` : '';
@@ -8379,22 +8371,14 @@ function buildMode2ResultHtml(result) {
       : `<div style="font-size:13px; color:#64748b;">${t('（選択なし）', '(No selection)')}</div>`;
     const epithetJa = isEnglishUi() ? (result.aliasEn || '') : (result.alias || '');
     const epithetEn = isEnglishUi() ? (result.alias || '') : (result.aliasEn || '');
-    const epithetReasonHtml = result.epithetReason
-      ? `<div style="margin-top:12px; padding-top:12px; border-top:1px solid #e8edf3;">
-          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('この名の由来', 'Why this name')}</div>
-          <div style="font-size:13px; line-height:1.75; margin-top:6px; color:#475569;">${escapeHtmlText(result.epithetReason)}</div>
-        </div>`
-      : '';
     const epithetBodyHtml = isEnglishUi()
       ? [
           epithetEn ? `<div style="font-size:31px; font-weight:800; line-height:1.25; margin-top:8px;">${escapeHtmlText(epithetEn)}</div>` : '',
-          epithetReasonHtml,
           epithetJa ? `<div style="font-size:18px; color:#475569; font-weight:600; line-height:1.35; margin-top:12px;">${escapeHtmlText(epithetJa)}</div>` : ''
         ].join('')
       : [
           epithetJa ? `<div style="font-size:31px; font-weight:800; line-height:1.25; margin-top:8px;">${escapeHtmlText(epithetJa)}</div>` : '',
-          epithetEn ? `<div style="font-size:20px; color:#475569; font-weight:600; line-height:1.35; margin-top:8px;">${escapeHtmlText(epithetEn)}</div>` : '',
-          epithetReasonHtml
+          epithetEn ? `<div style="font-size:20px; color:#475569; font-weight:600; line-height:1.35; margin-top:8px;">${escapeHtmlText(epithetEn)}</div>` : ''
         ].join('');
     const emblemHtml = `
       <div style="margin-top:18px; padding:16px 18px; background:#fff; border:1px solid #e2e8f0; border-radius:16px;">
@@ -8407,7 +8391,10 @@ function buildMode2ResultHtml(result) {
     `;
     return `
       <div data-diagnosis-report style="max-width:1040px; margin:0 auto; color:#0f172a;">
-        <div style="font-size:24px; font-weight:800; margin-bottom:14px; line-height:1.35;">${escapeHtmlText(mode2ResultPageTitle())}</div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+          <div style="font-size:24px; font-weight:800; line-height:1.35; flex:1 1 280px;">${escapeHtmlText(mode2ResultPageTitle())}</div>
+          <button type="button" id="mode2OtakuAttrsGuideBtn" data-copy-exclude="1" style="flex:0 0 auto; padding:8px 14px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; color:#475569; cursor:pointer; font-size:13px; font-weight:600; white-space:nowrap;">${escapeHtmlText(mode2OtakuAttrsGuideButtonLabel())}</button>
+        </div>
         <div style="padding:20px 22px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:18px;">
           <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの異名', 'Your Epithet')}</div>
           ${epithetBodyHtml}
@@ -8443,9 +8430,6 @@ function buildMode2CompactQrReport(result) {
       '',
       t('あなたの異名', 'Your Epithet'),
       [mode2ValueToText(result.alias, '—'), mode2ValueToText(result.aliasEn, '')].filter(Boolean).join(' / '),
-      '',
-      t('この名の由来', 'Why this name'),
-      mode2ValueToText(result.epithetReason, '—'),
       '',
       t('今回いちばん強かった属性', 'Strongest Attribute This Time'),
       main ? mode2ValueToText(isEnglishUi() ? (main.info && main.info.en) : (main.info && main.info.ja), '—') : '—',
@@ -8602,6 +8586,7 @@ function buildMode2CompactQrReport(result) {
     kioskModalPhase = 'diag2';
     openModal(t('診断結果', 'Diagnosis Result'), buildMode2ResultHtml(result), { footer: 'next' });
     attachKioskPersonalQrButton(result);
+    attachMode2OtakuAttrsGuideButton();
   }
 
   function showKioskMeaningSelection() {
