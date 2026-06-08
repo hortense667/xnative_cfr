@@ -8326,7 +8326,7 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           'The "otaku" attributes read from your selections','',
           'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
           'Overall', summary, '',
-          'Strongest Attribute This Time', `${normTop3[0].info.en}`, normTop3[0].info.desc, normTop3[0].reason ? `Reason: ${normTop3[0].reason}` : '', '',
+          'Strongest Attribute This Time', `${normTop3[0].info.en}`, normTop3[0].info.desc, '',
           'Sub Attribute', `${normTop3[1].info.en}`, '',
           'Hidden Attribute', `${normTop3[2].info.en}`, '',
           'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
@@ -8336,7 +8336,7 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           'あなたの選択の読み解いた"otaku"属性','',
           'あなたの異名', alias, aliasEn, '',
           summary, '',
-          '今回いちばん強かった属性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, normTop3[0].reason ? `理由: ${normTop3[0].reason}` : '', '',
+          '今回いちばん強かった属性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, '',
           '副属性', `${normTop3[1].info.ja}`, '',
           '裏属性', `${normTop3[2].info.ja}`, '',
           'あなたの記号', symbol, '',
@@ -8357,7 +8357,6 @@ function buildMode2ResultHtml(result) {
             <div style="font-size:13px; color:#64748b; font-weight:600;">${escapeHtmlText(isEnglishUi() ? (item.info.ja || '') : (item.info.en || ''))}</div>
           </div>
           <div style="font-size:13px; line-height:1.7; color:#334155;">${escapeHtmlText(getMode2AttrDesc(item.info.ja))}</div>
-          ${item.reason ? `<div style="margin-top:8px; font-size:12px; line-height:1.6; color:#64748b;">${escapeHtmlText(isEnglishUi() ? ('Reason: ' + item.reason) : ('理由: ' + item.reason))}</div>` : ''}
         </div>
       `;
     }).filter(Boolean).join('');
@@ -8374,6 +8373,17 @@ function buildMode2ResultHtml(result) {
           epithetJa ? `<div style="font-size:31px; font-weight:800; line-height:1.25; margin-top:8px;">${escapeHtmlText(epithetJa)}</div>` : '',
           epithetEn ? `<div style="font-size:20px; color:#475569; font-weight:600; line-height:1.35; margin-top:8px;">${escapeHtmlText(epithetEn)}</div>` : ''
         ].join('');
+    const selectionStatusLines = (kioskState.selections || [])
+      .slice()
+      .sort((a, b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year)
+      .map(selection => {
+        const item = getKioskSourceItem(selection) || selection;
+        if (isEnglishUi()) return `${selection.year}: ${getPrimaryLabel(item)}`;
+        return `${selection.year}年: ${getPrimaryLabel(item)}`;
+      });
+    const selectionStatusHtml = selectionStatusLines.length
+      ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${selectionStatusLines.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>`
+      : `<div style="font-size:13px; color:#64748b;">${t('（選択なし）', '(No selection)')}</div>`;
     return `
       <div data-diagnosis-report style="max-width:1040px; margin:0 auto; color:#0f172a;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
@@ -8392,6 +8402,10 @@ function buildMode2ResultHtml(result) {
         <div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
           <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${moduleSectionTitle}</div>
           ${(result.lowerModules || []).length ? moduleHtml : `<div style="font-size:13px; color:#64748b; margin-top:8px;">${t('（該当なし）', '(No matching modules)')}</div>`}
+        </div>
+        <div style="margin-top:18px; border-top:1px solid #e5e7eb; padding-top:14px;">
+          <div style="font-size:13px; color:#64748b; margin-bottom:8px; font-weight:600;">${t('項目選択状況', 'Item Selection Status')}</div>
+          ${selectionStatusHtml}
         </div>
         ${result.fallbackError ? `<p style="margin-top:12px; font-size:14px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
         <div data-copy-exclude="1" style="margin-top:18px; display:flex; flex-wrap:wrap; gap:16px;">
