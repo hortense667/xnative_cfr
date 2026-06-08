@@ -1136,26 +1136,12 @@
           return String(executedAtRaw);
         }
       })();
-      const selectedItems = (window.kioskState && Array.isArray(window.kioskState.selections) ? window.kioskState.selections : [])
-        .slice()
-        .sort((a, b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year)
-        .map(s => {
-          const source = (events[s.year] || []).find(it => it.label === s.label) || { label: s.label, label_en: '' };
-          const label = getPrimaryLabel(source) || s.label || '';
-          return `${s.year}年: ${label}`;
-        });
-      const selectedItemsText = selectedItems.length
-        ? (`（${selectedItems.length}件）\n` + selectedItems.join('\n'))
-        : '（0件）';
       const text = [
         '【ニックネーム】',
         nickname,
         '',
         '【実施日時】',
         executedAt,
-        '',
-        '【項目選択状況】',
-        selectedItemsText,
         '',
         '【診断結果】',
         diagnosisText
@@ -7517,10 +7503,10 @@ function buildMode2DiagnosisLocal() {
     const summary = `今回の選択では「${top3[0].info.ja}」が中心に見えました。`;
     const localModuleTitle = supplemental.lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏';
     const resultText = [
-      'あなたの選択の読み解いた"otaku"属性','',
+      'あなたの選択から読み解いた"otaku"属性','',
       'あなたの異名', alias, aliasEn, '',
       summary, '',
-      '今回いちばん強かった属性', `${top3[0].info.ja}`, top3[0].info.desc, '',
+      '主属性', `${top3[0].info.ja}`, top3[0].info.desc, '',
       '副属性', `${top3[1].info.ja}`, '',
       '裏属性', `${top3[2].info.ja}`, '',
       'あなたの記号', symbol, '',
@@ -7743,13 +7729,13 @@ function buildMode2AiPrompt(payload) {
   function mode2RoleLabel(roleJa) {
     if (!isEnglishUi()) {
       return ({
-        '主属性': '今回いちばん強かった属性',
+        '主属性': '主属性',
         '副属性': '副属性',
         '裏属性': '裏属性'
       })[roleJa] || roleJa;
     }
     return ({
-      '主属性': 'Strongest Attribute This Time',
+      '主属性': 'Main Attribute',
       '副属性': 'Sub Attribute',
       '裏属性': 'Hidden Attribute'
     })[roleJa] || roleJa;
@@ -7760,7 +7746,7 @@ function buildMode2AiPrompt(payload) {
   }
 
   function mode2ResultPageTitle() {
-    return t('あなたの選択の読み解いた"otaku"属性', 'The "otaku" attributes read from your selections');
+    return t('あなたの選択から読み解いた"otaku"属性', 'The "otaku" attributes read from your selections');
   }
 
   function mode2OtakuAttrsGuideButtonLabel() {
@@ -8326,17 +8312,17 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           'The "otaku" attributes read from your selections','',
           'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
           'Overall', summary, '',
-          'Strongest Attribute This Time', `${normTop3[0].info.en}`, normTop3[0].info.desc, '',
+          'Main Attribute', `${normTop3[0].info.en}`, normTop3[0].info.desc, '',
           'Sub Attribute', `${normTop3[1].info.en}`, '',
           'Hidden Attribute', `${normTop3[2].info.en}`, '',
           'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
           ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : [])
         ].filter(Boolean).join('\n')
       : [
-          'あなたの選択の読み解いた"otaku"属性','',
+          'あなたの選択から読み解いた"otaku"属性','',
           'あなたの異名', alias, aliasEn, '',
           summary, '',
-          '今回いちばん強かった属性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, '',
+          '主属性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, '',
           '副属性', `${normTop3[1].info.ja}`, '',
           '裏属性', `${normTop3[2].info.ja}`, '',
           'あなたの記号', symbol, '',
@@ -8427,7 +8413,7 @@ function buildMode2CompactQrReport(result) {
       t('あなたの異名', 'Your Epithet'),
       [mode2ValueToText(result.alias, '—'), mode2ValueToText(result.aliasEn, '')].filter(Boolean).join(' / '),
       '',
-      t('今回いちばん強かった属性', 'Strongest Attribute This Time'),
+      t('主属性', 'Main Attribute'),
       main ? mode2ValueToText(isEnglishUi() ? (main.info && main.info.en) : (main.info && main.info.ja), '—') : '—',
       '',
       t('副属性', 'Sub Attribute'),
