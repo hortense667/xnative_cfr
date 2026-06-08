@@ -7519,13 +7519,12 @@ function buildMode2DiagnosisLocal() {
     const resultText = [
       'あなたの選択の読み解いた"otaku"属性','',
       'あなたの異名', alias, aliasEn, '',
-      '総合すると', summary, '',
+      summary, '',
       '今回いちばん強かった属性', `${top3[0].info.ja}`, top3[0].info.desc, '',
-      mode2BleedingAttrsSectionLabel(), `${top3[1].info.ja} / ${top3[2].info.ja}`, '',
+      '副属性', `${top3[1].info.ja}`, '',
+      '裏属性', `${top3[2].info.ja}`, '',
       'あなたの記号', symbol, '',
-      ...(supplemental.lowerModules.length ? [localModuleTitle, ...(supplemental.lowerModules.map(m => `・${m.ja}`)), ''] : []),
-      ...(supplemental.practiceModes.length ? ['関わり方', ...(supplemental.practiceModes.map(m => `・${m.ja}`)), ''] : []),
-      ...(topSlots.length ? ['濃く出た手触り', topSlots.join(' / '), ''] : [])
+      ...(supplemental.lowerModules.length ? [localModuleTitle, ...(supplemental.lowerModules.map(m => `・${m.ja}`)), ''] : [])
     ].join('\n');
     return { top3, topSlots, alias, aliasEn, aliasShort, symbol, summary, resultText, selectedSummaries, lowerModules: supplemental.lowerModules, lowerModuleLevel: supplemental.lowerModuleLevel, practiceModes: supplemental.practiceModes };
   }
@@ -7745,19 +7744,19 @@ function buildMode2AiPrompt(payload) {
     if (!isEnglishUi()) {
       return ({
         '主属性': '今回いちばん強かった属性',
-        '副属性': 'にじむ属性',
-        '裏属性': '背景の属性'
+        '副属性': '副属性',
+        '裏属性': '裏属性'
       })[roleJa] || roleJa;
     }
     return ({
       '主属性': 'Strongest Attribute This Time',
-      '副属性': 'Bleeding Through Attribute',
-      '裏属性': 'Background Attribute'
+      '副属性': 'Sub Attribute',
+      '裏属性': 'Hidden Attribute'
     })[roleJa] || roleJa;
   }
 
   function mode2BleedingAttrsSectionLabel() {
-    return t('にじむ属性', 'Bleeding Through Attributes');
+    return t('副属性・裏属性', 'Sub / Hidden Attributes');
   }
 
   function mode2ResultPageTitle() {
@@ -8328,92 +8327,42 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
           'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
           'Overall', summary, '',
           'Strongest Attribute This Time', `${normTop3[0].info.en}`, normTop3[0].info.desc, normTop3[0].reason ? `Reason: ${normTop3[0].reason}` : '', '',
-          'Bleeding Through Attributes', `${normTop3[1].info.en}${normTop3[2].info.en ? ' / ' + normTop3[2].info.en : ''}`, '',
+          'Sub Attribute', `${normTop3[1].info.en}`, '',
+          'Hidden Attribute', `${normTop3[2].info.en}`, '',
           'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
-          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
-          ...(practiceModes.length ? ['How You Engage', ...practiceModes.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : []),
-          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['Strongest Textures', fallbackLocal.topSlots.join(' / '), ''] : [])
+          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : [])
         ].filter(Boolean).join('\n')
       : [
           'あなたの選択の読み解いた"otaku"属性','',
           'あなたの異名', alias, aliasEn, '',
-          '総合すると', summary, '',
+          summary, '',
           '今回いちばん強かった属性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, normTop3[0].reason ? `理由: ${normTop3[0].reason}` : '', '',
-          mode2BleedingAttrsSectionLabel(), `${normTop3[1].info.ja} / ${normTop3[2].info.ja}`, '',
+          '副属性', `${normTop3[1].info.ja}`, '',
+          '裏属性', `${normTop3[2].info.ja}`, '',
           'あなたの記号', symbol, '',
-          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏'), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
-          ...(practiceModes.length ? ['関わり方', ...practiceModes.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : []),
-          ...(fallbackLocal.topSlots && fallbackLocal.topSlots.length ? ['濃く出た手触り', fallbackLocal.topSlots.join(' / '), ''] : [])
+          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏'), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : [])
         ].filter(Boolean).join('\n');
     return { top3: normTop3, symbol, symbolEn, alias, aliasEn, aliasShort, aliasShortEn, summary, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '', lowerModules, lowerModuleLevel, practiceModes };
   }
 
 function buildMode2ResultHtml(result) {
     const top3 = Array.isArray(result.top3) ? result.top3 : [];
-    const mainAttr = top3[0] || null;
-    const mainAttrJa = mainAttr && mainAttr.info && mainAttr.info.ja;
-    const secondaryAttrs = top3.slice(1).filter(item => item && item.info && item.info.ja && item.info.ja !== mainAttrJa);
-    const symbolAlpha = mode2ValueToText(
-      (top3
-        .slice(0, 3)
-        .map(t => mode2ValueToText(
-          (t && t.info && t.info.code) || (t && t.code && MODE2_ATTRS[t.code] && MODE2_ATTRS[t.code].code),
-          ''
-        ))
-        .filter(Boolean)
-        .join('-')) ||
-      result.symbolEn ||
-      result.symbol,
-      ''
-    );
-    const mainCardHtml = mainAttr ? `
-      <div style="padding:20px 22px; border:1px solid #c7d2fe; border-radius:18px; background:linear-gradient(180deg,#ffffff 0%,#f8faff 100%);">
-        <div style="font-size:13px; color:#64748b; margin-bottom:10px; font-weight:600; letter-spacing:0.02em;">${escapeHtmlText(mode2RoleLabel(mainAttr.role))}</div>
-        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:10px;">
-          <div style="font-size:32px; font-weight:800; line-height:1.15; letter-spacing:0.01em;">${escapeHtmlText(isEnglishUi() ? (mainAttr.info.en || mainAttr.info.ja) : mainAttr.info.ja)}</div>
-          <div style="font-size:20px; color:#475569; font-weight:700; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (mainAttr.info.ja || '') : (mainAttr.info.en || ''))}</div>
+    const attrsHtml = top3.slice(0, 3).map((item) => {
+      if (!item || !item.info || !item.info.ja) return '';
+      return `
+        <div style="padding:14px 16px; border:1px solid #dbe3ee; border-radius:14px; background:#fff;">
+          <div style="font-size:12px; color:#64748b; margin-bottom:6px; font-weight:600; letter-spacing:0.02em;">${escapeHtmlText(mode2RoleLabel(item.role))}</div>
+          <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
+            <div style="font-size:22px; font-weight:800; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (item.info.en || item.info.ja) : item.info.ja)}</div>
+            <div style="font-size:13px; color:#64748b; font-weight:600;">${escapeHtmlText(isEnglishUi() ? (item.info.ja || '') : (item.info.en || ''))}</div>
+          </div>
+          <div style="font-size:13px; line-height:1.7; color:#334155;">${escapeHtmlText(getMode2AttrDesc(item.info.ja))}</div>
+          ${item.reason ? `<div style="margin-top:8px; font-size:12px; line-height:1.6; color:#64748b;">${escapeHtmlText(isEnglishUi() ? ('Reason: ' + item.reason) : ('理由: ' + item.reason))}</div>` : ''}
         </div>
-        <div style="font-size:14px; line-height:1.75; color:#334155;">${escapeHtmlText(getMode2AttrDesc(mainAttr.info.ja))}</div>
-        ${mainAttr.reason ? `<div style="margin-top:12px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:13px; line-height:1.7; color:#475569;">${escapeHtmlText(isEnglishUi() ? ('Reason: ' + mainAttr.reason) : ('理由: ' + mainAttr.reason))}</div>` : ''}
-      </div>
-    ` : '';
-    const secondaryChipsHtml = secondaryAttrs.length ? `
-      <div style="margin-top:14px;">
-        <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${escapeHtmlText(mode2BleedingAttrsSectionLabel())}</div>
-        <div style="display:flex; flex-wrap:wrap; gap:8px;">
-          ${secondaryAttrs.map(item => `
-            <span style="display:inline-flex; align-items:center; padding:8px 14px; border-radius:999px; border:1px solid #dbe3ee; background:#fff; font-size:14px; line-height:1.4;">
-              <strong>${escapeHtmlText(isEnglishUi() ? (item.info.en || item.info.ja) : item.info.ja)}</strong>
-            </span>
-          `).join('')}
-        </div>
-      </div>
-    ` : '';
-    const slotsHtml = (Array.isArray(result.topSlots) && result.topSlots.length) ? `
-      <div style="margin-top:16px;">
-        <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${t('濃く出た手触り', 'Strongest Textures')}</div>
-        <div style="display:flex; flex-wrap:wrap; gap:8px;">${result.topSlots.map(v => `<span style="padding:6px 10px; border-radius:999px; border:1px solid #dbe3ee; background:#fff; font-size:13px;">${escapeHtmlText(v)}</span>`).join('')}</div>
-      </div>
-    ` : '';
+      `;
+    }).filter(Boolean).join('');
     const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
-    const moduleSectionTitle = result.lowerModuleLevel === 'general' ? t('惹かれやすい領域', 'Areas You Naturally Gravitate Toward') : t('濃い文化圏', 'Strong Cultural Modules');
-    const practiceHtml = (result.practiceModes || []).length ? `
-      <div style="margin-top:16px;">
-        <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:8px;">${t('関わり方', 'How You Engage')}</div>
-        <div style="display:flex; flex-wrap:wrap; gap:8px;">${result.practiceModes.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong></span>`).join('')}</div>
-      </div>
-    ` : '';
-    const selectionStatusLines = (kioskState.selections || [])
-      .slice()
-      .sort((a, b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year)
-      .map(selection => {
-        const item = getKioskSourceItem(selection) || selection;
-        if (isEnglishUi()) return `${selection.year}: ${getPrimaryLabel(item)}`;
-        return `${selection.year}年: ${getPrimaryLabel(item)}`;
-      });
-    const selectionStatusHtml = selectionStatusLines.length
-      ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${selectionStatusLines.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>`
-      : `<div style="font-size:13px; color:#64748b;">${t('（選択なし）', '(No selection)')}</div>`;
+    const moduleSectionTitle = t('濃い文化圏', 'Strong Cultural Modules');
     const epithetJa = isEnglishUi() ? (result.aliasEn || '') : (result.alias || '');
     const epithetEn = isEnglishUi() ? (result.alias || '') : (result.aliasEn || '');
     const epithetBodyHtml = isEnglishUi()
@@ -8425,15 +8374,6 @@ function buildMode2ResultHtml(result) {
           epithetJa ? `<div style="font-size:31px; font-weight:800; line-height:1.25; margin-top:8px;">${escapeHtmlText(epithetJa)}</div>` : '',
           epithetEn ? `<div style="font-size:20px; color:#475569; font-weight:600; line-height:1.35; margin-top:8px;">${escapeHtmlText(epithetEn)}</div>` : ''
         ].join('');
-    const emblemHtml = `
-      <div style="margin-top:18px; padding:16px 18px; background:#fff; border:1px solid #e2e8f0; border-radius:16px;">
-        <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの記号', 'Your Emblem')}</div>
-        <div style="display:flex; justify-content:flex-start; align-items:baseline; gap:14px; margin-top:8px; flex-wrap:wrap;">
-          <div style="font-size:34px; font-weight:900; letter-spacing:0.04em; line-height:1.1;">${escapeHtmlText(symbolAlpha)}</div>
-          ${result.symbol && result.symbol !== symbolAlpha ? `<div style="font-size:14px; color:#64748b;">${escapeHtmlText(result.symbol)}</div>` : ''}
-        </div>
-      </div>
-    `;
     return `
       <div data-diagnosis-report style="max-width:1040px; margin:0 auto; color:#0f172a;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
@@ -8443,18 +8383,15 @@ function buildMode2ResultHtml(result) {
         <div style="padding:20px 22px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:18px;">
           <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの異名', 'Your Epithet')}</div>
           ${epithetBodyHtml}
-          <div style="font-size:13px; color:#7c8b9e; margin-top:16px; font-weight:600;">${t('総合すると', 'Overall')}</div>
-          <div style="font-size:15px; line-height:1.85; margin-top:6px; color:#1e293b;">${escapeHtmlText(result.summary)}</div>
+          <div style="font-size:15px; line-height:1.85; margin-top:16px; color:#1e293b;">${escapeHtmlText(result.summary)}</div>
         </div>
-        <div style="margin-top:18px;">${mainCardHtml}${secondaryChipsHtml}${emblemHtml}</div>
-        ${((result.lowerModules || []).length || (result.practiceModes || []).length || (result.topSlots || []).length) ? `<div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
-          ${(result.lowerModules || []).length ? `<div style="font-size:13px; color:#7c8b9e; font-weight:600;">${moduleSectionTitle}</div>${moduleHtml}` : ''}
-          ${practiceHtml}
-          ${slotsHtml}
-        </div>` : ''}
-        <div style="margin-top:18px; border-top:1px solid #e5e7eb; padding-top:14px;">
-          <div style="font-size:13px; color:#64748b; margin-bottom:8px; font-weight:600;">${t('項目選択状況', 'Item Selection Status')}</div>
-          ${selectionStatusHtml}
+        <div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:10px;">${t('属性', 'Attributes')}</div>
+          <div style="display:grid; gap:10px;">${attrsHtml || `<div style="font-size:13px; color:#64748b;">${t('（判定なし）', '(No attributes)')}</div>`}</div>
+        </div>
+        <div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${moduleSectionTitle}</div>
+          ${(result.lowerModules || []).length ? moduleHtml : `<div style="font-size:13px; color:#64748b; margin-top:8px;">${t('（該当なし）', '(No matching modules)')}</div>`}
         </div>
         ${result.fallbackError ? `<p style="margin-top:12px; font-size:14px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
         <div data-copy-exclude="1" style="margin-top:18px; display:flex; flex-wrap:wrap; gap:16px;">
@@ -8479,13 +8416,12 @@ function buildMode2CompactQrReport(result) {
       t('今回いちばん強かった属性', 'Strongest Attribute This Time'),
       main ? mode2ValueToText(isEnglishUi() ? (main.info && main.info.en) : (main.info && main.info.ja), '—') : '—',
       '',
-      mode2BleedingAttrsSectionLabel(),
-      secondary.map(tItem => mode2ValueToText(isEnglishUi() ? (tItem.info && tItem.info.en) : (tItem.info && tItem.info.ja), '')).filter(Boolean).join(' / ') || '—',
+      t('副属性', 'Sub Attribute'),
+      secondary[0] ? mode2ValueToText(isEnglishUi() ? (secondary[0].info && secondary[0].info.en) : (secondary[0].info && secondary[0].info.ja), '—') : '—',
       '',
-      t('あなたの記号', 'Your Emblem'),
-      [mode2ValueToText(result.emblemCode || result.symbol, '—'), mode2ValueToText(result.symbolEn, '')].filter(Boolean).join(' / '),
+      t('裏属性', 'Hidden Attribute'),
+      secondary[1] ? mode2ValueToText(isEnglishUi() ? (secondary[1].info && secondary[1].info.en) : (secondary[1].info && secondary[1].info.ja), '—') : '—',
       '',
-      t('総合すると', 'Overall'),
       mode2ValueToText(result.shareText || result.summary, '')
     ].filter((line, idx, arr) => !(line === '' && arr[idx - 1] === ''));
     return compactLines.join('\n');
