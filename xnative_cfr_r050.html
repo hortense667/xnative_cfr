@@ -121,6 +121,19 @@
     font-size:11px;
     line-height:1.35;
   }
+  .kiosk-usage-final .related-article{
+    margin:6px 0 0;
+    color:#9ca3af;
+    font-size:11px;
+    line-height:1.45;
+  }
+  .kiosk-usage-final .related-article a{
+    color:#64748b;
+    text-decoration:underline;
+  }
+  .kiosk-usage-final .related-article a:hover{
+    color:#334155;
+  }
   .kiosk-usage-final .message{
     margin:0;
     color:#71717a;
@@ -8808,6 +8821,7 @@ function buildMode2CompactQrReport(result) {
     const usageText = t('下の「スタート」ボタンで最初の画面に戻ります。', 'Press the Start button below to return to the first screen.')
       .replace(/</g,'&lt;')
       .replace(/\\n/g,'<br>');
+    const articleUrl = 'https://ascii.jp/elem/000/004/408/4408685/';
     const html = `
       <div class="kiosk-usage-final">
         <img
@@ -8818,6 +8832,7 @@ function buildMode2CompactQrReport(result) {
           decoding="async"
         >
         <p class="copyright">(c) 2026 Satoshi Endo / このソフトウェアは <a href="https://github.com/hortense667/Xnative" target="_blank" rel="noopener noreferrer">Xnative/Timeline</a> をベースに作られています。</p>
+        <p class="related-article">${t('このソフトウェアの関連記事：', 'Related article about this software: ')}<a href="${articleUrl}" target="_blank" rel="noopener noreferrer">${articleUrl}</a></p>
         <p class="message">${usageText}</p>
         <button type="button" id="kioskUsageStartBtn">
           ${t('スタート', 'Start')}
