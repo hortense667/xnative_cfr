@@ -760,6 +760,10 @@
     return params;
   }
   const initialUrlParams = normalizeEmergencyUrlParams();
+  const debugModeParam = String(initialUrlParams.get('debug') || '').toLowerCase();
+  function isMode2ScoreDebugEnabled() {
+    return debugModeParam.split(',').map(v => v.trim()).includes('score');
+  }
   function isTruthyUrlParam(value) {
     if (value == null) return false;
     const normalized = String(value).trim().toLowerCase();
@@ -771,7 +775,209 @@
   const kioskDiagnosisMode = String(initialUrlParams.get('mode') || '1').trim() === '2' ? '2' : '1';
   window.kioskDiagnosisMode = kioskDiagnosisMode;
   function isKioskMode2() { return kioskDiagnosisMode === '2'; }
-  function getKioskDiagnosisMinCount() { return isKioskMode2() ? 5 : 10; }
+  function getActiveDiagnosticProfile() {
+    try {
+      const cfr = (typeof getCfrPrompts === 'function') ? getCfrPrompts() : null;
+      const profile = cfr && cfr.diagnosticProfile;
+      return (profile && typeof profile === 'object') ? profile : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function getActiveMode2Profile() {
+    try {
+      const cfr = (typeof getCfrPrompts === 'function') ? getCfrPrompts() : null;
+      const profile = cfr && cfr.mode2Profile;
+      return (profile && typeof profile === 'object') ? profile : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function getActiveMode2LikeProfile() {
+    return getActiveMode2Profile() || getActiveDiagnosticProfile();
+  }
+  function getMode2RoleLabelDefs() {
+    const mode2 = getActiveMode2Profile();
+    const legacy = getActiveDiagnosticProfile();
+    const fromMode2 = mode2 && mode2.roleLabels && typeof mode2.roleLabels === 'object' ? mode2.roleLabels : null;
+    const fromLegacy = legacy && legacy.roleLabels && typeof legacy.roleLabels === 'object' ? legacy.roleLabels : null;
+    const labels = fromMode2 || fromLegacy || {};
+    return {
+      mainJa: String(labels.mainJa || '').trim() || '主属性',
+      mainEn: String(labels.mainEn || '').trim() || 'Main Attribute',
+      subJa: String(labels.subJa || '').trim() || '副属性',
+      subEn: String(labels.subEn || '').trim() || 'Sub Attribute',
+      hiddenJa: String(labels.hiddenJa || '').trim() || '裏属性',
+      hiddenEn: String(labels.hiddenEn || '').trim() || 'Hidden Attribute'
+    };
+  }
+  function getMode2ScoringConfig() {
+    const profile = getActiveMode2Profile();
+    const scoring = profile && profile.scoring && typeof profile.scoring === 'object' ? profile.scoring : null;
+    return scoring || null;
+  }
+  function resolveMode2AttrCode(token) {
+    const raw = String(token || '').trim();
+    if (!raw) return '';
+    if (Object.prototype.hasOwnProperty.call(MODE2_ATTRS, raw)) return raw;
+    const low = raw.toLowerCase();
+    const hit = Object.entries(MODE2_ATTRS).find(([code, info]) => {
+      const attrCode = String(info && info.code ? info.code : '').trim().toLowerCase();
+      const ja = String(info && info.ja ? info.ja : '').trim();
+      const en = String(info && info.en ? info.en : '').trim().toLowerCase();
+      return attrCode === low || ja === raw || en === low || code.toLowerCase() === low;
+    });
+    return hit ? hit[0] : '';
+  }
+  function buildMode2AttrWeightMap(rawMap) {
+    const out = {};
+    if (!rawMap || typeof rawMap !== 'object') return out;
+    Object.entries(rawMap).forEach(([token, v]) => {
+      const code = resolveMode2AttrCode(token);
+      const n = Number(v);
+      if (!code || !Number.isFinite(n) || n <= 0) return;
+      out[code] = n;
+    });
+    return out;
+  }
+  function buildMode2AttrBiasMap(rawMap) {
+    const out = {};
+    if (!rawMap || typeof rawMap !== 'object') return out;
+    Object.entries(rawMap).forEach(([token, v]) => {
+      const code = resolveMode2AttrCode(token);
+      const n = Number(v);
+      if (!code || !Number.isFinite(n)) return;
+      out[code] = n;
+    });
+    return out;
+  }
+  function buildMode2MeaningWeightMatrix(rawMap) {
+    const out = {};
+    if (!rawMap || typeof rawMap !== 'object') return out;
+    Object.entries(rawMap).forEach(([meaningCodeToken, attrMap]) => {
+      if (!attrMap || typeof attrMap !== 'object') return;
+      const key = String(meaningCodeToken || '').trim().toLowerCase();
+      if (!key) return;
+      out[key] = {};
+      Object.entries(attrMap).forEach(([attrToken, m]) => {
+        const attrCode = resolveMode2AttrCode(attrToken);
+        const n = Number(m);
+        if (!attrCode || !Number.isFinite(n) || n <= 0) return;
+        out[key][attrCode] = n;
+      });
+      if (!Object.keys(out[key]).length) delete out[key];
+    });
+    return out;
+  }
+  function getMode2MeaningAttrMultiplier(matrix, meaningDef, attrCode) {
+    if (!matrix || typeof matrix !== 'object' || !attrCode) return 1.0;
+    const codeToken = String(meaningDef && (meaningDef.code || meaningDef.key) ? (meaningDef.code || meaningDef.key) : '').trim().toLowerCase();
+    if (!codeToken || !matrix[codeToken]) return 1.0;
+    const n = Number(matrix[codeToken][attrCode]);
+    return Number.isFinite(n) && n > 0 ? n : 1.0;
+  }
+  function getMode2AttrFamily(code) {
+    const info = MODE2_ATTRS[code] || {};
+    const family = String(info.family || '').trim();
+    return family || code;
+  }
+  function applyMode2DominanceCap(attrScores, dominanceCapCfg) {
+    if (!dominanceCapCfg) return;
+    let maxRatio = 0;
+    let strength = 0.35;
+    if (typeof dominanceCapCfg === 'number') {
+      maxRatio = Number(dominanceCapCfg);
+    } else if (typeof dominanceCapCfg === 'object') {
+      maxRatio = Number(dominanceCapCfg.maxRatio != null ? dominanceCapCfg.maxRatio : dominanceCapCfg.leadRatio);
+      const s = Number(dominanceCapCfg.strength);
+      if (Number.isFinite(s) && s > 0 && s <= 1) strength = s;
+    }
+    if (!Number.isFinite(maxRatio) || maxRatio <= 1.0) return;
+    const ranked = Object.entries(attrScores || {}).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+    if (ranked.length < 2) return;
+    const topCode = ranked[0][0];
+    const top = Number(ranked[0][1] || 0);
+    const second = Number(ranked[1][1] || 0);
+    if (top <= 0 || second <= 0) return;
+    const allowed = second * maxRatio;
+    if (top <= allowed) return;
+    const compressed = allowed + ((top - allowed) * (1 - strength));
+    attrScores[topCode] = compressed;
+  }
+  function getMode2ScreenLabelText(key, fallbackJa, fallbackEn) {
+    const profile = getActiveDiagnosticProfile();
+    const labels = profile && profile.screenLabels && typeof profile.screenLabels === 'object'
+      ? profile.screenLabels
+      : null;
+    const jaKey = key + 'Ja';
+    const enKey = key + 'En';
+    const ja = labels && typeof labels[jaKey] === 'string' && labels[jaKey].trim() ? labels[jaKey].trim() : fallbackJa;
+    const en = labels && typeof labels[enKey] === 'string' && labels[enKey].trim() ? labels[enKey].trim() : fallbackEn;
+    return t(ja, en);
+  }
+  function getMode2UiLabel(key, fallbackJa, fallbackEn) {
+    if (key === 'epithetSection') {
+      const mode2 = getActiveMode2Profile();
+      const label = mode2 && mode2.epithetLabel;
+      if (label) {
+        if (typeof label === 'string') return String(label);
+        if (typeof label === 'object') {
+          const ja = String(label.ja || '').trim() || fallbackJa;
+          const en = String(label.en || '').trim() || fallbackEn;
+          return t(ja, en);
+        }
+      }
+    }
+    return getMode2ScreenLabelText(key, fallbackJa, fallbackEn);
+  }
+  function getKioskDiagnosisMinCount() {
+    if (!isKioskMode2()) return 10;
+    const profile = getActiveMode2LikeProfile();
+    const n = Number(profile && profile.minSelectionCount);
+    if (!Number.isFinite(n) || n <= 0) return 5;
+    return Math.max(1, Math.floor(n));
+  }
+  function getKioskDiagnosisRecommendedCount() {
+    if (!isKioskMode2()) return 10;
+    const profile = getActiveMode2LikeProfile();
+    const n = Number(profile && profile.recommendedSelectionCount);
+    if (!Number.isFinite(n) || n <= 0) return 10;
+    return Math.max(1, Math.floor(n));
+  }
+  function getMode2ShareHashtag() {
+    const profile = getActiveMode2LikeProfile();
+    const ja = (profile && typeof profile.shareHashtag === 'string') ? profile.shareHashtag.trim() : '';
+    const en = (profile && typeof profile.shareHashtag_en === 'string') ? profile.shareHashtag_en.trim() : '';
+    if (isEnglishUi()) return en || ja || '#otakuDiagnosis';
+    return ja || en || '#otaku診断';
+  }
+  function getDiagnosisShareImageFilename() {
+    const report = window.lastMode2DiagnosisResult;
+    if (!(report && typeof report === 'object' && Array.isArray(report.top3))) {
+      return 'otaku-diagnosis.png';
+    }
+    const rawBase = getMode2UiLabel('shareImageFileBase', 'otaku-diagnosis', 'otaku-diagnosis');
+    const safe = String(rawBase || 'otaku-diagnosis')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .toLowerCase();
+    return (safe || 'otaku-diagnosis') + '.png';
+  }
+  function getMode2LowerModuleSectionLabelByLevel(level) {
+    const profile = getActiveMode2LikeProfile();
+    const labels = profile && profile.lowerModuleLabels && typeof profile.lowerModuleLabels === 'object'
+      ? profile.lowerModuleLabels
+      : {};
+    const isGeneral = String(level || '').trim() === 'general';
+    const ja = isGeneral
+      ? (String(labels.generalJa || '').trim() || '惹かれやすい領域')
+      : (String(labels.deepJa || '').trim() || '濃い文化圏');
+    const en = isGeneral
+      ? (String(labels.generalEn || '').trim() || 'Areas You Naturally Gravitate Toward')
+      : (String(labels.deepEn || '').trim() || 'Strong Cultural Modules');
+    return t(ja, en);
+  }
   (function(){
     if (initialUrlParams.get('editmode') === 'ON' && settingsBtn) settingsBtn.style.display = '';
   })();
@@ -804,6 +1010,60 @@
     const ja = item && item.label ? String(item.label) : '';
     const en = item && item.label_en ? String(item.label_en) : '';
     return isEnglishUi() ? (en || ja) : (ja || en);
+  }
+  function getCandidateDisplayLanguageMode() {
+    const cfr = getCfrPrompts();
+    const candidateDisplay = (cfr && cfr.candidateDisplay && typeof cfr.candidateDisplay === 'object')
+      ? cfr.candidateDisplay
+      : null;
+    const mode = String(candidateDisplay && candidateDisplay.languageMode ? candidateDisplay.languageMode : '').trim();
+    return mode === 'primaryOnly' ? 'primaryOnly' : 'both';
+  }
+  function getCandidateLocalizedView(item, fallbackLabel) {
+    const labelJa = String(item && item.label ? item.label : '').trim();
+    const labelEn = String(item && item.label_en ? item.label_en : '').trim();
+    const urlJa = String(item && item.url ? item.url : '').trim();
+    const urlEn = String(item && (item.url_e || item.url_en || item.URL_en || item.URL_e || item.urlEn) ? (item.url_e || item.url_en || item.URL_en || item.URL_e || item.urlEn) : '').trim();
+    const fb = String(fallbackLabel || '').trim();
+    const primary = isEnglishUi()
+      ? { label: labelEn || labelJa || fb, url: urlEn, title: 'English page' }
+      : { label: labelJa || labelEn || fb, url: urlJa, title: t('関連ページを表示', 'Open related page') };
+    const secondary = isEnglishUi()
+      ? { label: labelJa, url: urlJa, title: t('関連ページを表示', 'Open related page') }
+      : { label: labelEn, url: urlEn, title: 'English page' };
+    return { primary, secondary };
+  }
+  function buildCandidateLabelUrlHtml(item, options) {
+    const opts = options || {};
+    const view = getCandidateLocalizedView(item, opts.fallbackLabel || '');
+    const mode = getCandidateDisplayLanguageMode();
+    const primary = view.primary;
+    const secondary = view.secondary;
+    const primaryHtml = `${primary.label ? `<span style="font-weight:700; overflow-wrap:anywhere; word-break:break-word;">${escapeHtmlText(primary.label)}</span>` : ''}${opts.includeGenreBadge ? renderGenreBadge(item) : ''}${primary.url ? `<span class="probe-web-icon" data-web-url="${escapeHtmlAttr(primary.url)}" title="${escapeHtmlAttr(primary.title || '')}" style="cursor:pointer; white-space:nowrap;">🌐</span>` : ''}`;
+    const secondaryHtml = `${secondary.label ? `<span style="color:#444; overflow-wrap:anywhere; word-break:break-word;">${escapeHtmlText(secondary.label)}</span>` : ''}${(secondary.label && secondary.url) ? ' ' : ''}${secondary.url ? `<span class="probe-web-icon" data-web-url="${escapeHtmlAttr(secondary.url)}" title="${escapeHtmlAttr(secondary.title || '')}" style="cursor:pointer; white-space:nowrap;">🌐</span>` : ''}`;
+    if (mode === 'primaryOnly') {
+      return `<span style="display:block; min-width:0; line-height:1.45;">${primaryHtml}</span>`;
+    }
+    const hasSecondary = !!(secondary.label || secondary.url);
+    if (!hasSecondary) {
+      return `<span style="display:block; min-width:0; line-height:1.45;">${primaryHtml}</span>`;
+    }
+    const primaryLen = String(primary.label || '').length;
+    const secondaryLen = String(secondary.label || '').length;
+    const forceSecondaryBreak = !!opts.forceSecondaryBreak || (primaryLen + secondaryLen >= 38);
+    if (!forceSecondaryBreak) {
+      return `
+        <span style="display:block; min-width:0; line-height:1.45;">
+          ${primaryHtml} ${secondaryHtml}
+        </span>
+      `;
+    }
+    return `
+      <span style="display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0; width:100%; line-height:1.45;">
+        <span style="display:block; min-width:0;">${primaryHtml}</span>
+        <span style="display:block; min-width:0;">${secondaryHtml}</span>
+      </span>
+    `;
   }
   const GENRE_BADGE_FALLBACK_MAP = {
     MAN: 'MNG', ANI: 'ANM', TVP: 'TV', MOV: 'MOV', FILM: 'MOV',
@@ -1033,6 +1293,11 @@
     }
     const footerMode = (options && options.footer) || 'default';
     modal.dataset.footerMode = footerMode;
+    const preventDismiss = (options && options.closeOnBackdrop === false)
+      || footerMode === 'next'
+      || isNonDismissibleModalTitle(title);
+    modal.dataset.closeOnBackdrop = preventDismiss ? 'false' : 'true';
+    modal.dataset.closeOnEscape = preventDismiss ? 'false' : 'true';
     if (modalFooter) {
       if (footerMode === 'none') {
         modalFooter.style.display = 'none';
@@ -1053,6 +1318,8 @@
     modal.setAttribute('aria-hidden','false');
     modal.style.display = 'flex';
     modal.dataset.prevFocusId = prevFocus && prevFocus.id ? prevFocus.id : '';
+    modal.dataset.closeOnBackdrop = 'true';
+    modal.dataset.closeOnEscape = 'true';
     const modalBox = modal.querySelector('.modal');
     if (modalBox) {
       modalBox.scrollTop = 0;
@@ -1066,6 +1333,13 @@
   function isDiagnosisResultModalTitle(title) {
     const s = String(title || '').toLowerCase();
     return s.includes('診断結果') || s.includes('diagnosis result');
+  }
+  function isNonDismissibleModalTitle(title) {
+    if (isDiagnosisResultModalTitle(title)) return true;
+    const s = String(title || '').toLowerCase();
+    return s.includes('診断中') || s.includes('diagnosing')
+      || s.includes('総合結果') || s.includes('overall result')
+      || s.includes('おつかれ') || s.includes('thank you for taking the test');
   }
   async function copyTextWithFallback(text) {
     const content = String(text || '');
@@ -1102,8 +1376,8 @@
     const raw = (clone.innerText || clone.textContent || '').trim();
     if (!raw) return '';
     const excludedLineFragments = [
-      '診断結果をコピー',
-      'Copy diagnosis result',
+      '診断結果全文コピー',
+      'Copy full diagnosis result',
       '個人レポートのQRを表示',
       'Show QR for personal report',
       'QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます。',
@@ -1116,6 +1390,325 @@
       .filter(line => !excludedLineFragments.some(fragment => line.includes(fragment)))
       .join('\n');
   }
+  function formatDiagnosisPlainCopyText(raw) {
+    const dynamicGuideLabel = mode2OtakuAttrsGuideButtonLabel();
+    const dynamicModuleDeep = getMode2LowerModuleSectionLabelByLevel('deep');
+    const dynamicModuleGeneral = getMode2LowerModuleSectionLabelByLevel('general');
+    const excludedLineFragments = [
+      '診断結果全文コピー',
+      'Copy full diagnosis result',
+      'SNS用診断文コピー',
+      'Copy SNS diagnosis text',
+      '診断画像コピー',
+      'Copy diagnosis image',
+      'Xに投稿',
+      'Post to X',
+      '個人レポートのQRを表示',
+      'Show QR for personal report',
+      'QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます。',
+      'Scanning the QR shows the checked item list and diagnosis text.',
+      'QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます（ただし項目が多数の場合は途中までとなります）。',
+      'Scanning the QR shows the checked item list and diagnosis text (however, if the number of items is large, it will be displayed up to a certain point).',
+      '"otaku"属性とは',
+      'What are "otaku" attributes?',
+      dynamicGuideLabel
+    ];
+    const sectionBreakBefore = [
+      getMode2UiLabel('epithetSection', 'あなたの異名', 'Your Epithet'),
+      getMode2UiLabel('emblemSection', 'あなたの記号', 'Your Emblem'),
+      getMode2UiLabel('attributesSection', '属性', 'Attributes'),
+      '主属性', 'Main Attribute',
+      '副属性', 'Sub Attribute',
+      '裏属性', 'Hidden Attribute',
+      '濃い文化圏', 'Strong Cultural Modules',
+      '惹かれやすい領域', 'Areas You Naturally Gravitate Toward',
+      dynamicModuleDeep,
+      dynamicModuleGeneral,
+      getMode2UiLabel('selectionStatusSection', '項目選択状況', 'Item Selection Status'),
+      getMode2UiLabel('overallSection', '総合', 'Overall'),
+      '今回の読み解き', 'Reading This Time',
+      '今回強く印を付けた項目', 'Items You Marked Strongly'
+    ];
+    let text = String(raw || '').trim();
+    if (!text) return '';
+    sectionBreakBefore.forEach(label => {
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`\\s+(?=${escaped}(?:[：:]|\\s|$))`, 'g');
+      text = text.replace(re, '\n\n');
+    });
+    const rolePatternParts = [
+      '主属性',
+      '副属性',
+      '裏属性',
+      'Main Attribute',
+      'Sub Attribute',
+      'Hidden Attribute',
+      mode2RoleLabel('主属性'),
+      mode2RoleLabel('副属性'),
+      mode2RoleLabel('裏属性')
+    ]
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (rolePatternParts.length) {
+      text = text.replace(new RegExp(`(${rolePatternParts.join('|')})([：:])`, 'g'), '\n$1$2');
+    }
+    const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    return lines
+      .filter(line => !excludedLineFragments.some(fragment => line.includes(fragment)))
+      .join('\n');
+  }
+  function buildMode2DiagnosisFullCopyBodyText(report) {
+    if (!report || typeof report !== 'object') return '';
+    const lines = [];
+    const pushBlank = () => { if (lines.length && lines[lines.length - 1] !== '') lines.push(''); };
+    const pushSection = (title) => { pushBlank(); lines.push(`■ ${title}`); };
+    lines.push(mode2ResultPageTitle());
+    const aliasJa = String(report.alias || '').trim();
+    const aliasEn = String(report.aliasEn || '').trim();
+    const epithetPrimary = isEnglishUi() ? aliasEn : aliasJa;
+    const epithetSecondary = isEnglishUi() ? aliasJa : aliasEn;
+    if (epithetPrimary || epithetSecondary) {
+      pushSection(getMode2UiLabel('epithetSection', 'あなたの異名', 'Your Epithet'));
+      if (epithetPrimary) lines.push(epithetPrimary);
+      if (epithetSecondary && epithetSecondary !== epithetPrimary) lines.push(epithetSecondary);
+    }
+    const summary = String(report.summary || '').trim();
+    if (summary) {
+      pushSection(getMode2UiLabel('overallSection', '総合', 'Overall'));
+      lines.push(summary);
+    }
+    const top3 = Array.isArray(report.top3) ? report.top3 : [];
+    if (top3.length) {
+      pushSection(getMode2UiLabel('attributesSection', '属性', 'Attributes'));
+      top3.slice(0, 3).forEach((item, idx) => {
+        if (!item || !item.info) return;
+        const role = mode2RoleLabel(item.role || [mode2RoleLabel('主属性'), mode2RoleLabel('副属性'), mode2RoleLabel('裏属性')][idx]);
+        const nameJa = String(item.info.ja || '').trim();
+        const nameEn = String(item.info.en || mode2AttrLabelEn(nameJa) || '').trim();
+        const primaryName = isEnglishUi() ? (nameEn || nameJa) : nameJa;
+        const secondaryName = isEnglishUi() ? nameJa : nameEn;
+        const nameLine = secondaryName && secondaryName !== primaryName
+          ? `${primaryName}（${secondaryName}）`
+          : primaryName;
+        lines.push(`${role}：${nameLine}`);
+        const desc = getMode2AttrDesc(nameJa);
+        if (desc) lines.push(`  ${desc}`);
+        const reason = String(item.reason || '').trim();
+        if (reason) lines.push(`  ${getMode2UiLabel('reasonLabel', '理由', 'Reason')}：${reason}`);
+        lines.push('');
+      });
+      while (lines.length && lines[lines.length - 1] === '') lines.pop();
+    }
+    const lowerModules = Array.isArray(report.lowerModules) ? report.lowerModules : [];
+    if (lowerModules.length) {
+      const moduleLabel = getMode2LowerModuleSectionLabelByLevel(report.lowerModuleLevel);
+      pushSection(moduleLabel);
+      lowerModules.forEach((v) => {
+        const ja = String(v.ja || '').trim();
+        const en = String(v.en || '').trim();
+        const primary = isEnglishUi() ? (en || ja) : ja;
+        const secondary = isEnglishUi() ? ja : en;
+        const label = secondary && secondary !== primary ? `${primary}（${secondary}）` : primary;
+        const reason = String(v.reason || '').trim();
+        lines.push(reason ? `・${label}\n  ${getMode2UiLabel('reasonLabel', '理由', 'Reason')}：${reason}` : `・${label}`);
+      });
+    }
+    const selectionLines = Array.isArray(report.selectedSummaries) && report.selectedSummaries.length
+      ? report.selectedSummaries.slice().sort()
+      : (kioskState.selections || [])
+        .slice()
+        .sort((a, b) => a.year === b.year ? String(a.label || '').localeCompare(String(b.label || '')) : a.year - b.year)
+        .map((selection) => {
+          const item = getKioskSourceItem(selection) || selection;
+          if (isEnglishUi()) return `${selection.year}: ${getPrimaryLabel(item)}`;
+          return `${selection.year}年: ${getPrimaryLabel(item)}`;
+        });
+    if (selectionLines.length) {
+      pushSection(getMode2UiLabel('selectionStatusSection', '項目選択状況', 'Item Selection Status'));
+      selectionLines.forEach(line => lines.push(`・${line}`));
+    }
+    const symbol = String(report.symbol || '').trim();
+    const symbolEn = String(report.symbolEn || '').trim();
+    if (symbol) {
+      pushSection(getMode2UiLabel('emblemSection', 'あなたの記号', 'Your Emblem'));
+      lines.push(symbolEn && symbolEn !== symbol ? `${symbol}（${symbolEn}）` : symbol);
+    }
+    if (report.fallbackError) {
+      pushBlank();
+      lines.push(String(report.fallbackError).trim());
+    }
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function buildDiagnosisFullCopyBodyText(sourceEl) {
+    const report = window.lastMode2DiagnosisResult;
+    if (report && typeof report === 'object' && Array.isArray(report.top3)) {
+      return buildMode2DiagnosisFullCopyBodyText(report);
+    }
+    if (!sourceEl) return '';
+    const reportOnly = sourceEl.querySelector('[data-diagnosis-report]');
+    if (reportOnly) {
+      const pre = (reportOnly.textContent || reportOnly.innerText || '').trim();
+      if (pre) return formatDiagnosisPlainCopyText(pre);
+    }
+    const clone = sourceEl.cloneNode(true);
+    clone.querySelectorAll('button, #diagnosisCopyBtnWrap, [data-copy-exclude="1"]').forEach(el => el.remove());
+    const raw = (clone.innerText || clone.textContent || '').trim();
+    if (!raw) return '';
+    return formatDiagnosisPlainCopyText(raw);
+  }
+  function buildDiagnosisFullCopyText(sourceEl) {
+    const diagnosisText = buildDiagnosisFullCopyBodyText(sourceEl);
+    const nickname = normalizeKioskNickname((window.kioskState && window.kioskState.nickname) || '') || 'Guest';
+    const executedAtRaw = window.lastDiagnosisExecutedAt || new Date().toISOString();
+    const executedAt = (() => {
+      try {
+        return new Date(executedAtRaw).toLocaleString('ja-JP', { hour12: false });
+      } catch (_) {
+        return String(executedAtRaw);
+      }
+    })();
+    return [
+      '【ニックネーム】',
+      nickname,
+      '',
+      '【実施日時】',
+      executedAt,
+      '',
+      '【診断結果】',
+      diagnosisText
+    ].join('\n');
+  }
+  function buildDiagnosisSharePayload(sourceEl) {
+    const report = window.lastMode2DiagnosisResult;
+    const url = window.location.href;
+    let text = '';
+    const title = (report && typeof report === 'object' && Array.isArray(report.top3))
+      ? getMode2ScreenLabelText('shareTitle', 'otaku診断', 'Otaku Diagnosis')
+      : t('otaku診断', 'Otaku Diagnosis');
+    if (report && typeof report.shareFullText === 'string' && report.shareFullText.trim()) {
+      text = report.shareFullText.trim();
+    } else if (report && typeof report === 'object' && Array.isArray(report.top3)) {
+      text = buildMode2DiagnosisShareText(report);
+    } else {
+      text = buildLegacyDiagnosisShareText(sourceEl, url);
+    }
+    return {
+      title,
+      text,
+      url
+    };
+  }
+  function buildLegacyDiagnosisShareText(sourceEl, url) {
+    const nickname = normalizeKioskNickname((window.kioskState && window.kioskState.nickname) || '');
+    const displayName = nickname || t('わたし', 'Me');
+    const body = buildDiagnosisCopyBodyText(sourceEl);
+    return [ `${displayName}の #otaku診断`, body, url || window.location.href ].filter(Boolean).join('\n');
+  }
+  function buildSnsShortDiagnosisText(sourceEl, maxLen) {
+    const limit = Math.max(1, maxLen || 240);
+    const full = String(buildDiagnosisSharePayload(sourceEl).text || '').trim();
+    if (!full) return '';
+    if (full.length <= limit) return full;
+    const url = window.location.href;
+    const lines = full.split('\n').map(s => s.trim()).filter(Boolean);
+    const urlLine = lines.includes(url) ? url : (lines.find(l => /^https?:\/\//.test(l)) || url);
+    const bodyLines = lines.filter(l => l !== urlLine);
+    const kept = [];
+    for (const line of bodyLines) {
+      const candidate = kept.concat(line).join('\n') + '\n' + urlLine;
+      if (candidate.length <= limit) kept.push(line);
+      else break;
+    }
+    if (kept.length) return kept.join('\n') + '\n' + urlLine;
+    const urlSuffix = '\n' + urlLine;
+    if (urlSuffix.length < limit) {
+      const headBudget = limit - urlSuffix.length;
+      return full.replace(/\s+/g, ' ').slice(0, headBudget).trim() + urlSuffix;
+    }
+    return full.slice(0, limit - 1) + '…';
+  }
+  async function copyDiagnosisImageToClipboard(sourceEl) {
+    const blob = await renderDiagnosisShareImageBlobFromElement(sourceEl);
+    if (!blob) return false;
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': Promise.resolve(blob) })
+        ]);
+        return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+  async function shareDiagnosisToXDesktop(sourceEl) {
+    const imgOk = await copyDiagnosisImageToClipboard(sourceEl);
+    const payload = buildDiagnosisSharePayload(sourceEl);
+    openDiagnosisShareUrl('x', payload);
+    return imgOk;
+  }
+  async function ensureHtml2Canvas() {
+    if (window.html2canvas) return window.html2canvas;
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+      script.crossOrigin = 'anonymous';
+      script.onload = () => resolve(window.html2canvas);
+      script.onerror = () => reject(new Error('html2canvas load failed'));
+      document.head.appendChild(script);
+    });
+  }
+  async function shareDiagnosisOnMobile(sourceEl) {
+    const text = buildSnsShortDiagnosisText(sourceEl, 240);
+    if (text) await copyTextWithFallback(text);
+    let blob = null;
+    try {
+      blob = await renderDiagnosisShareImageBlobFromElement(sourceEl);
+    } catch (_) {}
+    if (blob && navigator.share) {
+      const file = new File([blob], getDiagnosisShareImageFilename(), { type: 'image/png' });
+      const shareData = { files: [file] };
+      try {
+        if (!navigator.canShare || navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+    }
+    if (blob) {
+      try {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = getDiagnosisShareImageFilename();
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        return;
+      } catch (_) {}
+    }
+    if (text) await copyTextWithFallback(text);
+  }
+  function flashShareButtonLabel(btn, message, restoreLabel, duration) {
+    const restore = restoreLabel || btn.dataset.defaultLabel || btn.textContent;
+    btn.textContent = message;
+    setTimeout(() => { btn.textContent = restore; }, duration || 1600);
+  }
+  function openDiagnosisShareUrl(kind, payload) {
+    if (!payload || kind !== 'x') return false;
+    const text = String(payload.text || '');
+    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    const features = 'width=550,height=450,menubar=no,toolbar=no,location=yes,status=no,scrollbars=yes,resizable=yes';
+    const opened = window.open(shareUrl, 'xShareWindow', features);
+    if (opened) {
+      opened.focus();
+      return true;
+    }
+    return false;
+  }
   function attachDiagnosisCopyButton(title) {
     const oldWrap = document.getElementById('diagnosisCopyBtnWrap');
     if (oldWrap) oldWrap.remove();
@@ -1125,46 +1718,167 @@
     const wrap = document.createElement('div');
     wrap.id = 'diagnosisCopyBtnWrap';
     wrap.style.display = 'flex';
-    wrap.style.justifyContent = 'flex-end';
+    wrap.style.justifyContent = 'space-between';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '8px';
+    wrap.style.flexWrap = 'wrap';
     wrap.style.marginBottom = '8px';
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'diagnosisCopyBtn';
-    btn.textContent = '診断結果をコピー';
-    btn.title = t('診断結果をコピー', 'Copy diagnosis result');
-    btn.setAttribute('aria-label', t('診断結果をコピー', 'Copy diagnosis result'));
-    btn.style.padding = '6px 12px';
-    btn.style.border = '1px solid #d1d5db';
-    btn.style.borderRadius = '8px';
-    btn.style.background = '#fff';
-    btn.style.cursor = 'pointer';
-    btn.addEventListener('click', async () => {
-      const diagnosisText = buildDiagnosisCopyBodyText(sourceEl);
-      const nickname = normalizeKioskNickname((window.kioskState && window.kioskState.nickname) || '') || 'Guest';
-      const executedAtRaw = window.lastDiagnosisExecutedAt || new Date().toISOString();
-      const executedAt = (() => {
+    const leftActions = document.createElement('div');
+    leftActions.style.display = 'flex';
+    leftActions.style.gap = '8px';
+    leftActions.style.flexWrap = 'wrap';
+    leftActions.style.flex = '1 1 auto';
+    const btnStyle = 'padding:6px 12px;border-radius:8px;cursor:pointer;font-size:14px;';
+    if (isMobileLikeViewport()) {
+      const snsBtn = document.createElement('button');
+      snsBtn.type = 'button';
+      snsBtn.textContent = t('SNS共有', 'Share to SNS');
+      snsBtn.title = t('診断画面を画像で共有（短文はクリップボードへ）', 'Share diagnosis screen as image (short text copied)');
+      snsBtn.setAttribute('aria-label', snsBtn.title);
+      snsBtn.style.cssText = btnStyle + 'border:1px solid #6366f1;background:#6366f1;color:#fff;font-weight:600;';
+      snsBtn.addEventListener('click', async () => {
+        snsBtn.disabled = true;
+        const originalText = snsBtn.textContent;
+        snsBtn.textContent = t('画像を作成中…', 'Creating image…');
         try {
-          return new Date(executedAtRaw).toLocaleString('ja-JP', { hour12: false });
-        } catch (_) {
-          return String(executedAtRaw);
+          await shareDiagnosisOnMobile(sourceEl);
+        } finally {
+          snsBtn.disabled = false;
+          snsBtn.textContent = originalText;
         }
-      })();
-      const text = [
-        '【ニックネーム】',
-        nickname,
-        '',
-        '【実施日時】',
-        executedAt,
-        '',
-        '【診断結果】',
-        diagnosisText
-      ].join('\n');
-      const ok = await copyTextWithFallback(text);
-      const originalText = '診断結果をコピー';
-      btn.textContent = ok ? 'コピーしました' : 'コピー失敗';
-      setTimeout(() => { btn.textContent = originalText; }, 1200);
-    });
-    wrap.appendChild(btn);
+      });
+      leftActions.appendChild(snsBtn);
+      const note = document.createElement('p');
+      note.id = 'diagnosisShareMobileNote';
+      note.style.cssText = 'flex:1 1 100%;margin:4px 0 0;font-size:12px;line-height:1.65;color:#64748b;text-align:left;';
+      note.textContent = t(
+        '※画像で共有します。画像共有と同時にSNS用の短文診断結果がクリップボードにコピーされます',
+        'Shares as an image. A short diagnosis summary for SNS is also copied to the clipboard.'
+      );
+      leftActions.appendChild(note);
+    } else {
+      const xBtn = document.createElement('button');
+      xBtn.type = 'button';
+      const xLabelDefault = 'Xに投稿';
+      xBtn.textContent = xLabelDefault;
+      xBtn.title = t('Xに投稿（画像はクリップボードへ）', 'Post to X (image copied to clipboard)');
+      xBtn.setAttribute('aria-label', xBtn.title);
+      xBtn.dataset.defaultLabel = xLabelDefault;
+      xBtn.style.cssText = btnStyle + 'border:1px solid #111827;background:#111827;color:#fff;';
+      xBtn.addEventListener('click', async () => {
+        if (xBtn.disabled) return;
+        xBtn.disabled = true;
+        xBtn.textContent = t('準備中…', 'Preparing…');
+        let feedback = null;
+        try {
+          const imgOk = await shareDiagnosisToXDesktop(sourceEl);
+          if (!imgOk) feedback = t('画像コピー失敗', 'Image copy failed');
+        } catch (_) {
+          feedback = t('準備失敗', 'Failed');
+        } finally {
+          xBtn.disabled = false;
+          if (feedback) {
+            flashShareButtonLabel(xBtn, feedback, xLabelDefault);
+          } else {
+            xBtn.textContent = xLabelDefault;
+          }
+        }
+      });
+      leftActions.appendChild(xBtn);
+      const snsTextBtn = document.createElement('button');
+      snsTextBtn.type = 'button';
+      snsTextBtn.textContent = t('SNS用診断文コピー', 'Copy SNS diagnosis text');
+      snsTextBtn.title = t('240文字以下のSNS用診断文をコピー', 'Copy SNS diagnosis text (240 chars or less)');
+      snsTextBtn.setAttribute('aria-label', snsTextBtn.title);
+      snsTextBtn.style.cssText = btnStyle + 'border:1px solid #6366f1;background:#eef2ff;color:#312e81;';
+      const snsTextLabelDefault = t('SNS用診断文コピー', 'Copy SNS diagnosis text');
+      snsTextBtn.dataset.defaultLabel = snsTextLabelDefault;
+      snsTextBtn.addEventListener('click', async () => {
+        const text = buildSnsShortDiagnosisText(sourceEl, 240);
+        const ok = await copyTextWithFallback(text);
+        flashShareButtonLabel(
+          snsTextBtn,
+          ok ? t('コピーしました', 'Copied') : t('コピー失敗', 'Copy failed'),
+          snsTextLabelDefault
+        );
+      });
+      leftActions.appendChild(snsTextBtn);
+      const fullCopyBtn = document.createElement('button');
+      fullCopyBtn.type = 'button';
+      fullCopyBtn.id = 'diagnosisCopyBtn';
+      const fullCopyLabelDefault = t('診断結果全文コピー', 'Copy full diagnosis result');
+      fullCopyBtn.textContent = fullCopyLabelDefault;
+      fullCopyBtn.title = t('診断結果の詳細情報までコピー', 'Copy full diagnosis result including details');
+      fullCopyBtn.setAttribute('aria-label', fullCopyBtn.title);
+      fullCopyBtn.dataset.defaultLabel = fullCopyLabelDefault;
+      fullCopyBtn.style.cssText = btnStyle + 'border:1px solid #d1d5db;background:#fff;';
+      fullCopyBtn.addEventListener('click', async () => {
+        const ok = await copyTextWithFallback(buildDiagnosisFullCopyText(sourceEl));
+        flashShareButtonLabel(
+          fullCopyBtn,
+          ok ? t('コピーしました', 'Copied') : t('コピー失敗', 'Copy failed'),
+          fullCopyLabelDefault
+        );
+      });
+      leftActions.appendChild(fullCopyBtn);
+      const imageCopyBtn = document.createElement('button');
+      imageCopyBtn.type = 'button';
+      imageCopyBtn.textContent = t('診断画像コピー', 'Copy diagnosis image');
+      imageCopyBtn.title = t('診断結果を画像としてクリップボードにコピー', 'Copy diagnosis result as image to clipboard');
+      imageCopyBtn.setAttribute('aria-label', imageCopyBtn.title);
+      const imageLabelDefault = t('診断画像コピー', 'Copy diagnosis image');
+      imageCopyBtn.textContent = imageLabelDefault;
+      imageCopyBtn.dataset.defaultLabel = imageLabelDefault;
+      imageCopyBtn.style.cssText = btnStyle + 'border:1px solid #d1d5db;background:#fff;';
+      imageCopyBtn.addEventListener('click', async () => {
+        if (imageCopyBtn.disabled) return;
+        imageCopyBtn.disabled = true;
+        imageCopyBtn.textContent = t('画像を作成中…', 'Creating image…');
+        let feedback = null;
+        try {
+          const ok = await copyDiagnosisImageToClipboard(sourceEl);
+          feedback = ok ? t('コピーしました', 'Copied') : t('コピー失敗', 'Copy failed');
+        } catch (_) {
+          feedback = t('コピー失敗', 'Copy failed');
+        } finally {
+          imageCopyBtn.disabled = false;
+          if (feedback) {
+            flashShareButtonLabel(imageCopyBtn, feedback, imageLabelDefault);
+          } else {
+            imageCopyBtn.textContent = imageLabelDefault;
+          }
+        }
+      });
+      leftActions.appendChild(imageCopyBtn);
+      const pcNote = document.createElement('p');
+      pcNote.id = 'diagnosisSharePcNote';
+      pcNote.style.cssText = 'flex:1 1 100%;margin:4px 0 0;font-size:12px;line-height:1.65;color:#64748b;text-align:left;';
+      pcNote.textContent = t(
+        '※「Xに投稿」ではテキストの共有と同時に画像はクリップボードにコピーされています。「SNS用診断文コピー」はSNS用に240文字以下の診断文をコピー、「診断結果全文コピー」は診断結果の詳細情報までコピー、「診断画像コピー」ではこの診断結果を画像としてクリップボードにコピーします。',
+        'Post to X shares text and copies the image to the clipboard. Copy SNS diagnosis text copies a version within 240 characters. Copy full diagnosis result copies detailed diagnosis information. Copy diagnosis image copies this result as an image.'
+      );
+      leftActions.appendChild(pcNote);
+    }
+    if (isMobileLikeViewport()) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'diagnosisCopyBtn';
+      const fullCopyLabelDefault = t('診断結果全文コピー', 'Copy full diagnosis result');
+      btn.textContent = fullCopyLabelDefault;
+      btn.title = t('診断結果の詳細情報までコピー', 'Copy full diagnosis result including details');
+      btn.setAttribute('aria-label', btn.title);
+      btn.style.cssText = btnStyle + 'border:1px solid #d1d5db;background:#fff;';
+      btn.addEventListener('click', async () => {
+        const ok = await copyTextWithFallback(buildDiagnosisFullCopyText(sourceEl));
+        flashShareButtonLabel(
+          btn,
+          ok ? t('コピーしました', 'Copied') : t('コピー失敗', 'Copy failed'),
+          fullCopyLabelDefault
+        );
+      });
+      wrap.appendChild(btn);
+    }
+    wrap.appendChild(leftActions);
     modalContent.insertBefore(wrap, modalContent.firstChild);
   }
   function closeModal(){
@@ -1215,14 +1929,18 @@
     }
   }
   modalClose.addEventListener('click', closeModal);
-  modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
+  modal.addEventListener('click', (e)=>{
+    if (e.target !== modal) return;
+    if (modal.dataset.closeOnBackdrop === 'false') return;
+    closeModal();
+  });
   window.addEventListener('keydown', (e)=>{
     if (e.key !== 'Escape') return;
     if (document.getElementById('mode2OtakuAttrsGuideOverlay')) {
       closeMode2OtakuAttrsGuide();
       return;
     }
-    if (modal.style.display === 'flex') closeModal();
+    if (modal.style.display === 'flex' && modal.dataset.closeOnEscape !== 'false') closeModal();
   });
   function showError(title, errors){
     const text = Array.isArray(errors) ? errors.join('\n') : String(errors||'');
@@ -1812,12 +2530,55 @@
   };
   let cfrPromptsConfig = null;   // cfr_prompts.json 全体
   let activeCfrPrompts = null;   // 現在の年表ファイルに対応する設定
+  function isPrivateIpv4Host(hostname) {
+    const h = String(hostname || '').trim();
+    const m = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (!m) return false;
+    const a = Number(m[1]), b = Number(m[2]), c = Number(m[3]), d = Number(m[4]);
+    if (![a, b, c, d].every(n => Number.isInteger(n) && n >= 0 && n <= 255)) return false;
+    if (a === 10) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    return false;
+  }
+  function shouldPreferLocalAssets() {
+    const localAssetsFlag = isTruthyUrlParam(initialUrlParams.get('localAssets'));
+    if (localAssetsFlag) return true;
+    const host = String(location.hostname || '').trim().toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1') return true;
+    return isPrivateIpv4Host(host);
+  }
+  function shouldTryLocalTimelineFirst(filePath) {
+    const fp = String(filePath || '').trim();
+    if (!fp) return false;
+    if (!shouldPreferLocalAssets()) return false;
+    const base = fp.split('/').pop();
+    return /^timeline_.*\.json$/i.test(base || '');
+  }
+  function normalizeLocalAssetPath(filePath) {
+    const p = String(filePath || '').trim().replace(/^\/+/, '');
+    return p ? ('/' + p) : '/';
+  }
 
   async function loadCfrPromptsFromGitHub() {
     try {
       const owner = githubConfig.owner || 'hortense667';
       const repo  = githubConfig.repo  || 'xnative';
       const path  = 'cfr_prompts.json';
+      const preferLocalAssets = shouldPreferLocalAssets();
+
+      if (preferLocalAssets) {
+        try {
+          const localRes = await fetch('/cfr_prompts.json');
+          if (localRes.ok) {
+            return await localRes.json();
+          }
+          console.warn('ローカル cfr_prompts.json の取得に失敗しました:', localRes.status);
+        } catch (localErr) {
+          console.warn('ローカル cfr_prompts.json の読み込みエラー:', localErr);
+        }
+      }
+
       const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${path}`;
       const res = await fetch(rawUrl);
       if (!res.ok) {
@@ -1924,6 +2685,26 @@
       return cfr[enKey] || DEFAULT_CFR_PROMPTS_EN[key] || cfr[key] || DEFAULT_CFR_PROMPTS[key] || '';
     }
     return cfr[key] || DEFAULT_CFR_PROMPTS[key] || '';
+  }
+  function getLocalizedStep1Text(key, fallbackJa, fallbackEn) {
+    const cfr = getCfrPrompts();
+    const block = (cfr && cfr.step1Texts && typeof cfr.step1Texts === 'object') ? cfr.step1Texts : null;
+    if (isEnglishUi()) {
+      const enKey = key + '_en';
+      const enValue = block && typeof block[enKey] === 'string' ? block[enKey] : '';
+      const jaValue = block && typeof block[key] === 'string' ? block[key] : '';
+      return enValue || jaValue || fallbackEn;
+    }
+    const jaValue = block && typeof block[key] === 'string' ? block[key] : '';
+    const enValue = block && typeof block[key + '_en'] === 'string' ? block[key + '_en'] : '';
+    return jaValue || enValue || fallbackJa;
+  }
+  function formatStep1TemplateText(text, vars) {
+    const src = String(text || '');
+    return src.replace(/\{(\w+)\}/g, (_, key) => {
+      if (!vars || !Object.prototype.hasOwnProperty.call(vars, key)) return '';
+      return String(vars[key]);
+    });
   }
   function getConfiguredInitialProbeYears() {
     const cfr = getCfrPrompts();
@@ -2598,18 +3379,11 @@
       const sourceIndex = allItems.indexOf(item);
       const key = makeProbeItemKey(y, sourceIndex);
       const checkedAttr = probeCheckedKeys.has(key) ? 'checked' : '';
-      const jpUrl = item.url || '';
-      const enUrl = item.url_e || item.url_en || item.URL_en || item.URL_e || item.urlEn || '';
-      const hasJpUrl = !!jpUrl;
-      const hasEnUrl = !!enUrl;
-      const labelEn = item.label_en || '';
       return `
         <li>
-          <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:18px; flex-wrap:wrap;">
-            <input type="checkbox" data-year="${y}" data-source-index="${sourceIndex}" style="margin-right:8px; transform:scale(1.2); flex-shrink:0;" ${checkedAttr}>
-            <strong style="flex-shrink:0;">${item.label}</strong>${renderGenreBadge(item)}
-            ${hasJpUrl ? `<span class="probe-web-icon" data-web-url="${jpUrl}" title="${t('関連ページを表示', 'Open related page')}" style="cursor:pointer; flex-shrink:0;">🌐</span>` : ''}
-            <span style="display:inline; font-size:18px;">${labelEn ? `<span style="color:#444;">${labelEn}</span>` : ''}${(labelEn && hasEnUrl) ? ' ' : ''}${hasEnUrl ? `<span class="probe-web-icon" data-web-url="${enUrl}" title="English page" style="cursor:pointer;">🌐</span>` : ''}</span>
+          <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:18px; width:100%; min-width:0;">
+            <input type="checkbox" data-year="${y}" data-source-index="${sourceIndex}" style="margin-top:4px; transform:scale(1.2); flex-shrink:0;" ${checkedAttr}>
+            <span style="display:block; min-width:0; flex:1 1 auto; overflow-wrap:anywhere; word-break:break-word;">${buildCandidateLabelUrlHtml(item, { includeGenreBadge: true, fallbackLabel: item && item.label ? item.label : '', forceSecondaryBreak: false })}</span>
           </label>
         </li>
       `;
@@ -2619,7 +3393,7 @@
     probeEventsPanel.innerHTML = `
       <h4>${panelTitle}</h4>
       <p style="margin:2px 0 4px; font-size:18px; color:#666;">${(desc || '').replace(/</g,'&lt;')}</p>
-      <ul>${listHtml}</ul>
+      <ul style="overflow-x:hidden; word-break:break-word;">${listHtml}</ul>
     `;
     // 「▼年+」「▲年－」で年を変えたときも先頭（●●●●年のイベント）から見えるようにする
     probeEventsPanel.scrollTop = 0;
@@ -3838,7 +4612,27 @@
   // GitHubからデータを読み込み（トークンなし）
   async function loadFromGitHubWithoutToken() {
     try {
-      // トークンなしでGitHubのrawファイルに直接アクセス
+      const filePath = String(githubConfig.filePath || '').trim();
+      if (shouldTryLocalTimelineFirst(filePath)) {
+        try {
+          const localPath = normalizeLocalAssetPath(filePath);
+          const localRes = await fetch(localPath, { cache: 'no-store' });
+          if (localRes.ok) {
+            const localContent = await localRes.text();
+            const localJson = parseJsonWithRecovery(localContent, `Local timeline: ${filePath}`);
+            if (localJson.genres) { setGenresFromRemote(localJson.genres); }
+            if (localJson.eraSettings) {
+              eraSettings = localJson.eraSettings;
+              if (typeof drawEraBackgrounds === 'function') drawEraBackgrounds();
+            }
+            return localJson.events ? localJson.events : localJson;
+          }
+          console.warn('ローカル timeline JSON の取得に失敗しました:', localRes.status, filePath);
+        } catch (localErr) {
+          console.warn('ローカル timeline JSON の読み込みエラー:', localErr);
+        }
+      }
+      // トークンなしでGitHubのrawファイルに直接アクセス（ローカル失敗時フォールバック）
       const rawUrl = `https://raw.githubusercontent.com/${githubConfig.owner}/${githubConfig.repo}/main/${githubConfig.filePath}`;
       console.log('GitHub raw URL:', rawUrl);
       
@@ -5548,7 +6342,7 @@
     `;
     
     const isMobile = isMobileLikeViewport();
-    const opts = { footer: 'none' };
+    const opts = { footer: 'none', closeOnBackdrop: false, closeOnEscape: false };
     if (window.kioskMode && isMobile) opts.positionBelowKioskOnMobile = true;
     openModal(t('ジャンル選択（1～4個がおすすめ）', 'Genre Selection (1-4 recommended)'), modalContent, opts);
   }
@@ -5763,6 +6557,35 @@
     if (!key) return {};
     if (!kioskState.selectionMeanings[key]) kioskState.selectionMeanings[key] = {};
     return kioskState.selectionMeanings[key];
+  }
+  function getMode2MeaningLabel(def, useEnglish) {
+    const d = def && typeof def === 'object' ? def : {};
+    const ja = String(d.labelJa || d.label || '').trim();
+    const en = String(d.labelEn || d.label_en || d.label || '').trim();
+    return useEnglish ? (en || ja || String(d.key || d.code || '')) : (ja || en || String(d.key || d.code || ''));
+  }
+  function getMode2MeaningDescription(def, useEnglish) {
+    const d = def && typeof def === 'object' ? def : {};
+    const ja = String(d.descriptionJa || d.description || '').trim();
+    const en = String(d.descriptionEn || d.description_en || d.description || '').trim();
+    return useEnglish ? (en || ja) : (ja || en);
+  }
+  function getMode2ActiveMeaningDefsForSelection(selection) {
+    const state = (typeof getKioskMeaningState === 'function') ? getKioskMeaningState(selection) : null;
+    if (!state || typeof MODE2_MEANING_DEFS === 'undefined' || !Array.isArray(MODE2_MEANING_DEFS)) return [];
+    return MODE2_MEANING_DEFS.filter(def => !!state[def.key]);
+  }
+  function getMode2MeaningCatalog() {
+    if (typeof MODE2_MEANING_DEFS === 'undefined' || !Array.isArray(MODE2_MEANING_DEFS)) return [];
+    return MODE2_MEANING_DEFS.map(def => ({
+      key: String(def && def.key ? def.key : '').trim(),
+      code: String(def && def.code ? def.code : '').trim() || String(def && def.key ? def.key : '').trim(),
+      labelJa: getMode2MeaningLabel(def, false),
+      labelEn: getMode2MeaningLabel(def, true),
+      descriptionJa: getMode2MeaningDescription(def, false),
+      descriptionEn: getMode2MeaningDescription(def, true),
+      weight: Number.isFinite(Number(def && def.weight)) ? Number(def.weight) : 1.0
+    })).filter(def => def.key && (def.labelJa || def.labelEn));
   }
   function escapeHtmlAttr(s) {
     return String(s == null ? '' : s)
@@ -6232,6 +7055,11 @@
       if (wizard.step === 1) {
         const topTitleLines = getLocalizedTopTitleLines();
         const topDesc  = getLocalizedCfrPrompt('topDescription');
+        const privacyNotice = getLocalizedStep1Text(
+          'privacyNotice',
+          '※入力した内容や選択内容は診断結果の表示や集計に使わせていただきます。',
+          'Your inputs and selections are used to show and aggregate diagnosis results.'
+        );
         const checked = isEnglishUi() ? 'checked' : '';
         overlay.innerHTML = `
           <div class="inner">
@@ -6240,7 +7068,7 @@
             </h2>
             <p style="font-size:18px; line-height:1.7;">${escapeHtmlText(topDesc)}</p>
             <div style="margin-top:6px; font-size:18px; color:#666;">
-              ${t('※入力した内容や選択内容は診断結果の表示や集計に使わせていただきます。', 'Your inputs and selections are used to show and aggregate diagnosis results.')}
+              ${escapeHtmlText(privacyNotice)}
             </div>
             <div class="kiosk-start-bottom">
               <label class="kiosk-start-en">
@@ -6332,13 +7160,30 @@
         return;
       }
 
+      const checklistGuide = getLocalizedStep1Text(
+        'selectionGuide',
+        getLocalizedCfrPrompt('eventChecklistDescription'),
+        getLocalizedCfrPrompt('eventChecklistDescription')
+      );
+      const min = getKioskDiagnosisMinCount();
+      const rec = getKioskDiagnosisRecommendedCount();
+      const minimumSelectionNoticeRaw = getLocalizedStep1Text(
+        'minimumSelectionNotice',
+        '※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（{min}個以上、{recommended}個程度までが適切です）。次画面で生年をセットしたあとに動かす〇マーカーは生年以前へも動かしてみてください。たとえば、ドラえもんはあなたが生まれるよりもはるかに前からある作品だったりしますよね。時期的には偏っていてもかまいません。',
+        'Check items you liked and were influenced by, even if not in real time (at least {min} items, around {recommended} is recommended). The 〇 marker in the next screen after setting the birth year can be moved anywhere, including before birth year. For example, Doraemon is an earlier work than you were born. We recommend selecting one or two items every 1-3 years.'
+      );
+      const minimumSelectionNotice = formatStep1TemplateText(minimumSelectionNoticeRaw, {
+        min,
+        recommended: rec
+      });
+      const startButtonText = getLocalizedStep1Text('startButton', '診断スタート', 'Start Diagnosis');
       overlay.innerHTML = `
         <div class="inner">
           <div style="margin-top:6px; font-size:18px; color:#666;">
-            ${t('※該当する項目の選択はチェックボックスで行ってください。', 'Use checkboxes to select matching items.')}
+            ${escapeHtmlText(checklistGuide || t('※該当する項目の選択はチェックボックスで行ってください。', 'Use checkboxes to select matching items.'))}
           </div>
           <div style="margin-top:6px; font-size:18px; color:red; font-weight:bold;">
-            ${t('※リアルタイムで接したものでなくても、好きな、影響を受けたものをチェックしてください（5個以上、10個程度までが適切です）。次画面で生年をセットしたあとに動かす〇マーカーは生年以前へも動かしてみてください。たとえば、ドラえもんはあなたが生まれるよりもはるかに前からある作品だったりしますよね。時期的には偏っていてもかまいません。', 'Check items you liked and were influenced by, even if not in real time (at least 5 items, ideally 10-20 items). The 〇 marker in the next screen after setting the birth year can be moved anywhere, including before birth year. For example, Doraemon is an earlier work than you were born. We recommend selecting one or two items every 1-3 years.')}
+            ${escapeHtmlText(minimumSelectionNotice)}
           </div>
           <div style="margin-top:6px; font-size:18px; color:#666;">
             ${t('※地球マーク', 'The globe icon')}<span style="pointer-events:none;">🌐</span>${t('はホバー（スマホではタップ）するとWikipediaなどのページを表示します。必要に応じて内容を確認したり楽しみながらチェックしてください。', ' opens pages like Wikipedia. You can follow links to explore information. Check items while enjoying the content as needed.')}
@@ -6347,7 +7192,7 @@
             ${t('※項目チェックの最中には「検索」や「ヘルプ」が使えます。項目が多すぎると感じた場合は「ジャンル選択」で絞っることができます。', 'During item checking, you can use "Search" and "Help". If you feel that the number of items is too many, you can narrow down the "genre" at any time from the buttons on the screen.')}
           </div>
           <div class="actions">
-            <button type="button" id="kioskStartBtn">${t('診断スタート', 'Start Diagnosis')}</button>
+            <button type="button" id="kioskStartBtn">${escapeHtmlText(startButtonText)}</button>
           </div>
         </div>
       `;
@@ -6369,7 +7214,10 @@
     };
 
     document.body.appendChild(overlay);
-    renderStep();
+    Promise.resolve()
+      .then(() => ensureCfrPromptsLoaded())
+      .catch(() => {})
+      .finally(() => { renderStep(); });
   }
 
   function openKioskChecklist(year) {
@@ -6551,12 +7399,24 @@
       const label = getPrimaryLabel(source) || s.label;
       return isEnglishUi() ? `${s.year}: ${label}` : `${s.year}年: ${label}`;
     }).join('\n');
+    const meaningLines = kioskState.selections.map(s => {
+      const active = getMode2ActiveMeaningDefsForSelection(s);
+      if (!active.length) return '';
+      const source = (events[s.year] || []).find(it => it.label === s.label) || { label: s.label, label_en: '' };
+      const label = getPrimaryLabel(source) || s.label;
+      const meanings = active.map(def => {
+        const mLabel = getMode2MeaningLabel(def, isEnglishUi());
+        const mDesc = getMode2MeaningDescription(def, isEnglishUi());
+        return mDesc ? `${mLabel}(${mDesc})` : mLabel;
+      }).join(' / ');
+      return isEnglishUi() ? `${s.year}: ${label} => ${meanings}` : `${s.year}年: ${label} => ${meanings}`;
+    }).filter(Boolean).join('\n');
     const cfr = getCfrPrompts();
     const localizedDefaultHead = getLocalizedCfrPrompt('geminiPromptHead');
     const head = headOverride || (isEnglishUi() ? (cfr.geminiPromptHead_en || localizedDefaultHead) : (cfr.geminiPromptHead || localizedDefaultHead));
     return isEnglishUi()
-      ? (head + `Nickname: ${nickname}\nGender: ${gender}\nBirth year: ${birthYear}\n\nSelected content (year: event):\n${lines}`)
-      : (head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}`);
+      ? (head + `Nickname: ${nickname}\nGender: ${gender}\nBirth year: ${birthYear}\n\nSelected content (year: event):\n${lines}${meaningLines ? `\n\nMeaning context per item:\n${meaningLines}` : ''}`)
+      : (head + `ニックネーム: ${nickname}\n性別: ${gender}\n生年: ${birthYear}年\n\n選択したコンテンツ（年: イベント名）:\n${lines}${meaningLines ? `\n\n各項目の意味づけ:\n${meaningLines}` : ''}`);
   }
   const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite';
   const DEFAULT_OPENAI_MODEL = 'gpt-5.4';
@@ -6728,9 +7588,18 @@
           const urlEn = item.url_e || item.url_en || item.URL_en || item.URL_e || item.urlEn || '';
           const labelEn = item.label_en || '';
           const note = item.note || '';
-          const meaning = getKioskMeaningState(s);
-          const meaningTags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => def.labelJa);
-          return { year: s.year, label: s.label, label_en: labelEn, genre: genre, url: url, urlEn: urlEn, note: note, meaningTags: meaningTags };
+          const activeMeanings = getMode2ActiveMeaningDefsForSelection(s);
+          const meaningTags = activeMeanings.map(def => getMode2MeaningLabel(def, false));
+          const meaningDetails = activeMeanings.map(def => ({
+            code: String(def.code || def.key || '').trim(),
+            key: String(def.key || '').trim(),
+            label: getMode2MeaningLabel(def, false),
+            labelEn: getMode2MeaningLabel(def, true),
+            description: getMode2MeaningDescription(def, false),
+            descriptionEn: getMode2MeaningDescription(def, true),
+            weight: Number.isFinite(Number(def.weight)) ? Number(def.weight) : 1.0
+          }));
+          return { year: s.year, label: s.label, label_en: labelEn, genre: genre, url: url, urlEn: urlEn, note: note, meaningTags: meaningTags, meaningDetails: meaningDetails };
         })
       });
       localStorage.setItem(KIOSK_SESSIONS_KEY, JSON.stringify(list));
@@ -6766,6 +7635,7 @@
     const birthYear = (typeof probeBlue !== 'undefined' && probeBlue.birthYear != null) ? probeBlue.birthYear : null;
     return {
       timestamp: new Date().toISOString(),
+      mode: isKioskMode2() ? '2' : '1',
       nickname: normalizeKioskNickname(kioskState.nickname || ''),
       gender: kioskState.gender || '',
       birthYear: birthYear,
@@ -6784,8 +7654,17 @@
           genre: s.genre != null ? s.genre : ''
         };
         if (includeMeaningTags) {
-          const meaning = getKioskMeaningState(s);
-          result.meaningTags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => def.labelJa);
+          const activeMeanings = getMode2ActiveMeaningDefsForSelection(s);
+          result.meaningTags = activeMeanings.map(def => getMode2MeaningLabel(def, false));
+          result.meaningDetails = activeMeanings.map(def => ({
+            code: String(def.code || def.key || '').trim(),
+            key: String(def.key || '').trim(),
+            label: getMode2MeaningLabel(def, false),
+            labelEn: getMode2MeaningLabel(def, true),
+            description: getMode2MeaningDescription(def, false),
+            descriptionEn: getMode2MeaningDescription(def, true),
+            weight: Number.isFinite(Number(def.weight)) ? Number(def.weight) : 1.0
+          }));
         }
         return result;
       }),
@@ -7018,6 +7897,7 @@
     { key: 'self', labelJa: '自分らしい', labelEn: 'Feels like me', weight: 1.55 },
     { key: 'oshi', labelJa: '推す', labelEn: 'Oshi / Support', weight: 1.35 }
   ];
+  const MODE2_MEANING_DEFS_FALLBACK = MODE2_MEANING_DEFS.map(def => ({ ...def }));
   const MODE2_ATTRS = {
     world: { ja: '世界観没入', en: 'World Immersion', short: '世界', code: 'WI', desc: 'その世界に入れる感じで選ぶ属性です。', descEn: 'You choose through the feeling of entering a world.' },
     mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機構', code: 'ME', desc: '道具や仕組みそのものに心が動く属性です。', descEn: 'Tools and systems themselves move your heart.' },
@@ -7031,6 +7911,9 @@
     author: { ja: '作者偏信', en: 'Author Bias', short: '作者', code: 'AU', desc: '作り手の癖や姿勢まで含めて愛する属性です。', descEn: 'You love the maker\'s habits and stance, not just the work.' },
     archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', code: 'AR', desc: '好きなものを系譜や記録として抱える属性です。', descEn: 'You hold what you love as lineage and record.' }
   };
+  const MODE2_ATTRS_FALLBACK = Object.fromEntries(
+    Object.entries(MODE2_ATTRS).map(([k, v]) => [k, { ...v }])
+  );
   const MODE2_ATTR_EN = Object.values(MODE2_ATTRS).reduce((acc, item) => {
     acc[item.ja] = { label: item.en, short: item.en, code: item.code || '' };
     return acc;
@@ -7038,6 +7921,236 @@
   const MODE2_ATTR_BY_JA = Object.fromEntries(
     Object.entries(MODE2_ATTRS).map(([code, info]) => [info.ja, code])
   );
+  let mode2DiagnosticProfileAppliedSig = '';
+  function rebuildMode2AttrLookups() {
+    Object.keys(MODE2_ATTR_EN).forEach((k) => { delete MODE2_ATTR_EN[k]; });
+    Object.values(MODE2_ATTRS).forEach((item) => {
+      MODE2_ATTR_EN[item.ja] = { label: item.en, short: item.en, code: item.code || '' };
+    });
+    Object.keys(MODE2_ATTR_BY_JA).forEach((k) => { delete MODE2_ATTR_BY_JA[k]; });
+    Object.entries(MODE2_ATTRS).forEach(([code, info]) => {
+      MODE2_ATTR_BY_JA[info.ja] = code;
+    });
+  }
+  function resetMode2MeaningDefs(defs) {
+    MODE2_MEANING_DEFS.splice(0, MODE2_MEANING_DEFS.length, ...defs.map(def => ({
+      key: String(def.key || '').trim(),
+      code: String(def.code || '').trim() || String(def.key || '').trim(),
+      labelJa: String(def.labelJa || def.label || '').trim(),
+      labelEn: String(def.labelEn || def.label_en || def.label || '').trim() || String(def.labelJa || def.label || '').trim(),
+      descriptionJa: String(def.descriptionJa || def.description || '').trim(),
+      descriptionEn: String(def.descriptionEn || def.description_en || def.description || '').trim() || String(def.descriptionJa || def.description || '').trim(),
+      weight: Number.isFinite(Number(def.weight)) ? Number(def.weight) : 1.0
+    })).filter(def => def.key && def.labelJa));
+  }
+  function buildMode2MeaningDefsFromChoices(choices) {
+    if (!Array.isArray(choices) || !choices.length) return null;
+    const out = choices.map((choice, idx) => {
+      if (!choice || typeof choice !== 'object') return null;
+      const code = String(choice.code || '').trim() || ('choice_' + idx);
+      const key = String(choice.scoreKey || choice.key || code).trim();
+      if (!key) return null;
+      const labelJa = String(choice.label || choice.labelJa || '').trim();
+      const labelEn = String(choice.label_en || choice.labelEn || '').trim() || labelJa;
+      if (!labelJa) return null;
+      return {
+        key,
+        code,
+        labelJa,
+        labelEn,
+        descriptionJa: String(choice.description || choice.descriptionJa || '').trim(),
+        descriptionEn: String(choice.description_en || choice.descriptionEn || '').trim() || String(choice.description || choice.descriptionJa || '').trim(),
+        weight: Number.isFinite(Number(choice.weight)) ? Number(choice.weight) : 1.0
+      };
+    }).filter(Boolean);
+    return out.length ? out : null;
+  }
+  function resetMode2Attrs(attrsMap) {
+    Object.keys(MODE2_ATTRS).forEach((k) => { delete MODE2_ATTRS[k]; });
+    Object.entries(attrsMap || {}).forEach(([k, v]) => {
+      const key = String(k || '').trim();
+      if (!key || !v || typeof v !== 'object') return;
+      MODE2_ATTRS[key] = {
+        ja: String(v.ja || '').trim(),
+        en: String(v.en || '').trim() || String(v.ja || '').trim(),
+        short: String(v.short || '').trim() || String(v.ja || '').trim(),
+        code: String(v.code || '').trim(),
+        family: String(v.family || '').trim(),
+        desc: String(v.desc || '').trim(),
+        descEn: String(v.descEn || '').trim() || String(v.desc || '').trim()
+      };
+    });
+    if (!Object.keys(MODE2_ATTRS).length) {
+      Object.entries(MODE2_ATTRS_FALLBACK).forEach(([k, v]) => { MODE2_ATTRS[k] = { ...v }; });
+    }
+    rebuildMode2AttrLookups();
+  }
+  function buildMode2AttrsFromProfile(mode2Profile) {
+    if (!mode2Profile || typeof mode2Profile !== 'object') return null;
+    const attrs = mode2Profile.attributes;
+    if (!attrs) return null;
+    if (Array.isArray(attrs)) {
+      const out = {};
+      attrs.forEach((item, idx) => {
+        if (!item || typeof item !== 'object') return;
+        const key = String(item.key || '').trim() || ('attr_' + idx);
+        out[key] = item;
+      });
+      return Object.keys(out).length ? out : null;
+    }
+    if (typeof attrs === 'object') return attrs;
+    return null;
+  }
+  function normalizeMode2ModuleItems(items, level, fallbackPrefix) {
+    if (!Array.isArray(items) || !items.length) return null;
+    const out = items.map((item, idx) => {
+      if (item && typeof item === 'object') {
+        const ja = String(item.ja || item.name || '').trim();
+        const en = String(item.en || item.name || item.ja || '').trim();
+        if (!ja && !en) return null;
+        const key = String(item.key || '').trim() || slugifyMode2Name(ja || en, `${fallbackPrefix}_${idx}`);
+        return { key, ja: ja || en, en: en || ja, level };
+      }
+      const name = String(item || '').trim();
+      if (!name) return null;
+      return { key: slugifyMode2Name(name, `${fallbackPrefix}_${idx}`), ja: name, en: name, level };
+    }).filter(Boolean);
+    return out.length ? out : null;
+  }
+  function normalizeMode2PracticeItems(items) {
+    if (!Array.isArray(items) || !items.length) return null;
+    const out = items.map((item, idx) => {
+      if (item && typeof item === 'object') {
+        const ja = String(item.ja || item.name || '').trim();
+        const en = String(item.en || item.name || item.ja || '').trim();
+        if (!ja && !en) return null;
+        const key = String(item.key || '').trim() || slugifyMode2Name(ja || en, `practice_${idx}`);
+        return { key, ja: ja || en, en: en || ja };
+      }
+      const name = String(item || '').trim();
+      if (!name) return null;
+      return { key: slugifyMode2Name(name, `practice_${idx}`), ja: name, en: name };
+    }).filter(Boolean);
+    return out.length ? out : null;
+  }
+  function applyMode2DiagnosticProfileIfNeeded() {
+    const mode2Profile = getActiveMode2Profile();
+    const diagnosticProfile = getActiveDiagnosticProfile();
+    const profileSig = JSON.stringify({
+      mode2Profile: mode2Profile && typeof mode2Profile === 'object' ? mode2Profile : {},
+      diagnosticProfile: diagnosticProfile && typeof diagnosticProfile === 'object' ? diagnosticProfile : {}
+    });
+    if (profileSig === mode2DiagnosticProfileAppliedSig) return;
+    mode2DiagnosticProfileAppliedSig = profileSig;
+    const meaningChoices = buildMode2MeaningDefsFromChoices(mode2Profile && mode2Profile.meaningChoices);
+    const meaningDefs = meaningChoices && meaningChoices.length
+      ? meaningChoices
+      : (Array.isArray(mode2Profile && mode2Profile.meaningDefs) && mode2Profile.meaningDefs.length
+        ? mode2Profile.meaningDefs
+        : (Array.isArray(diagnosticProfile && diagnosticProfile.meaningDefs) && diagnosticProfile.meaningDefs.length
+          ? diagnosticProfile.meaningDefs
+          : MODE2_MEANING_DEFS_FALLBACK));
+    const attrsFromMode2 = buildMode2AttrsFromProfile(mode2Profile);
+    const attrs = attrsFromMode2 && Object.keys(attrsFromMode2).length
+      ? attrsFromMode2
+      : (diagnosticProfile && diagnosticProfile.attrs && typeof diagnosticProfile.attrs === 'object' && Object.keys(diagnosticProfile.attrs).length
+        ? diagnosticProfile.attrs
+        : MODE2_ATTRS_FALLBACK);
+    const deepModules = normalizeMode2ModuleItems(mode2Profile && mode2Profile.deepModules, 'deep', 'deep');
+    const generalModules = normalizeMode2ModuleItems(mode2Profile && mode2Profile.generalModules, 'general', 'general');
+    const practiceModes = normalizeMode2PracticeItems(mode2Profile && mode2Profile.practiceModes);
+    if (deepModules) {
+      MODE2_DEEP_LOWER_MODULES = deepModules;
+    } else {
+      MODE2_DEEP_LOWER_MODULES = MODE2_DEEP_LOWER_MODULES_FALLBACK.map(v => ({ ...v }));
+    }
+    if (generalModules) {
+      MODE2_GENERAL_LOWER_MODULES = generalModules;
+    } else {
+      MODE2_GENERAL_LOWER_MODULES = MODE2_GENERAL_LOWER_MODULES_FALLBACK.map(v => ({ ...v }));
+    }
+    if (practiceModes) {
+      MODE2_PRACTICE_MODES = practiceModes;
+    } else {
+      MODE2_PRACTICE_MODES = MODE2_PRACTICE_MODES_FALLBACK.map(v => ({ ...v }));
+    }
+    resetMode2MeaningDefs(meaningDefs);
+    resetMode2Attrs(attrs);
+  }
+  function getMode2AttrCodeByJa(jaName) {
+    const key = MODE2_ATTR_BY_JA[String(jaName || '').trim()];
+    return (key && MODE2_ATTRS[key] && MODE2_ATTRS[key].code) ? MODE2_ATTRS[key].code : '';
+  }
+  function formatMode2AttrShareLine(roleLabel, item) {
+    if (!item || !item.info) return '';
+    const ja = String(item.info.ja || '').trim();
+    if (!ja) return '';
+    const code = getMode2AttrCodeByJa(ja) || ((item.code && MODE2_ATTRS[item.code]) ? MODE2_ATTRS[item.code].code : '');
+    return code ? `${roleLabel}：${code} ${ja}` : `${roleLabel}：${ja}`;
+  }
+  function buildMode2DiagnosisShareText(report) {
+    const nickname = normalizeKioskNickname((window.kioskState && window.kioskState.nickname) || '');
+    const displayName = nickname || t('わたし', 'Me');
+    const url = window.location.href;
+    const top3 = Array.isArray(report.top3) ? report.top3 : [];
+    const aliasJa = String(report.alias || '').trim();
+    const aliasEn = String(report.aliasEn || '').trim();
+    const lowerModules = Array.isArray(report.lowerModules) ? report.lowerModules : [];
+    const moduleLabel = getMode2LowerModuleSectionLabelByLevel(report.lowerModuleLevel);
+    const roleLabels = [mode2RoleLabel('主属性'), mode2RoleLabel('副属性'), mode2RoleLabel('裏属性')];
+    const lines = [`${displayName}の ${getMode2ShareHashtag()}`];
+    if (aliasJa) lines.push(`${t('異名', 'Epithet')}：${aliasJa}`);
+    if (aliasEn) lines.push(aliasEn);
+    top3.slice(0, 3).forEach((item, idx) => {
+      const line = formatMode2AttrShareLine(roleLabels[idx], item);
+      if (line) lines.push(line);
+    });
+    if (lowerModules.length) {
+      const moduleNames = lowerModules.map(v => String(v.ja || '').trim()).filter(Boolean).join(' ');
+      if (moduleNames) lines.push(`${moduleLabel}：${moduleNames}`);
+    }
+    lines.push(url);
+    return lines.join('\n');
+  }
+  async function renderDiagnosisShareImageBlobFromElement(sourceEl) {
+    const target = (sourceEl && sourceEl.getAttribute && sourceEl.getAttribute('data-diagnosis-report') != null)
+      ? sourceEl
+      : (sourceEl && sourceEl.querySelector ? sourceEl.querySelector('[data-diagnosis-report]') : null)
+        || document.querySelector('[data-diagnosis-report]');
+    if (!target) throw new Error('no diagnosis report');
+    const captureWidth = Math.max(target.scrollWidth, target.offsetWidth, 320);
+    const clone = target.cloneNode(true);
+    clone.querySelectorAll('[data-copy-exclude]').forEach(el => el.remove());
+    clone.style.width = captureWidth + 'px';
+    clone.style.maxWidth = 'none';
+    clone.style.boxSizing = 'border-box';
+    clone.style.background = '#ffffff';
+    const holder = document.createElement('div');
+    holder.style.cssText = `position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;width:${captureWidth}px;overflow:visible;`;
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
+    try {
+      const html2canvas = await ensureHtml2Canvas();
+      const canvas = await html2canvas(clone, {
+        backgroundColor: '#ffffff',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        logging: false,
+        width: clone.scrollWidth,
+        height: clone.scrollHeight,
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight
+      });
+      return await new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('image blob failed'));
+        }, 'image/png', 0.92);
+      });
+    } finally {
+      holder.remove();
+    }
+  }
   const MODE2_GENRE_FAMILIES = {
     narrative: ['ANI', 'ANM', 'MOV', 'TVP', 'TV', 'MAN', 'MNG'],
     game: ['GAM', 'GM'],
@@ -7124,6 +8237,7 @@
     { key:'doujin', ja:'同人／二次創作', en:'Doujin / Fan Creation', level:'deep' },
     { key:'idol', ja:'アイドル／推し文化', en:'Idol / Oshikatsu Culture', level:'deep' }
   ];
+  const MODE2_DEEP_LOWER_MODULES_FALLBACK = MODE2_DEEP_LOWER_MODULES.map(v => ({ ...v }));
   let MODE2_GENERAL_LOWER_MODULES = [
     { key:'storyworld', ja:'物語世界', en:'Story Worlds', level:'general' },
     { key:'character', ja:'キャラクター愛着', en:'Character Attachment', level:'general' },
@@ -7136,6 +8250,7 @@
     { key:'nostalgia', ja:'懐かしさ／ノスタルジー', en:'Nostalgia', level:'general' },
     { key:'wafantasy', ja:'和風幻想', en:'Japanese Fantasy', level:'general' }
   ];
+  const MODE2_GENERAL_LOWER_MODULES_FALLBACK = MODE2_GENERAL_LOWER_MODULES.map(v => ({ ...v }));
   function getMode2AllLowerModules() { return MODE2_DEEP_LOWER_MODULES.concat(MODE2_GENERAL_LOWER_MODULES); }
   let MODE2_PRACTICE_MODES = [
     { key:'watch', ja:'観る', en:'Watch' },
@@ -7147,6 +8262,7 @@
     { key:'talk', ja:'語る', en:'Talk' },
     { key:'research', ja:'研究する', en:'Research' }
   ];
+  const MODE2_PRACTICE_MODES_FALLBACK = MODE2_PRACTICE_MODES.map(v => ({ ...v }));
 
   function slugifyMode2Name(s, fallback) {
     const t = String(s || '').trim();
@@ -7179,6 +8295,9 @@
           en: String(name)
         }));
       }
+      MODE2_DEEP_LOWER_MODULES_FALLBACK.splice(0, MODE2_DEEP_LOWER_MODULES_FALLBACK.length, ...MODE2_DEEP_LOWER_MODULES.map(v => ({ ...v })));
+      MODE2_GENERAL_LOWER_MODULES_FALLBACK.splice(0, MODE2_GENERAL_LOWER_MODULES_FALLBACK.length, ...MODE2_GENERAL_LOWER_MODULES.map(v => ({ ...v })));
+      MODE2_PRACTICE_MODES_FALLBACK.splice(0, MODE2_PRACTICE_MODES_FALLBACK.length, ...MODE2_PRACTICE_MODES.map(v => ({ ...v })));
     } catch (e) {
       console.warn('diagnosticConfig の適用に失敗:', e);
     }
@@ -7408,9 +8527,28 @@ function buildMode2DiagnosisLocal() {
     const roleWordScores = {};
     const moodWordScores = {};
     const selectedSummaries = [];
+    const scoreDebugEnabled = isMode2ScoreDebugEnabled();
+    const scoringCfg = getMode2ScoringConfig();
+    const attrWeightMap = buildMode2AttrWeightMap(scoringCfg && scoringCfg.attributeWeights);
+    const attrBiasMap = buildMode2AttrBiasMap(scoringCfg && scoringCfg.attributeBias);
+    const meaningWeightMatrix = buildMode2MeaningWeightMatrix(scoringCfg && scoringCfg.meaningWeights);
+    const diversityPenalty = Number(scoringCfg && scoringCfg.diversityPenalty);
+    const meaningTrendMap = {};
+    const scoreDebugRows = {};
     const boostWord = (bag, word, val) => { if (!word) return; bag[word] = (bag[word] || 0) + val; };
     const ensureAttr = (code) => { if (attrScores[code] == null) attrScores[code] = 0; };
     Object.keys(MODE2_ATTRS).forEach(ensureAttr);
+    Object.keys(MODE2_ATTRS).forEach((code) => {
+      scoreDebugRows[code] = {
+        code,
+        label: MODE2_ATTRS[code] && MODE2_ATTRS[code].ja ? MODE2_ATTRS[code].ja : code,
+        family: getMode2AttrFamily(code),
+        base: 0,
+        weightedBase: 0,
+        bias: Number(attrBiasMap[code] || 0),
+        attrWeight: Number(attrWeightMap[code] || 1)
+      };
+    });
 
     const roleByAttr = {
       mechanism: ['司書','整備士','技手'], world: ['住人','旅人','観測者'], future: ['観測者','予報士','技手'],
@@ -7433,7 +8571,18 @@ function buildMode2DiagnosisLocal() {
       let totalMeaningWeight = 0;
       activeMeanings.forEach(def => {
         totalMeaningWeight += def.weight;
-        Object.keys(attr).forEach(code => { attrScores[code] = (attrScores[code] || 0) + attr[code] * def.weight; });
+        const meaningCodeToken = String(def && (def.code || def.key) ? (def.code || def.key) : '').trim().toLowerCase();
+        if (meaningCodeToken) meaningTrendMap[meaningCodeToken] = (meaningTrendMap[meaningCodeToken] || 0) + 1;
+        Object.keys(attr).forEach(code => {
+          const baseDelta = Number(attr[code] || 0) * Number(def.weight || 1);
+          const mMul = getMode2MeaningAttrMultiplier(meaningWeightMatrix, def, code);
+          const finalDelta = baseDelta * mMul;
+          attrScores[code] = (attrScores[code] || 0) + finalDelta;
+          if (scoreDebugRows[code]) {
+            scoreDebugRows[code].base += baseDelta;
+            scoreDebugRows[code].weightedBase += finalDelta;
+          }
+        });
         Object.keys(slots).forEach(code => { slotScores[code] = (slotScores[code] || 0) + slots[code] * def.weight; });
         boostWord(moodWordScores, moodByMeaning[def.key], def.weight);
       });
@@ -7467,6 +8616,17 @@ function buildMode2DiagnosisLocal() {
       attrScores.crossing = (attrScores.crossing || 0) + 0.8;
     }
 
+    // scoring.attributeWeights / scoring.attributeBias
+    Object.keys(attrScores).forEach((code) => {
+      const raw = Number(attrScores[code] || 0);
+      const w = Number(attrWeightMap[code] || 1);
+      const b = Number(attrBiasMap[code] || 0);
+      const weighted = raw * (Number.isFinite(w) && w > 0 ? w : 1);
+      attrScores[code] = weighted + (Number.isFinite(b) ? b : 0);
+    });
+    // scoring.dominanceCap
+    applyMode2DominanceCap(attrScores, scoringCfg && scoringCfg.dominanceCap);
+
     let rankedAttrs = Object.entries(attrScores).sort((a, b) => b[1] - a[1]);
     if (rankedAttrs.length >= 2 && rankedAttrs[0][0] === 'crossing') {
       const topScore = Number(rankedAttrs[0][1] || 0);
@@ -7484,11 +8644,37 @@ function buildMode2DiagnosisLocal() {
     }
     const top3Entries = [];
     const seenAttrCodes = new Set();
-    for (let i = 0; i < rankedAttrs.length && top3Entries.length < 3; i++) {
-      const entry = rankedAttrs[i];
-      if (seenAttrCodes.has(entry[0])) continue;
-      seenAttrCodes.add(entry[0]);
-      top3Entries.push(entry);
+    if (Number.isFinite(diversityPenalty) && diversityPenalty > 0) {
+      const remaining = rankedAttrs.slice();
+      const selectedFamilyCounts = {};
+      while (remaining.length && top3Entries.length < 3) {
+        let bestIdx = 0;
+        let bestAdjusted = -Infinity;
+        for (let i = 0; i < remaining.length; i++) {
+          const code = remaining[i][0];
+          const score = Number(remaining[i][1] || 0);
+          const family = getMode2AttrFamily(code);
+          const familyCount = Number(selectedFamilyCounts[family] || 0);
+          const adjusted = score - (familyCount * diversityPenalty);
+          if (adjusted > bestAdjusted) {
+            bestAdjusted = adjusted;
+            bestIdx = i;
+          }
+        }
+        const picked = remaining.splice(bestIdx, 1)[0];
+        if (!picked || seenAttrCodes.has(picked[0])) continue;
+        seenAttrCodes.add(picked[0]);
+        top3Entries.push(picked);
+        const fam = getMode2AttrFamily(picked[0]);
+        selectedFamilyCounts[fam] = (selectedFamilyCounts[fam] || 0) + 1;
+      }
+    } else {
+      for (let i = 0; i < rankedAttrs.length && top3Entries.length < 3; i++) {
+        const entry = rankedAttrs[i];
+        if (seenAttrCodes.has(entry[0])) continue;
+        seenAttrCodes.add(entry[0]);
+        top3Entries.push(entry);
+      }
     }
     while (top3Entries.length < 3) {
       const fallbackCode = Object.keys(MODE2_ATTRS).find(code => !seenAttrCodes.has(code)) || 'world';
@@ -7514,17 +8700,41 @@ function buildMode2DiagnosisLocal() {
     const aliasShort = `${topWorldWords[0] || '電脳'}${topMoodWord}${topRoleWord}`;
     const symbol = top3.map(t => MODE2_ATTRS[t.code].short).join('・');
     const summary = `今回の選択では「${top3[0].info.ja}」が中心に見えました。`;
-    const localModuleTitle = supplemental.lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏';
+    const localModuleTitle = getMode2LowerModuleSectionLabelByLevel(supplemental.lowerModuleLevel);
     const resultText = [
-      'あなたの選択から読み解いた"otaku"属性','',
-      'あなたの異名', alias, aliasEn, '',
+      mode2ResultPageTitle(),'',
+      getMode2UiLabel('epithetSection', 'あなたの異名', 'Your Epithet'), alias, aliasEn, '',
       summary, '',
-      '主属性', `${top3[0].info.ja}`, top3[0].info.desc, '',
-      '副属性', `${top3[1].info.ja}`, '',
-      '裏属性', `${top3[2].info.ja}`, '',
-      'あなたの記号', symbol, '',
+      mode2RoleLabel('主属性'), `${top3[0].info.ja}`, top3[0].info.desc, '',
+      mode2RoleLabel('副属性'), `${top3[1].info.ja}`, '',
+      mode2RoleLabel('裏属性'), `${top3[2].info.ja}`, '',
+      getMode2UiLabel('emblemSection', 'あなたの記号', 'Your Emblem'), symbol, '',
       ...(supplemental.lowerModules.length ? [localModuleTitle, ...(supplemental.lowerModules.map(m => `・${m.ja}`)), ''] : [])
     ].join('\n');
+    if (scoreDebugEnabled) {
+      try {
+        const rows = Object.entries(attrScores).map(([code, finalScore]) => {
+          const d = scoreDebugRows[code] || {};
+          return {
+            code,
+            label: d.label || code,
+            family: d.family || getMode2AttrFamily(code),
+            base: Number((d.base || 0).toFixed(3)),
+            afterMeaningWeights: Number((d.weightedBase || 0).toFixed(3)),
+            attributeWeight: Number((d.attrWeight || 1).toFixed(3)),
+            attributeBias: Number((d.bias || 0).toFixed(3)),
+            final: Number((Number(finalScore || 0)).toFixed(3))
+          };
+        }).sort((a, b) => b.final - a.final);
+        console.groupCollapsed('[Mode2 score debug]');
+        console.log('testid=', (typeof getCurrentTestId === 'function' ? getCurrentTestId() : ''));
+        console.log('scoring=', scoringCfg || {});
+        console.log('meaningTrend=', meaningTrendMap);
+        console.table(rows);
+        console.log('top3=', top3.map(t => ({ code: t.code, label: t.info && t.info.ja ? t.info.ja : t.code, score: Number((t.score || 0).toFixed(3)), family: getMode2AttrFamily(t.code) })));
+        console.groupEnd();
+      } catch (_) {}
+    }
     return { top3, topSlots, alias, aliasEn, aliasShort, symbol, summary, resultText, selectedSummaries, lowerModules: supplemental.lowerModules, lowerModuleLevel: supplemental.lowerModuleLevel, practiceModes: supplemental.practiceModes };
   }
 
@@ -7544,13 +8754,23 @@ function buildMode2DiagnosisLocal() {
     const timestamp = new Date().toISOString();
     const selectedItems = (kioskState.selections || []).map((selection) => {
       const item = getKioskSourceItem(selection) || {};
-      const meaning = getKioskMeaningState(selection);
-      const tags = MODE2_MEANING_DEFS.filter(def => !!meaning[def.key]).map(def => def.labelJa);
+      const activeMeanings = getMode2ActiveMeaningDefsForSelection(selection);
+      const tags = activeMeanings.map(def => getMode2MeaningLabel(def, false));
+      const meaningDetails = activeMeanings.map(def => ({
+        code: String(def.code || def.key || '').trim(),
+        key: String(def.key || '').trim(),
+        label: getMode2MeaningLabel(def, false),
+        labelEn: getMode2MeaningLabel(def, true),
+        description: getMode2MeaningDescription(def, false),
+        descriptionEn: getMode2MeaningDescription(def, true),
+        weight: Number.isFinite(Number(def.weight)) ? Number(def.weight) : 1.0
+      }));
       return {
         label: getPrimaryLabel(item || selection) || selection.label || '',
         year: selection.year,
         genre: Array.isArray(item.genre) ? item.genre : (item.genre ? [item.genre] : []),
-        tags
+        tags,
+        meaningDetails
       };
     }).filter(it => Array.isArray(it.tags) && it.tags.length > 0);
     return { mode: 2, nickname, timestamp, selectedItems };
@@ -7634,20 +8854,89 @@ function buildMode2DiagnosisLocal() {
 
   
 function buildMode2AiPrompt(payload) {
-    const attrs = [
-      '世界観没入','機構偏愛','未来感受','異形親和','日常浸透','越境回遊','少年回路','少女回路','反復愛着','作者偏信','記録蒐集'
-    ];
+    const getMode2PromptExtraLines = () => {
+      const profile = getActiveMode2Profile();
+      if (!profile || typeof profile !== 'object') return [];
+      const lines = [];
+      const scoring = profile.scoring && typeof profile.scoring === 'object' ? profile.scoring : null;
+      if (scoring) {
+        const w = scoring.attributeWeights && typeof scoring.attributeWeights === 'object' ? scoring.attributeWeights : null;
+        const b = scoring.attributeBias && typeof scoring.attributeBias === 'object' ? scoring.attributeBias : null;
+        if (w && Object.keys(w).length) {
+          lines.push(
+            isEnglishUi()
+              ? ('Attribute weighting hints (higher is easier to appear): ' + Object.entries(w).map(([k, v]) => `${k}:${v}`).join(', '))
+              : ('属性の出やすさ補正（大きいほど出やすい）: ' + Object.entries(w).map(([k, v]) => `${k}:${v}`).join(', '))
+          );
+        }
+        if (b && Object.keys(b).length) {
+          lines.push(
+            isEnglishUi()
+              ? ('Attribute bias hints (positive/negative): ' + Object.entries(b).map(([k, v]) => `${k}:${v}`).join(', '))
+              : ('属性バイアス補正（加点/減点）: ' + Object.entries(b).map(([k, v]) => `${k}:${v}`).join(', '))
+          );
+        }
+      }
+      const inst = profile.epithetInstructions;
+      if (inst) {
+        if (typeof inst === 'string') {
+          lines.push(inst);
+        } else if (typeof inst === 'object') {
+          const v = isEnglishUi() ? (inst.en || inst.ja) : (inst.ja || inst.en);
+          if (v) lines.push(String(v));
+        }
+      }
+      const hints = profile.epithetVocabularyHints;
+      if (hints) {
+        let list = [];
+        if (Array.isArray(hints)) {
+          list = hints;
+        } else if (typeof hints === 'object') {
+          const picked = isEnglishUi()
+            ? (Array.isArray(hints.en) ? hints.en : hints.ja)
+            : (Array.isArray(hints.ja) ? hints.ja : hints.en);
+          list = Array.isArray(picked) ? picked : [];
+        }
+        const clean = list.map(v => String(v || '').trim()).filter(Boolean);
+        if (clean.length) {
+          lines.push(
+            isEnglishUi()
+              ? ('Prefer vocabulary from this list when crafting epithets: ' + clean.join(' / '))
+              : ('異名の語彙は次を優先してください: ' + clean.join(' / '))
+          );
+        }
+      }
+      return lines;
+    };
+    const attrs = Object.values(MODE2_ATTRS || {}).map(info => String(info && info.ja ? info.ja : '').trim()).filter(Boolean);
+    const attrsCount = attrs.length;
     const deepLowerModules = MODE2_DEEP_LOWER_MODULES.map(m => m.ja);
     const generalLowerModules = MODE2_GENERAL_LOWER_MODULES.map(m => m.ja);
     const allLowerModules = getMode2AllLowerModules().map(m => m.ja);
     const practiceModes = MODE2_PRACTICE_MODES.map(m => m.ja);
+    const meaningCatalog = getMode2MeaningCatalog();
+    const meaningCatalogLineJa = meaningCatalog.map(m => `${m.labelJa}${m.descriptionJa ? `（${m.descriptionJa}）` : ''}`).join(' / ');
+    const meaningCatalogLineEn = meaningCatalog.map(m => `${m.labelEn}${m.descriptionEn ? ` (${m.descriptionEn})` : ''}`).join(' / ');
+    const meaningTrend = Object.entries((payload && Array.isArray(payload.selectedItems) ? payload.selectedItems : []).reduce((acc, item) => {
+      const list = Array.isArray(item && item.meaningDetails) ? item.meaningDetails : [];
+      list.forEach(detail => {
+        const label = isEnglishUi() ? String(detail.labelEn || detail.label || '').trim() : String(detail.label || detail.labelJa || '').trim();
+        if (!label) return;
+        acc[label] = (acc[label] || 0) + 1;
+      });
+      return acc;
+    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([label, count]) => `${label} x${count}`).join(' / ');
+    const extraPromptLines = getMode2PromptExtraLines();
     if (isEnglishUi()) {
       return [
         'You are a cultural diagnosis analyst.',
         'This is not a medical or psychological diagnosis. It is a grounded reading of cultural taste.',
         'You will receive a list of selected items and meaning tags for each item.',
-        'The six meaning tags are: Taste / Moe / Impact / Returned to / Feels like me / Oshi / Support.',
+        'Meaning choices and their nuances are:',
+        meaningCatalogLineEn || 'Taste / Moe / Impact / Returned to / Feels like me / Oshi / Support',
+        meaningTrend ? ('Current selection trend of meaning choices: ' + meaningTrend) : '',
         'Read the pattern of selections, crossings between genres and media, jumps across time periods, and the distribution of the meaning tags.',
+        'Use both the meaning labels and their descriptions when inferring nuance for attributes, lower modules, summary, and epithet.',
         'Choose exactly three upper attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the names exactly as written in Japanese.',
         'Treat mainAttribute as the single anchor of the reading. subAttribute and hiddenAttribute are softer traces that bleed through; do not present all three as equally strong personality pillars.',
         attrs.join(' / '),
@@ -7675,6 +8964,7 @@ function buildMode2AiPrompt(payload) {
         'Make epithet clearly longer than epithetShort. Aim for about 8 to 16 words so it feels rich and specific.',
         'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
         'For epithet wording, avoid harsh or negative terms such as "scrap", "junk", or "waste"; prefer neutral or poetic vocabulary such as "mechanism", "workshop", "circuit", and "transmutation".',
+        ...extraPromptLines,
         'Set emblemCode to an English code only, such as GH-DY-RP.',
         'summary should be in English, about 80 to 180 words.',
         'shareText should be in English and within 120 characters.',
@@ -7690,9 +8980,12 @@ function buildMode2AiPrompt(payload) {
       'あなたは、コンテンツ・製品・サービスの選択履歴から、その人の「属性」を読む文化的診断アナリストです。',
       'これは医療・心理診断ではなく、文化的嗜好の読み解きです。',
       '入力として、ユーザーが選んだ項目一覧と、各項目に対する意味づけタグが渡されます。',
-      'タグは次の6種類です: 好み / 萌え / 影響 / 繰り返し触れた / 自分らしい / 推す',
+      '意味付け候補とニュアンスは次のとおりです。',
+      meaningCatalogLineJa || '好み / 萌え / 影響 / 繰り返し触れた / 自分らしい / 推す',
+      meaningTrend ? ('今回の意味付け選択の傾向: ' + meaningTrend) : '',
       '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
-      '上位属性は次の11属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。',
+      '属性判定・下位モジュール・総評・異名生成では、意味ラベルだけでなく description のニュアンスも根拠として使ってください。',
+      `上位属性は次の${attrsCount}属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。`,
       '主属性を今回の読み解きの軸にしてください。副属性・裏属性は「にじむ属性」「背景の属性」として、主属性ほど強く語らないでください。3つを対等な性格タイプのように描写してはいけません。',
       attrs.join(' / '),
       '「越境回遊」は、複数項目にまたがって明確なジャンル横断・媒体横断の根拠が繰り返し見える場合にのみ選んでください。',
@@ -7716,6 +9009,7 @@ function buildMode2AiPrompt(payload) {
       'epithet（長い異名）は epithetShort（短い異名）より明確に長くしてください。日本語では目安として16〜36文字程度で、象徴語を2〜3個つないだ厚みのある言い回しにしてください。',
       'あわせて、短い異名も1つ返してください。短い異名も同様に、直接的な固有名詞ではなく、象徴語ベースにしてください。',
       '異名の語彙では「鉄屑」「ガラクタ」「廃材」などのネガティブ語を避け、「機巧」「機関」「工房」「回路」「錬成」など中立〜詩的な語を優先してください。',
+      ...extraPromptLines,
       'emblemCode は「日本語表記 || 英字コード」の1つの文字列にしてください。日本語表記は属性短縮名を「・」でつないでください。例: 少女・日常・反復 || GH-DY-RP',
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。日本語と英語は別々のイメージではなく、同じ異名の対訳にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
@@ -7740,36 +9034,47 @@ function buildMode2AiPrompt(payload) {
   }
 
   function mode2RoleLabel(roleJa) {
+    const defs = getMode2RoleLabelDefs();
     if (!isEnglishUi()) {
       return ({
-        '主属性': '主属性',
-        '副属性': '副属性',
-        '裏属性': '裏属性'
+        '主属性': getMode2ScreenLabelText('mainAttribute', defs.mainJa, defs.mainEn),
+        '副属性': getMode2ScreenLabelText('subAttribute', defs.subJa, defs.subEn),
+        '裏属性': getMode2ScreenLabelText('hiddenAttribute', defs.hiddenJa, defs.hiddenEn)
       })[roleJa] || roleJa;
     }
     return ({
-      '主属性': 'Main Attribute',
-      '副属性': 'Sub Attribute',
-      '裏属性': 'Hidden Attribute'
+      '主属性': getMode2ScreenLabelText('mainAttribute', defs.mainJa, defs.mainEn),
+      '副属性': getMode2ScreenLabelText('subAttribute', defs.subJa, defs.subEn),
+      '裏属性': getMode2ScreenLabelText('hiddenAttribute', defs.hiddenJa, defs.hiddenEn)
     })[roleJa] || roleJa;
   }
 
   function mode2BleedingAttrsSectionLabel() {
-    return t('副属性・裏属性', 'Sub / Hidden Attributes');
+    return getMode2UiLabel('subHiddenSection', '副属性・裏属性', 'Sub / Hidden Attributes');
   }
 
   function mode2ResultPageTitle() {
-    return t('あなたの選択から読み解いた"otaku"属性', 'The "otaku" attributes read from your selections');
+    return getMode2ScreenLabelText(
+      'resultPageTitle',
+      'あなたの選択から読み解いた"otaku"属性',
+      'The "otaku" attributes read from your selections'
+    );
   }
 
   function mode2OtakuAttrsGuideButtonLabel() {
-    return t('"otaku"属性とは', 'What are "otaku" attributes?');
+    return getMode2ScreenLabelText(
+      'attrsGuideButton',
+      '"otaku"属性とは',
+      'What are "otaku" attributes?'
+    );
   }
 
   function buildMode2OtakuAttrsGuideHtml() {
-    const intro = t(
-      'この診断で使う11の「otaku」属性の一覧です。医療・性格診断ではなく、あなたが選んだ項目と意味づけタグから読み取った、文化的嗜好のラベルです。',
-      'These eleven "otaku" attributes are used in this diagnosis. They are cultural taste labels read from your selections and meaning tags—not medical or personality typing.'
+    const attrsCount = Object.keys(MODE2_ATTRS || {}).length || 11;
+    const intro = getMode2ScreenLabelText(
+      'attrsGuideIntro',
+      `この診断で使う${attrsCount}の「otaku」属性の一覧です。医療・性格診断ではなく、あなたが選んだ項目と意味づけタグから読み取った、文化的嗜好のラベルです。`,
+      `These ${attrsCount} "otaku" attributes are used in this diagnosis. They are cultural taste labels read from your selections and meaning tags—not medical or personality typing.`
     );
     const items = Object.values(MODE2_ATTRS).map(info => {
       const name = isEnglishUi() ? info.en : info.ja;
@@ -7923,7 +9228,12 @@ function buildMode2AiPrompt(payload) {
   };
 
   function mode2ShortJa(name) {
-    return MODE2_ATTR_SHORT_JA[String(name || '').trim()] || String(name || '').trim();
+    const s = String(name || '').trim();
+    if (!s) return '';
+    if (MODE2_ATTR_SHORT_JA[s]) return MODE2_ATTR_SHORT_JA[s];
+    const key = MODE2_ATTR_BY_JA[s];
+    if (key && MODE2_ATTRS[key] && MODE2_ATTRS[key].short) return String(MODE2_ATTRS[key].short);
+    return s;
   }
 
   function mode2AttrLabelEn(name) {
@@ -8109,17 +9419,22 @@ function buildMode2AiPrompt(payload) {
   }
 
   function getMode2SelectionMeaningTags(selection) {
-    if (!selection) return [];
-    const state = (typeof getKioskMeaningState === 'function') ? getKioskMeaningState(selection) : null;
-    const tags = [];
-    if (state && typeof MODE2_MEANING_DEFS !== 'undefined' && Array.isArray(MODE2_MEANING_DEFS)) {
-      MODE2_MEANING_DEFS.forEach(def => { if (state[def.key]) tags.push(def.labelJa || def.key); });
-    }
-    return tags;
+    return getMode2ActiveMeaningDefsForSelection(selection).map(def => getMode2MeaningLabel(def, false));
   }
 
   function getMode2MeaningWeight(tag) {
     const t = String(tag || '');
+    if (typeof MODE2_MEANING_DEFS !== 'undefined' && Array.isArray(MODE2_MEANING_DEFS)) {
+      const hit = MODE2_MEANING_DEFS.find(def => {
+        if (!def) return false;
+        const key = String(def.key || '').trim();
+        const code = String(def.code || '').trim();
+        const ja = getMode2MeaningLabel(def, false);
+        const en = getMode2MeaningLabel(def, true);
+        return t === key || t === code || t === ja || t === en;
+      });
+      if (hit && Number.isFinite(Number(hit.weight))) return Number(hit.weight);
+    }
     if (t === '自分らしい') return 5.0;
     if (t === '影響') return 4.0;
     if (t === '推す') return 3.2;
@@ -8322,34 +9637,67 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
 
     const resultText = isEnglishUi()
       ? [
-          'The "otaku" attributes read from your selections','',
-          'Your Epithet', `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
-          'Overall', summary, '',
-          'Main Attribute', `${normTop3[0].info.en}`, normTop3[0].info.desc, '',
-          'Sub Attribute', `${normTop3[1].info.en}`, '',
-          'Hidden Attribute', `${normTop3[2].info.en}`, '',
-          'Your Emblem', `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
-          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? 'Areas You Naturally Gravitate Toward' : 'Strong Cultural Modules'), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : [])
+          mode2ResultPageTitle(),'',
+          getMode2UiLabel('epithetSection', 'あなたの異名', 'Your Epithet'), `${alias}${aliasEn ? ' (' + aliasEn + ')' : ''}`, '',
+          getMode2UiLabel('overallSection', '総合', 'Overall'), summary, '',
+          mode2RoleLabel('主属性'), `${normTop3[0].info.en}`, normTop3[0].info.desc, '',
+          mode2RoleLabel('副属性'), `${normTop3[1].info.en}`, '',
+          mode2RoleLabel('裏属性'), `${normTop3[2].info.en}`, '',
+          getMode2UiLabel('emblemSection', 'あなたの記号', 'Your Emblem'), `${symbol}${symbolEn ? ' (' + symbolEn + ')' : ''}`, '',
+          ...(lowerModules.length ? [getMode2LowerModuleSectionLabelByLevel(lowerModuleLevel), ...lowerModules.map(v => `- ${v.en || v.ja}${v.reason ? ' / ' + v.reason : ''}`), ''] : [])
         ].filter(Boolean).join('\n')
       : [
-          'あなたの選択から読み解いた"otaku"属性','',
-          'あなたの異名', alias, aliasEn, '',
+          mode2ResultPageTitle(),'',
+          getMode2UiLabel('epithetSection', 'あなたの異名', 'Your Epithet'), alias, aliasEn, '',
           summary, '',
-          '主属性', `${normTop3[0].info.ja}`, normTop3[0].info.desc, '',
-          '副属性', `${normTop3[1].info.ja}`, '',
-          '裏属性', `${normTop3[2].info.ja}`, '',
-          'あなたの記号', symbol, '',
-          ...(lowerModules.length ? [(lowerModuleLevel === 'general' ? '惹かれやすい領域' : '濃い文化圏'), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : [])
+          mode2RoleLabel('主属性'), `${normTop3[0].info.ja}`, normTop3[0].info.desc, '',
+          mode2RoleLabel('副属性'), `${normTop3[1].info.ja}`, '',
+          mode2RoleLabel('裏属性'), `${normTop3[2].info.ja}`, '',
+          getMode2UiLabel('emblemSection', 'あなたの記号', 'Your Emblem'), symbol, '',
+          ...(lowerModules.length ? [getMode2LowerModuleSectionLabelByLevel(lowerModuleLevel), ...lowerModules.map(v => `・${v.ja}${v.reason ? ' — ' + v.reason : ''}`), ''] : [])
         ].filter(Boolean).join('\n');
     return { top3: normTop3, symbol, symbolEn, alias, aliasEn, aliasShort, aliasShortEn, summary, shareText, resultText, selectedSummaries, topSlots: fallbackLocal.topSlots || [], fallbackError: '', lowerModules, lowerModuleLevel, practiceModes };
   }
 
 function buildMode2ResultHtml(result) {
     const top3 = Array.isArray(result.top3) ? result.top3 : [];
+    const getMode2PlaceholderIllustration = (item) => {
+      const label = String(item && item.info && item.info.ja ? item.info.ja : '').trim();
+      const seed = (label || String(item && item.role || '')).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+      const themes = [
+        { a: '#e0f2fe', b: '#bae6fd', icon: '🌌' },
+        { a: '#ede9fe', b: '#ddd6fe', icon: '🛠️' },
+        { a: '#fef3c7', b: '#fde68a', icon: '🚀' },
+        { a: '#dcfce7', b: '#bbf7d0', icon: '📚' },
+        { a: '#fee2e2', b: '#fecaca', icon: '🎮' },
+        { a: '#f3e8ff', b: '#e9d5ff', icon: '✨' }
+      ];
+      const t = themes[Math.abs(seed) % themes.length];
+      const shortLabel = escapeHtmlText(label.slice(0, 6));
+      const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="${t.a}" />
+      <stop offset="100%" stop-color="${t.b}" />
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" rx="28" fill="url(#bg)"/>
+  <circle cx="526" cy="76" r="46" fill="rgba(255,255,255,0.56)"/>
+  <path d="M0 280 C100 235 185 330 280 286 C365 246 426 330 640 256 L640 360 L0 360 Z" fill="rgba(255,255,255,0.72)"/>
+  <text x="42" y="70" font-size="44" font-family="Segoe UI, sans-serif">${t.icon}</text>
+  <text x="50%" y="198" text-anchor="middle" font-size="44" font-family="Segoe UI, sans-serif" font-weight="700" fill="#0f172a">${shortLabel}</text>
+</svg>`;
+      return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    };
     const attrsHtml = top3.slice(0, 3).map((item) => {
       if (!item || !item.info || !item.info.ja) return '';
+      const illustUrl = getMode2PlaceholderIllustration(item);
       return `
-        <div style="padding:14px 16px; border:1px solid #dbe3ee; border-radius:14px; background:#fff;">
+        <div style="padding:12px; border:1px solid #dbe3ee; border-radius:14px; background:#fff;">
+          <div style="margin-bottom:10px; border-radius:12px; overflow:hidden; border:1px solid #dbe3ee; background:#f8fafc;">
+            <img src="${illustUrl}" alt="${escapeHtmlAttr(t('属性イラスト（仮）', 'Attribute illustration (temporary)'))}" style="display:block; width:100%; height:auto; aspect-ratio:16/9; object-fit:cover;">
+          </div>
           <div style="font-size:12px; color:#64748b; margin-bottom:6px; font-weight:600; letter-spacing:0.02em;">${escapeHtmlText(mode2RoleLabel(item.role))}</div>
           <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
             <div style="font-size:22px; font-weight:800; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (item.info.en || item.info.ja) : item.info.ja)}</div>
@@ -8360,7 +9708,7 @@ function buildMode2ResultHtml(result) {
       `;
     }).filter(Boolean).join('');
     const moduleHtml = (result.lowerModules || []).length ? `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">${result.lowerModules.map(v => `<span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; font-size:13px;"><strong>${escapeHtmlText(isEnglishUi() ? (v.en || v.ja) : v.ja)}</strong><span style="color:#64748b; font-size:12px;">${escapeHtmlText(isEnglishUi() ? (v.ja || '') : (v.en || ''))}</span></span>`).join('')}</div>` : '';
-    const moduleSectionTitle = t('濃い文化圏', 'Strong Cultural Modules');
+    const moduleSectionTitleResolved = getMode2LowerModuleSectionLabelByLevel(result && result.lowerModuleLevel);
     const epithetJa = isEnglishUi() ? (result.aliasEn || '') : (result.alias || '');
     const epithetEn = isEnglishUi() ? (result.alias || '') : (result.aliasEn || '');
     const epithetBodyHtml = isEnglishUi()
@@ -8390,27 +9738,27 @@ function buildMode2ResultHtml(result) {
           <button type="button" id="mode2OtakuAttrsGuideBtn" data-copy-exclude="1" style="flex:0 0 auto; padding:8px 14px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; color:#475569; cursor:pointer; font-size:13px; font-weight:600; white-space:nowrap;">${escapeHtmlText(mode2OtakuAttrsGuideButtonLabel())}</button>
         </div>
         <div style="padding:20px 22px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:18px;">
-          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${t('あなたの異名', 'Your Epithet')}</div>
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${escapeHtmlText(getMode2UiLabel('epithetSection', 'あなたの異名', 'Your Epithet'))}</div>
           ${epithetBodyHtml}
           <div style="font-size:15px; line-height:1.85; margin-top:16px; color:#1e293b;">${escapeHtmlText(result.summary)}</div>
         </div>
         <div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
-          <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:10px;">${t('属性', 'Attributes')}</div>
-          <div style="display:grid; gap:10px;">${attrsHtml || `<div style="font-size:13px; color:#64748b;">${t('（判定なし）', '(No attributes)')}</div>`}</div>
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:10px;">${escapeHtmlText(getMode2UiLabel('attributesSection', '属性', 'Attributes'))}</div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">${attrsHtml || `<div style="font-size:13px; color:#64748b;">${escapeHtmlText(getMode2UiLabel('noAttributes', '（判定なし）', '(No attributes)'))}</div>`}</div>
         </div>
         <div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
-          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${moduleSectionTitle}</div>
-          ${(result.lowerModules || []).length ? moduleHtml : `<div style="font-size:13px; color:#64748b; margin-top:8px;">${t('（該当なし）', '(No matching modules)')}</div>`}
+          <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${escapeHtmlText(moduleSectionTitleResolved)}</div>
+          ${(result.lowerModules || []).length ? moduleHtml : `<div style="font-size:13px; color:#64748b; margin-top:8px;">${escapeHtmlText(getMode2UiLabel('noMatchingModules', '（該当なし）', '(No matching modules)'))}</div>`}
         </div>
         <div style="margin-top:18px; border-top:1px solid #e5e7eb; padding-top:14px;">
-          <div style="font-size:13px; color:#64748b; margin-bottom:8px; font-weight:600;">${t('項目選択状況', 'Item Selection Status')}</div>
+          <div style="font-size:13px; color:#64748b; margin-bottom:8px; font-weight:600;">${escapeHtmlText(getMode2UiLabel('selectionStatusSection', '項目選択状況', 'Item Selection Status'))}</div>
           ${selectionStatusHtml}
         </div>
         ${result.fallbackError ? `<p style="margin-top:12px; font-size:14px; color:#b91c1c;">${escapeHtmlText(result.fallbackError)}</p>` : ''}
         <div data-copy-exclude="1" style="margin-top:18px; display:flex; flex-wrap:wrap; gap:16px;">
-          <div><button type="button" id="kioskQrPersonalBtn" style="padding:8px 14px; border-radius:10px; border:1px solid #d9e1f0; background:#f8fafc; color:#1e293b; cursor:pointer; font-size:15px; font-weight:600;">${t('個人レポートのQRを表示', 'Show QR for personal report')}</button></div>
+          <div><button type="button" id="kioskQrPersonalBtn" style="padding:8px 14px; border-radius:10px; border:1px solid #d9e1f0; background:#f8fafc; color:#1e293b; cursor:pointer; font-size:15px; font-weight:600;">${escapeHtmlText(getMode2UiLabel('personalQrButton', '個人レポートのQRを表示', 'Show QR for personal report'))}</button></div>
         </div>
-        <p data-copy-exclude="1" style="margin-top:14px; font-size:13px; color:#64748b;">${t('QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます。', 'Scanning the QR shows the checked item list and diagnosis text.')}</p>
+        <p data-copy-exclude="1" style="margin-top:14px; font-size:13px; color:#64748b;">${escapeHtmlText(getMode2UiLabel('personalQrDescription', 'QRを読み取ると、チェックした項目一覧と診断結果のテキストが表示されます。', 'Scanning the QR shows the checked item list and diagnosis text.'))}</p>
       </div>
     `;
   }
@@ -8423,16 +9771,16 @@ function buildMode2CompactQrReport(result) {
     const compactLines = [
       mode2ResultPageTitle(),
       '',
-      t('あなたの異名', 'Your Epithet'),
+      getMode2UiLabel('epithetSection', 'あなたの異名', 'Your Epithet'),
       [mode2ValueToText(result.alias, '—'), mode2ValueToText(result.aliasEn, '')].filter(Boolean).join(' / '),
       '',
-      t('主属性', 'Main Attribute'),
+      mode2RoleLabel('主属性'),
       main ? mode2ValueToText(isEnglishUi() ? (main.info && main.info.en) : (main.info && main.info.ja), '—') : '—',
       '',
-      t('副属性', 'Sub Attribute'),
+      mode2RoleLabel('副属性'),
       secondary[0] ? mode2ValueToText(isEnglishUi() ? (secondary[0].info && secondary[0].info.en) : (secondary[0].info && secondary[0].info.ja), '—') : '—',
       '',
-      t('裏属性', 'Hidden Attribute'),
+      mode2RoleLabel('裏属性'),
       secondary[1] ? mode2ValueToText(isEnglishUi() ? (secondary[1].info && secondary[1].info.en) : (secondary[1].info && secondary[1].info.ja), '—') : '—',
       '',
       mode2ValueToText(result.shareText || result.summary, '')
@@ -8550,6 +9898,7 @@ function buildMode2CompactQrReport(result) {
   }
 
   async function showKioskResultMode2() {
+    applyMode2DiagnosticProfileIfNeeded();
     const fallbackLocal = buildMode2DiagnosisLocal();
     let result = fallbackLocal;
     let fallbackError = '';
@@ -8577,6 +9926,7 @@ function buildMode2CompactQrReport(result) {
       lastProbeEventYear = null;
     }
     window.lastDiagnosisExecutedAt = new Date().toISOString();
+    result.shareFullText = buildMode2DiagnosisShareText(result);
     window.lastMode2DiagnosisResult = result;
     kioskModalPhase = 'diag2';
     openModal(t('診断結果', 'Diagnosis Result'), buildMode2ResultHtml(result), { footer: 'next' });
@@ -8593,8 +9943,10 @@ function buildMode2CompactQrReport(result) {
       const key = getKioskSelectionKey(sel);
       const chips = defs.map(def => {
         const active = !!state[def.key];
+        const label = getMode2MeaningLabel(def, isEnglishUi());
         return `<label style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid ${active ? '#818cf8' : '#cbd5e1'}; background:${active ? '#eef2ff' : '#fff'}; cursor:pointer; font-size:13px;">
-          <input type="checkbox" data-meaning-key="${def.key}" data-selection-key="${escapeHtmlAttr(key)}" ${active ? 'checked' : ''} style="margin:0;">${isEnglishUi() ? def.labelEn : def.labelJa}
+          <input type="checkbox" data-meaning-key="${def.key}" data-selection-key="${escapeHtmlAttr(key)}" ${active ? 'checked' : ''} style="margin:0;">
+          <span>${escapeHtmlText(label)}</span>
         </label>`;
       }).join('');
       return `<div style="border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:12px; background:#fff;">
@@ -8654,19 +10006,12 @@ function buildMode2CompactQrReport(result) {
         const year = s.year;
         const items = (events[year] || []);
         const it = items.find(i => i.label === s.label) || {};
-        const jpUrl = it.url || '';
-        const enUrl = it.url_e || it.url_en || it.URL_en || it.URL_e || it.urlEn || '';
-        const hasJpUrl = !!jpUrl;
-        const hasEnUrl = !!enUrl;
-        const labelEn = it.label_en || '';
-        const displayLabel = getPrimaryLabel(it) || s.label;
+        const displayLabel = getPrimaryLabel(it) || s.label || '';
         return `
           <li>
-            <span style="font-size:18px; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="font-size:18px; display:flex; align-items:flex-start; gap:8px; min-width:0;">
               <span style="min-width:3em; color:#666; flex-shrink:0;">${isEnglishUi() ? year : (year + '年')}</span>
-              <strong style="flex-shrink:0;">${escapeHtmlText(displayLabel)}</strong>${renderGenreBadge(it)}
-              ${hasJpUrl ? `<span class="probe-web-icon" data-web-url="${jpUrl}" title="${t('関連ページを表示', 'Open related page')}" style="cursor:pointer; flex-shrink:0;">🌐</span>` : ''}
-              <span style="display:inline; font-size:18px;">${labelEn ? `<span style="color:#444;">${labelEn}</span>` : ''}${(labelEn && hasEnUrl) ? ' ' : ''}${hasEnUrl ? `<span class="probe-web-icon" data-web-url="${enUrl}" title="English page" style="cursor:pointer;">🌐</span>` : ''}</span>
+              <span style="display:block; min-width:0; flex:1 1 auto; overflow-wrap:anywhere; word-break:break-word;">${buildCandidateLabelUrlHtml(it, { includeGenreBadge: true, fallbackLabel: displayLabel, forceSecondaryBreak: false })}</span>
             </span>
           </li>
         `;
@@ -8900,6 +10245,7 @@ function buildMode2CompactQrReport(result) {
     try {
       await ensureCfrPromptsLoaded();
     } catch (_) {}
+    applyMode2DiagnosticProfileIfNeeded();
     applyConfiguredBlueProbeYears();
     openKioskStartOverlay();
     const hintBox = ensureKioskHint();
@@ -8953,7 +10299,7 @@ function buildMode2CompactQrReport(result) {
   document.getElementById('helpBtn').addEventListener('click', ()=>{
     const helpHtmlJa = `
       <h2>概要</h2>
-      <p>自分が生まれて何歳の頃に何に出会ったかをチェックしていくことで、AIによる分析を行うシステムです。年表データごとにAIの分析方法が異なっています。何年のときに自分は何歳だったか分かるようになっていて、Wikipediaなどの関連ページも容易に見ることができます。当時の状況を思い浮かべたり確認しながらチェックしていき、楽しみながら自分の人生を俯瞰しながらチェックしていってください。自分の生まれる前の事柄もあるので年を示すプローブの〇は、生年よりも前に動かすこともできます。項目がバランスよくチェックされたか確認したら「診断」へ進んでください。生年と性別、チェック項目を集計、他の人たちのチェック内容との比較や分析も行います（現時点では未実装）。それにより、たとえば日本のコンテンツ消費者（広い意味でのオタク）を64分類するといったことを目指しています。</p>
+      <p>自分が生まれて何歳の頃に何に出会ったかをチェックしていくことで、AIによる分析を行うシステムです。年表データごとにAIの分析方法が異なっています。何年のときに自分は何歳だったか分かるようになっていて、Wikipediaなどの関連ページも容易に見ることができます。当時の状況を思い浮かべたり確認しながらチェックしていき、楽しみながら自分の人生を俯瞰しながらチェックしていってください。自分の生まれる前の事柄もあるので年を示すプローブの〇は、生年よりも前に動かすこともできます。項目がバランスよくチェックされたか確認したら「診断」へ進んでください。生年と性別、チェック項目を集計、他の人たちのチェック内容との比較や分析も行います（現時点では未実装）。それにより、たとえば日本のコンテンツ消費者（広い意味での${getMode2UiLabel('helpAudience', 'オタク', 'otaku')})を64分類するといったことを目指しています。</p>
       <h2>1. 画面の流れ（診断モード）</h2>
       <ol>
         <li><strong>開始画面</strong> → タイトル・説明を読み「次へ」。</li>
@@ -8961,7 +10307,7 @@ function buildMode2CompactQrReport(result) {
         <li><strong>診断スタート</strong> → 「診断スタート」で本編へ。</li>
         <li><strong>ステップ1：ジャンル</strong> → 関心のあるジャンルを選び「適用」。</li>
         <li><strong>ステップ2：生年</strong> → 青い<strong>上の〇</strong>をドラッグして生年に合わせる。</li>
-        <li><strong>ステップ3：イベント選択</strong> → <strong>下の〇</strong>で年を変え、一覧から10個以上チェック。スマホでは「年+」「年-」で年を進め・戻せる。</li>
+        <li><strong>ステップ3：イベント選択</strong> → <strong>下の〇</strong>で年を変え、一覧から${getKioskDiagnosisMinCount()}個以上チェック。スマホでは「年+」「年-」で年を進め・戻せる。</li>
         <li><strong>診断</strong> → 「診断」を押すとAI診断が実行され、結果が表示される。</li>
       </ol>
       <h2>2. プローブの操作（使いかたの例：任天堂ファミコン）</h2>
@@ -8985,7 +10331,7 @@ function buildMode2CompactQrReport(result) {
         <li><strong>地球マーク 🌐：</strong> PCではホバーでWikipedia等を右側にプレビュー。スマホではタップで画面の中央に大きく表示し、画面の他の部分をタップすると閉じる。表示先ではリンクをたどってページ遷移はできますが、新規ウィンドウを開く操作や右クリックメニュー、ページ内の保存系操作などは無効です。</li>
       </ul>
       <h2>5. 診断とジャンル</h2>
-      <p>10個以上チェックすると「診断」ボタンが押せます。チェック内容をもとに<strong>AI診断</strong>が実行されます。</p>
+      <p>${getKioskDiagnosisMinCount()}個以上チェックすると「診断」ボタンが押せます。チェック内容をもとに<strong>AI診断</strong>が実行されます。</p>
       <h5>ジャンル一覧（登録件数／総件数：${getTotalItemCount()}件）</h5>
       <ul>
         ${generateGenreListWithCounts()}
@@ -9002,7 +10348,7 @@ function buildMode2CompactQrReport(result) {
         <li><strong>Start diagnosis</strong> -> Press <strong>Start Diagnosis</strong>.</li>
         <li><strong>Step 1: Genres</strong> -> Choose genres and press <strong>Apply</strong>.</li>
         <li><strong>Step 2: Birth year</strong> -> Drag the <strong>upper blue circle</strong> to your birth year.</li>
-        <li><strong>Step 3: Event selection</strong> -> Move the <strong>lower blue circle</strong>, then check 10+ items.</li>
+        <li><strong>Step 3: Event selection</strong> -> Move the <strong>lower blue circle</strong>, then check ${getKioskDiagnosisMinCount()}+ items.</li>
         <li><strong>Diagnosis</strong> -> Press <strong>Diagnose</strong> to run AI diagnosis.</li>
       </ol>
       <h2>2. Basic Operations</h2>
@@ -9018,7 +10364,7 @@ function buildMode2CompactQrReport(result) {
         <li><strong>Globe icon 🌐:</strong> on PC, hover to preview pages. On mobile, tap to open a centered web view and tap outside to close.</li>
       </ul>
       <h2>4. Diagnosis and Genres</h2>
-      <p>After checking 10 or more items, the <strong>Diagnose</strong> button becomes available.</p>
+      <p>After checking ${getKioskDiagnosisMinCount()} or more items, the <strong>Diagnose</strong> button becomes available.</p>
       <h5>Genres (${getTotalItemCount()} total items)</h5>
       <ul>
         ${generateGenreListWithCounts()}

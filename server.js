@@ -392,14 +392,7 @@ function buildMode2DiagnosisResponseFormat() {
           emblemCode: { type: 'string' },
           epithet: { type: 'string' },
           epithetShort: { type: 'string' },
-          epithetReason: { type: 'string' },
           summary: { type: 'string' },
-          readingPoints: {
-            type: 'array',
-            items: { type: 'string' },
-            minItems: 3,
-            maxItems: 3
-          },
           shareText: { type: 'string' }
         },
         required: [
@@ -411,9 +404,7 @@ function buildMode2DiagnosisResponseFormat() {
           'emblemCode',
           'epithet',
           'epithetShort',
-          'epithetReason',
           'summary',
-          'readingPoints',
           'shareText'
         ]
       }
@@ -498,7 +489,7 @@ app.post('/api/openai-diagnosis', async (req, res) => {
 
   const useStructuredOutput =
     String(mode || '') === '2' ||
-    /mainAttribute|subAttribute|hiddenAttribute|readingPoints|lowerModules|practiceModes|epithetShort/.test(prompt);
+    /mainAttribute|subAttribute|hiddenAttribute|lowerModules|practiceModes|epithetShort/.test(prompt);
 
   const responseFormat = useStructuredOutput ? buildMode2DiagnosisResponseFormat() : null;
 
@@ -579,6 +570,7 @@ app.post('/api/diagnostic-result', (req, res) => {
 
   const normalized = {
     timestamp: record.timestamp || new Date().toISOString(),
+    mode: record.mode != null ? String(record.mode) : '',
     gender: record.gender != null ? String(record.gender) : '',
     birthYear: record.birthYear != null ? record.birthYear : null,
     nickname: record.nickname != null ? String(record.nickname) : '',
