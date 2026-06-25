@@ -1991,7 +1991,7 @@
     'EVT':'イベント','FMT':'フォーマット','SPW':'スポーツ','RDE':'テーマパーク',
     'FOO':'食','UNC':'その他'
   };
-  const GENRE_LABELS_EN = {
+  const DEFAULT_GENRE_LABELS_EN = {
     'ANI':'Anime','MAN':'Manga','GAM':'Games','TVP':'TV Programs',
     'MOV':'Movies','NET':'Internet','HAR':'Hardware','PHE':'Phenomena/Trends',
     'SOF':'Software','TOY':'Toys','FAS':'Fashion','BOO':'Books',
@@ -1999,31 +1999,102 @@
     'EVT':'Events','FMT':'Formats','SPW':'Sports','RDE':'Theme Parks',
     'FOO':'Food','UNC':'Others'
   };
+  let GENRE_LABELS_EN = { ...DEFAULT_GENRE_LABELS_EN };
+  let GENRE_DETAILS = {};
+  function getGenreDefinition(genreOrCode) {
+    if (genreOrCode && typeof genreOrCode === 'object' && !Array.isArray(genreOrCode)) {
+      const code = String(genreOrCode.code || '').trim().toUpperCase();
+      if (!code) return null;
+      const saved = GENRE_DETAILS[code] && typeof GENRE_DETAILS[code] === 'object' ? GENRE_DETAILS[code] : {};
+      return { ...saved, ...genreOrCode, code };
+    }
+    const code = String(genreOrCode || '').trim().toUpperCase();
+    if (!code) return null;
+    const saved = GENRE_DETAILS[code] && typeof GENRE_DETAILS[code] === 'object' ? GENRE_DETAILS[code] : {};
+    return {
+      ...saved,
+      code,
+      label: saved.label || GENRE_LABELS[code] || code,
+      label_en: saved.label_en || GENRE_LABELS_EN[code] || ''
+    };
+  }
+  function getGenreDisplayLabel(genreOrCode) {
+    const def = getGenreDefinition(genreOrCode);
+    if (!def) return '';
+    const code = String(def.code || '').toUpperCase();
+    const label = String(def.label || '').trim();
+    const labelEn = String(def.label_en || '').trim();
+    if (isEnglishUi()) return labelEn || label || code;
+    return label || code;
+  }
   function getGenreLabel(code) {
-    const c = String(code || '').toUpperCase();
-    if (isEnglishUi()) return GENRE_LABELS_EN[c] || GENRE_LABELS[c] || c;
-    return GENRE_LABELS[c] || c;
+    return getGenreDisplayLabel(code);
+  }
+  function exportGenreDefinitions() {
+    return GENRES.map((codeRaw) => {
+      const code = String(codeRaw || '').toUpperCase();
+      const def = getGenreDefinition(code) || { code };
+      const out = { ...def, code };
+      if (!out.label) out.label = GENRE_LABELS[code] || code;
+      if (!out.label_en && GENRE_LABELS_EN[code]) out.label_en = GENRE_LABELS_EN[code];
+      return out;
+    });
   }
   let GENRE_SET=new Set(GENRES);
   function setGenresFromRemote(genresDef){
     try{
       if(Array.isArray(genresDef) && genresDef.length){
         // 期待フォーマット: [{code:'ANI', label:'アニメ'}, ...]
-        const codes=[]; const labels={};
+        const codes=[]; const labels={}; const labelsEn={}; const details={};
         for(const g of genresDef){
           const code=String(g.code||'').toUpperCase();
           if(!code) continue;
           codes.push(code);
-          labels[code]=g.label||code;
+          const detail = (g && typeof g === 'object') ? { ...g, code } : { code };
+          const label = String(detail.label || '').trim() || code;
+          const labelEn = String(detail.label_en || detail.enLabel || '').trim();
+          detail.label = label;
+          if (labelEn) detail.label_en = labelEn;
+          labels[code]=label;
+          if (labelEn) labelsEn[code] = labelEn;
+          else if (DEFAULT_GENRE_LABELS_EN[code]) labelsEn[code] = DEFAULT_GENRE_LABELS_EN[code];
+          details[code] = detail;
         }
-        if(codes.length){ GENRES=codes; GENRE_LABELS=labels; GENRE_SET=new Set(GENRES); }
+        if(codes.length){ GENRES=codes; GENRE_LABELS=labels; GENRE_LABELS_EN=labelsEn; GENRE_DETAILS=details; GENRE_SET=new Set(GENRES); }
       } else if(genresDef && genresDef.list && Array.isArray(genresDef.list)){
         // 互換フォーマット: {list:['ANI',...], labels:{ANI:'アニメ',...}}
         const codes=genresDef.list.map(c=>String(c).toUpperCase());
         const labels={...genresDef.labels};
-        if(codes.length){ GENRES=codes; GENRE_LABELS=labels||GENRE_LABELS; GENRE_SET=new Set(GENRES); }
+        const labelsEn={...genresDef.labels_en};
+        const details={};
+        codes.forEach((code) => {
+          const label = (labels && labels[code]) ? labels[code] : code;
+          const labelEn = (labelsEn && labelsEn[code]) ? labelsEn[code] : (DEFAULT_GENRE_LABELS_EN[code] || '');
+          details[code] = { code, label, ...(labelEn ? { label_en: labelEn } : {}) };
+        });
+        if(codes.length){
+          GENRES=codes;
+          GENRE_LABELS=labels||GENRE_LABELS;
+          GENRE_LABELS_EN=labelsEn||GENRE_LABELS_EN;
+          GENRE_DETAILS=details;
+          GENRE_SET=new Set(GENRES);
+        }
       }
     }catch(e){ console.warn('ジャンル定義の適用に失敗:', e); }
+  }
+  GENRE_DETAILS = GENRES.reduce((acc, codeRaw) => {
+    const code = String(codeRaw || '').toUpperCase();
+    acc[code] = { code, label: GENRE_LABELS[code] || code, label_en: GENRE_LABELS_EN[code] || '' };
+    return acc;
+  }, {});
+  function formatGenreLabels(genreValue) {
+    const codes = Array.isArray(genreValue)
+      ? genreValue.map(v => String(v || '').toUpperCase()).filter(Boolean)
+      : (genreValue != null && String(genreValue).trim()
+          ? String(genreValue).split('・').map(v => String(v || '').trim().toUpperCase()).filter(Boolean)
+          : []);
+    if (!codes.length) return '';
+    return codes.map(code => getGenreDisplayLabel(code)).filter(Boolean).join(isEnglishUi() ? ' / ' : '・');
   }
   function getGenreKey(genre){
     if(Array.isArray(genre)) return genre.map(g=>String(g).toUpperCase()).sort().join('・');
@@ -2452,7 +2523,7 @@
       const data = {
         events: events,
         eraSettings: eraSettings,
-        genres: GENRES.map(code=>({code, label: (GENRE_LABELS && GENRE_LABELS[code]) ? GENRE_LABELS[code] : code}))
+        genres: exportGenreDefinitions()
       };
       
       // 削除フラグ付きの項目をチェック
@@ -3722,7 +3793,7 @@
               <div style="flex: 1;">
                 <div style="font-weight: bold; margin-bottom: 4px;">${item.label}</div>
                 <div style="font-size: 12px; color: #666;">
-                  ${item.genre ? `ジャンル: ${Array.isArray(item.genre) ? item.genre.join('・') : item.genre}` : ''}
+                  ${item.genre ? `${t('ジャンル', 'Genre')}: ${formatGenreLabels(item.genre)}` : ''}
                   ${item.imp ? ` | 重要度: ${item.imp}` : ''}
                   ${item.note ? ` | 注釈: ${item.note}` : ''}
                 </div>
@@ -3949,7 +4020,7 @@
           ${GENRES.map(code => `
           <label style=\"display: flex; align-items: center; gap: 4px; font-size: 13px;\">
             <input type=\"checkbox\" value=\"${code}\" ${Array.isArray(item.genre) ? (item.genre.includes(code) ? 'checked' : '') : (item.genre === code ? 'checked' : '')}>
-            ${GENRE_LABELS[code] || code}
+            ${getGenreDisplayLabel(code)}
           </label>`).join('')}
         </div>
       </div>
@@ -4900,7 +4971,7 @@
   function formatItemDetails(item) {
     let details = [];
     if (item.label) details.push(`<strong>ラベル:</strong> ${item.label}`);
-    if (item.genre) details.push(`<strong>ジャンル:</strong> ${item.genre}`);
+    if (item.genre) details.push(`<strong>${t('ジャンル', 'Genre')}:</strong> ${formatGenreLabels(item.genre)}`);
     if (item.imp) details.push(`<strong>重要度:</strong> ${item.imp}`);
     if (item.url) details.push(`<strong>URL:</strong> ${item.url}`);
     if (item.note) details.push(`<strong>注釈:</strong> ${item.note}`);
@@ -5345,7 +5416,7 @@
       const dataToSave = {
         events: merged,
         eraSettings: toSaveEraSettings, // リモートに保存するのは同名上書き分と新規取り込み分のみ
-        genres: GENRES.map(code=>({code, label: (GENRE_LABELS && GENRE_LABELS[code]) ? GENRE_LABELS[code] : code}))
+        genres: exportGenreDefinitions()
       };
       console.log('保存するデータ構造:', {
         hasEvents: !!dataToSave.events,
