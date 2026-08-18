@@ -772,6 +772,13 @@
   // URLで与える kiosk スイッチ（従来の kioskMode とは別管理）
   const kioskSwitchFromUrl = isTruthyUrlParam(initialUrlParams.get('kiosk'));
   window.kioskSwitchFromUrl = kioskSwitchFromUrl;
+  function isKioskSwitchEnabled() {
+    try {
+      const liveParams = new URLSearchParams(window.location.search || '');
+      if (isTruthyUrlParam(liveParams.get('kiosk'))) return true;
+    } catch (_) {}
+    return !!window.kioskSwitchFromUrl;
+  }
   const kioskDiagnosisMode = String(initialUrlParams.get('mode') || '1').trim() === '2' ? '2' : '1';
   window.kioskDiagnosisMode = kioskDiagnosisMode;
   function isKioskMode2() { return kioskDiagnosisMode === '2'; }
@@ -1712,7 +1719,7 @@
   function attachDiagnosisCopyButton(title) {
     const oldWrap = document.getElementById('diagnosisCopyBtnWrap');
     if (oldWrap) oldWrap.remove();
-    if (window.kioskSwitchFromUrl) return;
+    if (isKioskSwitchEnabled()) return;
     if (!isDiagnosisResultModalTitle(title)) return;
     const sourceEl = modalContent.querySelector('[data-diagnosis-report]') || modalContent;
     const wrap = document.createElement('div');
