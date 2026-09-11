@@ -6228,15 +6228,45 @@
           const vpH = vp.clientHeight || 0;
           const maxScroll = Math.max(0, vp.scrollHeight - vpH);
           const MARGIN = 80;
+          let topLimitY = vp.scrollTop + MARGIN;
+          let bottomLimitY = vp.scrollTop + vpH - MARGIN;
+          let shouldFastFollowDown = false;
+          // スマホのキオスク step3 ではチェック一覧パネルが下部を覆うため、
+          // 下ハンドルは「パネルの上端より少し上」を可視域下端として追従させる。
+          if (
+            color === 'blue' &&
+            el === eh &&
+            isMobileLikeViewport() &&
+            probeEventsPanel &&
+            probeEventsPanel.style.display !== 'none'
+          ) {
+            const vpRect = vp.getBoundingClientRect();
+            const panelRect = probeEventsPanel.getBoundingClientRect();
+            const visibleBottomPx = Math.min(vpRect.bottom, panelRect.top) - vpRect.top;
+            if (Number.isFinite(visibleBottomPx) && visibleBottomPx > 0) {
+              const PANEL_GAP = 24;
+              bottomLimitY = Math.min(bottomLimitY, vp.scrollTop + visibleBottomPx - PANEL_GAP);
+              // パネルが高くて可視域が狭い時でも、限界値の逆転は防ぐ
+              if (bottomLimitY <= topLimitY + 20) bottomLimitY = topLimitY + 20;
+              shouldFastFollowDown = true;
+            }
+          }
           let targetTop = vp.scrollTop;
-          if(y < vp.scrollTop + MARGIN){
+          if(y < topLimitY){
             targetTop = Math.max(0, y - MARGIN);
-          } else if(y > vp.scrollTop + vpH - MARGIN){
-            targetTop = Math.min(maxScroll, y - vpH + MARGIN);
+          } else if(y > bottomLimitY){
+            const visibleHeight = Math.max(40, bottomLimitY - vp.scrollTop);
+            targetTop = Math.min(maxScroll, y - visibleHeight);
           }
           if(targetTop !== vp.scrollTop){
             const d = targetTop - vp.scrollTop;
             const now = Date.now();
+            if (shouldFastFollowDown && d > 0) {
+              // スマホ+下ハンドル時は、急ドラッグで下方向に潜らないよう即時追従
+              lastScrollTime = now;
+              vp.scrollTop = targetTop;
+              return;
+            }
             const elapsed = lastScrollTime ? Math.min(now - lastScrollTime, 150) : 100;
             const maxStep = (elapsed / 100) * PX_PER_YEAR; // 100msで1年分
             lastScrollTime = now;
