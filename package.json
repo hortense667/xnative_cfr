@@ -4,7 +4,8 @@
   "description": "ネイティブマップ診断（Railwayデプロイ用）",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build:attr-webp": "node scripts/build-attr-webp.js"
   },
   "engines": {
     "node": ">=18"

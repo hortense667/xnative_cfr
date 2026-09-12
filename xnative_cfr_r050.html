@@ -8019,6 +8019,29 @@
     author: { ja: '作者偏信', en: 'Author Bias', short: '作者', code: 'AU', desc: '作り手の癖や姿勢まで含めて愛する属性です。', descEn: 'You love the maker\'s habits and stance, not just the work.' },
     archive: { ja: '記録蒐集', en: 'Archive Impulse', short: '蒐集', code: 'AR', desc: '好きなものを系譜や記録として抱える属性です。', descEn: 'You hold what you love as lineage and record.' }
   };
+  // 属性カード画像（テキスト焼き込み済み）。英語UIでも日本語カードを使う。
+  const MODE2_ATTR_IMAGE_FILES = {
+    '世界観没入': 'IMG_sekaikan',
+    '機構偏愛': 'IMG_kiko',
+    '未来感受': 'IMG_mirai',
+    '異形親和': 'IMG_ikei',
+    '日常浸透': 'IMG_nichijyo',
+    '越境回遊': 'IMG_ekkyo',
+    '少年回路': 'IMG_boy',
+    '少女回路': 'IMG_girl',
+    '反復愛着': 'IMG_hanpuku',
+    '作者偏信': 'IMG_sakusha',
+    '記録蒐集': 'IMG_kiroku'
+  };
+  const MODE2_ATTR_IMAGE_BASE = 'assets/attrs';
+  function getMode2AttrImagePaths(jaName) {
+    const base = MODE2_ATTR_IMAGE_FILES[String(jaName || '').trim()];
+    if (!base) return null;
+    return {
+      webp: `${MODE2_ATTR_IMAGE_BASE}/${base}.webp`,
+      png: `${MODE2_ATTR_IMAGE_BASE}/${base}.png`
+    };
+  }
   const MODE2_ATTRS_FALLBACK = Object.fromEntries(
     Object.entries(MODE2_ATTRS).map(([k, v]) => [k, { ...v }])
   );
@@ -9769,49 +9792,21 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
 
 function buildMode2ResultHtml(result) {
     const top3 = Array.isArray(result.top3) ? result.top3 : [];
-    const getMode2PlaceholderIllustration = (item) => {
-      const label = String(item && item.info && item.info.ja ? item.info.ja : '').trim();
-      const seed = (label || String(item && item.role || '')).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-      const themes = [
-        { a: '#e0f2fe', b: '#bae6fd', icon: '🌌' },
-        { a: '#ede9fe', b: '#ddd6fe', icon: '🛠️' },
-        { a: '#fef3c7', b: '#fde68a', icon: '🚀' },
-        { a: '#dcfce7', b: '#bbf7d0', icon: '📚' },
-        { a: '#fee2e2', b: '#fecaca', icon: '🎮' },
-        { a: '#f3e8ff', b: '#e9d5ff', icon: '✨' }
-      ];
-      const t = themes[Math.abs(seed) % themes.length];
-      const shortLabel = escapeHtmlText(label.slice(0, 6));
-      const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-  <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="${t.a}" />
-      <stop offset="100%" stop-color="${t.b}" />
-    </linearGradient>
-  </defs>
-  <rect width="640" height="360" rx="28" fill="url(#bg)"/>
-  <circle cx="526" cy="76" r="46" fill="rgba(255,255,255,0.56)"/>
-  <path d="M0 280 C100 235 185 330 280 286 C365 246 426 330 640 256 L640 360 L0 360 Z" fill="rgba(255,255,255,0.72)"/>
-  <text x="42" y="70" font-size="44" font-family="Segoe UI, sans-serif">${t.icon}</text>
-  <text x="50%" y="198" text-anchor="middle" font-size="44" font-family="Segoe UI, sans-serif" font-weight="700" fill="#0f172a">${shortLabel}</text>
-</svg>`;
-      return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-    };
     const attrsHtml = top3.slice(0, 3).map((item) => {
       if (!item || !item.info || !item.info.ja) return '';
-      const illustUrl = getMode2PlaceholderIllustration(item);
+      const nameJa = String(item.info.ja || '').trim();
+      const paths = getMode2AttrImagePaths(nameJa);
+      const altText = nameJa || mode2RoleLabel(item.role);
+      const imgInner = paths
+        ? `<picture>
+            <source srcset="${escapeHtmlAttr(paths.webp)}" type="image/webp">
+            <img class="mode2-attr-card-img" src="${escapeHtmlAttr(paths.png)}" alt="${escapeHtmlAttr(altText)}" width="960" height="540" loading="lazy" decoding="async">
+          </picture>`
+        : `<div class="mode2-attr-card-fallback">${escapeHtmlText(nameJa)}</div>`;
       return `
-        <div style="padding:12px; border:1px solid #dbe3ee; border-radius:14px; background:#fff;">
-          <div style="margin-bottom:10px; border-radius:12px; overflow:hidden; border:1px solid #dbe3ee; background:#f8fafc;">
-            <img src="${illustUrl}" alt="${escapeHtmlAttr(t('属性イラスト（仮）', 'Attribute illustration (temporary)'))}" style="display:block; width:100%; height:auto; aspect-ratio:16/9; object-fit:cover;">
-          </div>
-          <div style="font-size:12px; color:#64748b; margin-bottom:6px; font-weight:600; letter-spacing:0.02em;">${escapeHtmlText(mode2RoleLabel(item.role))}</div>
-          <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
-            <div style="font-size:22px; font-weight:800; line-height:1.2;">${escapeHtmlText(isEnglishUi() ? (item.info.en || item.info.ja) : item.info.ja)}</div>
-            <div style="font-size:13px; color:#64748b; font-weight:600;">${escapeHtmlText(isEnglishUi() ? (item.info.ja || '') : (item.info.en || ''))}</div>
-          </div>
-          <div style="font-size:13px; line-height:1.7; color:#334155;">${escapeHtmlText(getMode2AttrDesc(item.info.ja))}</div>
+        <div class="mode2-attr-card">
+          <div class="mode2-attr-card-role">${escapeHtmlText(mode2RoleLabel(item.role))}</div>
+          <div class="mode2-attr-card-media">${imgInner}</div>
         </div>
       `;
     }).filter(Boolean).join('');
@@ -9840,6 +9835,19 @@ function buildMode2ResultHtml(result) {
       ? `<ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.7;">${selectionStatusLines.map(line => `<li>${escapeHtmlText(line)}</li>`).join('')}</ul>`
       : `<div style="font-size:13px; color:#64748b;">${t('（選択なし）', '(No selection)')}</div>`;
     return `
+      <style>
+        .mode2-attr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+        .mode2-attr-card{padding:10px;border:1px solid #dbe3ee;border-radius:14px;background:#fff;}
+        .mode2-attr-card-role{font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600;letter-spacing:0.02em;}
+        .mode2-attr-card-media{border-radius:12px;overflow:hidden;border:1px solid #dbe3ee;background:#f8fafc;}
+        .mode2-attr-card-img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;}
+        .mode2-attr-card-fallback{display:flex;align-items:center;justify-content:center;min-height:120px;padding:16px;font-size:18px;font-weight:700;color:#0f172a;aspect-ratio:16/9;}
+        @media (max-width:768px){
+          .mode2-attr-grid{grid-template-columns:1fr;gap:14px;}
+          .mode2-attr-card{padding:12px;}
+          .mode2-attr-card-role{font-size:13px;margin-bottom:10px;}
+        }
+      </style>
       <div data-diagnosis-report style="max-width:1040px; margin:0 auto; color:#0f172a;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
           <div style="font-size:24px; font-weight:800; line-height:1.35; flex:1 1 280px;">${escapeHtmlText(mode2ResultPageTitle())}</div>
@@ -9852,7 +9860,7 @@ function buildMode2ResultHtml(result) {
         </div>
         <div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
           <div style="font-size:13px; color:#7c8b9e; font-weight:600; margin-bottom:10px;">${escapeHtmlText(getMode2UiLabel('attributesSection', '属性', 'Attributes'))}</div>
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">${attrsHtml || `<div style="font-size:13px; color:#64748b;">${escapeHtmlText(getMode2UiLabel('noAttributes', '（判定なし）', '(No attributes)'))}</div>`}</div>
+          <div class="mode2-attr-grid">${attrsHtml || `<div style="font-size:13px; color:#64748b;">${escapeHtmlText(getMode2UiLabel('noAttributes', '（判定なし）', '(No attributes)'))}</div>`}</div>
         </div>
         <div style="margin-top:18px; padding:16px 18px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px;">
           <div style="font-size:13px; color:#7c8b9e; font-weight:600;">${escapeHtmlText(moduleSectionTitleResolved)}</div>

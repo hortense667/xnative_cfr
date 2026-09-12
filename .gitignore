@@ -3,3 +3,7 @@ data/
 .env
 .env.local
 *.log
+LOCAL_OPERATIONS.md
+
+# Corel autosave under attrs
+assets/attrs/Corel*/

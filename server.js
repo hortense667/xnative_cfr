@@ -23,7 +23,7 @@ const API_JSON_LIMIT = process.env.API_JSON_LIMIT || '64kb';
 const RATE_LIMIT_WINDOW_MS = toPositiveInt(process.env.RATE_LIMIT_WINDOW_MS, 60 * 1000);
 const RATE_LIMIT_GET_RESULTS_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_GET_RESULTS_PER_MIN, 60);
 const RATE_LIMIT_POST_RESULT_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_RESULT_PER_MIN, 30);
-const RATE_LIMIT_POST_AI_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_AI_PER_MIN, 10);
+const RATE_LIMIT_POST_AI_PER_MIN = toPositiveInt(process.env.RATE_LIMIT_POST_AI_PER_MIN, 30);
 const MAX_PROMPT_CHARS = toPositiveInt(process.env.MAX_PROMPT_CHARS, 40000);
 const BACKUP_RETENTION_DAYS = toPositiveInt(process.env.BACKUP_RETENTION_DAYS, 31);
 
@@ -176,6 +176,16 @@ function writeDiagnosticResults(list) {
   fs.writeFileSync(DIAGNOSTIC_RESULTS_FILE, JSON.stringify(list, null, 2), 'utf8');
 }
 
+// 属性カード画像は差し替え頻度が低いので長めにキャッシュ（通信量・レスポンス改善）
+app.use('/assets/attrs', express.static(path.join(__dirname, 'assets', 'attrs'), {
+  maxAge: '7d',
+  immutable: false,
+  setHeaders(res, filePath) {
+    if (/\.(?:webp|png)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+    }
+  }
+}));
 app.use(express.static(path.join(__dirname)));
 app.use(express.json({ limit: API_JSON_LIMIT }));
 app.use('/api', apiRateLimit);
