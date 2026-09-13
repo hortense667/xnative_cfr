@@ -6164,11 +6164,13 @@
       eventYearText.textContent = isEnglishUi() ? `${state.eventYear}` : `${state.eventYear}年`;
       eventYearText.setAttribute('x', ORIGIN_X+8);
       eventYearText.setAttribute('y', yE-6);
-      const yAtAxis = yE - age*PX_PER_YEAR; const by = Math.round((yAtAxis - ORIGIN_Y)/PX_PER_YEAR) + YEAR_MIN;
-      birthYearText.textContent = isEnglishUi() ? `${by} born` : `${by}年生`;
+      // 生年ラベルは常に state.birthYear を表示・配置する。
+      // age を 0 クランプした座標から逆算すると、イベント年が生年より前のとき
+      // 「年生」がイベント年に追従して増減して見える不具合になる。
+      birthYearText.textContent = isEnglishUi() ? `${state.birthYear} born` : `${state.birthYear}年生`;
       birthYearText.style.fill = '#000'; // 生年表示を黒色に
       birthYearText.setAttribute('x', ORIGIN_X+8);
-      birthYearText.setAttribute('y', yAtAxis-6);
+      birthYearText.setAttribute('y', yB-6);
       // 上下の〇が同じ年のときは下の〇(eh)をドラッグできるように、上の〇(bh)でクリックを受けない
       if (state.eventYear === state.birthYear) {
         bh.setAttribute('pointer-events', 'none');
