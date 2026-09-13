@@ -3264,6 +3264,19 @@
     } 
     return true; 
   }
+  // 検索クエリ照合（日本語・英語ラベル両方。UI言語に依存しない）
+  function getItemSearchText(item) {
+    if (!item || typeof item !== 'object') return '';
+    return [item.label, item.label_en].filter(Boolean).map(v => String(v)).join(' ');
+  }
+  function itemMatchesSearchQuery(item, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return true;
+    return getItemSearchText(item).toLowerCase().includes(q);
+  }
+  function getActiveSearchQuery() {
+    return (searchBox && searchBox.value ? String(searchBox.value).trim() : '');
+  }
 
   // ===== グリッド =====
   function yFromBirthYear(by){return ORIGIN_Y+(by-YEAR_MIN)*PX_PER_YEAR;}
@@ -3446,7 +3459,9 @@
     }
     const y = Math.round(year);
     const allItems = events[y] || [];
-    const items = allItems.filter(passesFilter);
+    const searchQ = getActiveSearchQuery();
+    // 検索中はヒットした項目だけ（label / label_en）。空なら従来どおり年内の全件（ジャンル等フィルタ後）
+    const items = allItems.filter(passesFilter).filter(it => itemMatchesSearchQuery(it, searchQ));
     if (!items.length){
       probeEventsPanel.style.display = 'none';
       probeEventsPanel.innerHTML = '';
@@ -4443,21 +4458,28 @@
   }
 
   // ===== 検索 =====
+  function refreshProbePanelForSearch() {
+    if (typeof window.updateProbeEventsPanel === 'function' && typeof probeBlue !== 'undefined') {
+      window.updateProbeEventsPanel(probeBlue.eventYear);
+    }
+  }
   function doSearch(){ 
     clearHighlight(true); 
-    const q=searchBox.value.trim(); 
+    const q = getActiveSearchQuery(); 
     if(!q){ 
       matches=[]; 
       matchIndex=-1; 
       // 検索ボックスが空の場合はすべてのハイライトをクリア
       document.querySelectorAll('.hlText').forEach(el => el.classList.remove('hlText'));
+      // 検索解除時はチェックリストを年の全件表示に戻す
+      refreshProbePanelForSearch();
       return; 
     } 
     
     console.log('検索クエリ:', q);
     console.log('events:', events);
     
-    // 検索対象は「選択中ジャンルのラベルのみ」
+    // 検索対象は「選択中ジャンルのラベルのみ」（日本語・英語ラベル両方）
     const searchResults = [];
     for (const year of Object.keys(events)) {
       const items = events[year] || [];
@@ -4465,12 +4487,9 @@
         // ジャンルフィルタ
         if (selectedGenres.size === 0) continue;
         if (!itemHasSelectedGenre(item)) continue;
-        const searchTarget = [item.label, item.label_en].filter(Boolean).join(' ').toLowerCase();
-        const labelMatch = searchTarget.includes(q.toLowerCase());
-        if (labelMatch) {
-          searchResults.push({ year: parseInt(year), item });
-          console.log('マッチした項目:', { year, item, labelMatch });
-        }
+        if (!itemMatchesSearchQuery(item, q)) continue;
+        searchResults.push({ year: parseInt(year), item });
+        console.log('マッチした項目:', { year, item });
       }
     }
     
@@ -4494,7 +4513,8 @@
     console.log('最終的なマッチ数:', matches.length);
     
     matchIndex = matches.length? 0 : -1; 
-    if(matchIndex!==-1){ highlight(matches[matchIndex]); } 
+    if(matchIndex!==-1){ highlight(matches[matchIndex]); }
+    else { refreshProbePanelForSearch(); }
   }
   function nextMatch(dir){ if(!matches.length) return; matchIndex=(matchIndex+ (dir>0?1:-1) + matches.length)%matches.length; highlight(matches[matchIndex]); }
   searchBtn.addEventListener('click', doSearch);
