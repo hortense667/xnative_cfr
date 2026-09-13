@@ -1935,7 +1935,54 @@
       }
     }
   }
-  modalClose.addEventListener('click', closeModal);
+  function isDiagnosisResultLeaveConfirmNeeded() {
+    if (!window.kioskMode) return false;
+    if (!isDiagnosisResultModalTitle(modalTitle && modalTitle.textContent)) return false;
+    return kioskModalPhase === 'diag' || kioskModalPhase === 'diag2';
+  }
+  function confirmProceedFromDiagnosisResult() {
+    return new Promise((resolve) => {
+      const existing = document.getElementById('diagnosisLeaveConfirm');
+      if (existing) existing.remove();
+      const layer = document.createElement('div');
+      layer.id = 'diagnosisLeaveConfirm';
+      layer.setAttribute('role', 'dialog');
+      layer.setAttribute('aria-modal', 'true');
+      layer.style.cssText = 'position:fixed; inset:0; z-index:3000; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; padding:16px;';
+      const messageJa = '次の画面へ進みますか？\n\nこの先では診断結果を再表示できません。画像の保存やコピー、SNS共有など、必要な保存を済ませてから進んでください。';
+      const messageEn = 'Proceed to the next screen?\n\nYou will not be able to view this diagnosis result again. Please save or copy what you need (image, text, SNS share, etc.) before continuing.';
+      layer.innerHTML = `
+        <div style="background:#fff; border-radius:12px; max-width:440px; width:100%; padding:20px 22px; box-shadow:0 24px 80px rgba(0,0,0,.25); color:#0f172a;">
+          <h3 style="margin:0 0 12px; font-size:18px; font-weight:700;">${t('確認', 'Confirm')}</h3>
+          <p style="margin:0; font-size:15px; line-height:1.75; white-space:pre-wrap;">${t(messageJa, messageEn)}</p>
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+            <button type="button" class="btn" id="diagnosisLeaveCancelBtn">${t('キャンセル', 'Cancel')}</button>
+            <button type="button" class="btn btn-primary" id="diagnosisLeaveOkBtn">${t('進む', 'Proceed')}</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(layer);
+      const done = (val) => {
+        try { layer.remove(); } catch (_) {}
+        resolve(val);
+      };
+      const cancelBtn = document.getElementById('diagnosisLeaveCancelBtn');
+      const okBtn = document.getElementById('diagnosisLeaveOkBtn');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => done(false));
+      if (okBtn) okBtn.addEventListener('click', () => done(true));
+      layer.addEventListener('click', (e) => {
+        if (e.target === layer) done(false);
+      });
+      if (cancelBtn) cancelBtn.focus();
+    });
+  }
+  modalClose.addEventListener('click', async () => {
+    if (isDiagnosisResultLeaveConfirmNeeded()) {
+      const ok = await confirmProceedFromDiagnosisResult();
+      if (!ok) return;
+    }
+    closeModal();
+  });
   modal.addEventListener('click', (e)=>{
     if (e.target !== modal) return;
     if (modal.dataset.closeOnBackdrop === 'false') return;
@@ -1943,6 +1990,7 @@
   });
   window.addEventListener('keydown', (e)=>{
     if (e.key !== 'Escape') return;
+    if (document.getElementById('diagnosisLeaveConfirm')) return;
     if (document.getElementById('mode2OtakuAttrsGuideOverlay')) {
       closeMode2OtakuAttrsGuide();
       return;
