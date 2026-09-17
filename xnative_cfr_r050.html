@@ -9111,6 +9111,17 @@ function buildMode2AiPrompt(payload) {
     };
     const attrs = Object.values(MODE2_ATTRS || {}).map(info => String(info && info.ja ? info.ja : '').trim()).filter(Boolean);
     const attrsCount = attrs.length;
+    const attrCatalogLineJa = Object.values(MODE2_ATTRS || {}).map(info => {
+      const ja = String(info && info.ja ? info.ja : '').trim();
+      const desc = String(info && info.desc ? info.desc : '').trim();
+      return `${ja}${desc ? `：${desc}` : ''}`;
+    }).filter(Boolean).join('\n');
+    const attrCatalogLineEn = Object.values(MODE2_ATTRS || {}).map(info => {
+      const ja = String(info && info.ja ? info.ja : '').trim();
+      const en = String(info && info.en ? info.en : ja).trim();
+      const desc = String(info && (info.descEn || info.desc) ? (info.descEn || info.desc) : '').trim();
+      return `${ja} / ${en}${desc ? `: ${desc}` : ''}`;
+    }).filter(Boolean).join('\n');
     const deepLowerModules = MODE2_DEEP_LOWER_MODULES.map(m => m.ja);
     const generalLowerModules = MODE2_GENERAL_LOWER_MODULES.map(m => m.ja);
     const allLowerModules = getMode2AllLowerModules().map(m => m.ja);
@@ -9127,6 +9138,31 @@ function buildMode2AiPrompt(payload) {
       });
       return acc;
     }, {})).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([label, count]) => `${label} x${count}`).join(' / ');
+    const promptSelectedItems = (payload && Array.isArray(payload.selectedItems)) ? payload.selectedItems : [];
+    const repeatTaggedItemCount = promptSelectedItems.filter(item => {
+      const details = Array.isArray(item && item.meaningDetails) ? item.meaningDetails : [];
+      return details.some(detail => {
+        const key = String(detail && (detail.key || detail.code) ? (detail.key || detail.code) : '').trim().toLowerCase();
+        const label = String(detail && (detail.label || detail.labelJa || detail.labelEn) ? (detail.label || detail.labelJa || detail.labelEn) : '').trim().toLowerCase();
+        return key === 'repeat' || label === '繰り返し触れた' || label === 'returned to';
+      });
+    }).length;
+    const repeatTaggedRatio = promptSelectedItems.length ? repeatTaggedItemCount / promptSelectedItems.length : 0;
+    const repeatEvidenceLineJa = `反復タグの実数: ${repeatTaggedItemCount}/${promptSelectedItems.length}項目（${Math.round(repeatTaggedRatio * 100)}%）`;
+    const repeatEvidenceLineEn = `Observed repetition evidence: ${repeatTaggedItemCount} of ${promptSelectedItems.length} selected items (${Math.round(repeatTaggedRatio * 100)}%) carry the Returned to tag.`;
+    const selectedGenreFamilies = Array.from(promptSelectedItems.reduce((set, item) => {
+      const genres = Array.isArray(item && item.genre) ? item.genre : (item && item.genre ? [item.genre] : []);
+      genres.forEach(genre => {
+        const family = mode2GenreFamily(genre);
+        if (family && family !== 'other') set.add(family);
+      });
+      return set;
+    }, new Set())).sort();
+    const genreFamilyLineJa = `選択がまたがる主要分野: ${selectedGenreFamilies.length}系統${selectedGenreFamilies.length ? `（${selectedGenreFamilies.join(' / ')}）` : ''}`;
+    const genreFamilyLineEn = `Major genre/media families represented: ${selectedGenreFamilies.length}${selectedGenreFamilies.length ? ` (${selectedGenreFamilies.join(' / ')})` : ''}.`;
+    const crossingEligible = selectedGenreFamilies.length >= 3;
+    const crossingEligibilityLineJa = `越境回遊の候補資格: ${crossingEligible ? '候補可（ただし、ほかに強い共通軸がない場合のみ）' : '候補外（主属性・副属性・裏属性のいずれにも越境回遊を返してはいけません）'}`;
+    const crossingEligibilityLineEn = `Crossing eligibility: ${crossingEligible ? 'ELIGIBLE only if no stronger common axis exists' : 'NOT ELIGIBLE; do not return 越境回遊 in mainAttribute, subAttribute, or hiddenAttribute'}.`;
     const extraPromptLines = getMode2PromptExtraLines();
     if (isEnglishUi()) {
       return [
@@ -9136,15 +9172,37 @@ function buildMode2AiPrompt(payload) {
         'Meaning choices and their nuances are:',
         meaningCatalogLineEn || 'Taste / Moe / Impact / Returned to / Feels like me / Oshi / Support',
         meaningTrend ? ('Current selection trend of meaning choices: ' + meaningTrend) : '',
+        repeatEvidenceLineEn,
+        genreFamilyLineEn,
+        crossingEligibilityLineEn,
         'Read the pattern of selections, crossings between genres and media, jumps across time periods, and the distribution of the meaning tags.',
         'Use both the meaning labels and their descriptions when inferring nuance for attributes, lower modules, summary, and epithet.',
-        'Choose exactly three upper attributes only from the following fixed Japanese labels. Do not invent new attributes, and return the names exactly as written in Japanese.',
-        'Treat mainAttribute as the single anchor of the reading. subAttribute and hiddenAttribute are softer traces that bleed through; do not present all three as equally strong personality pillars.',
-        attrs.join(' / '),
-        'For 越境回遊 specifically, choose it only when there is clear and repeated crossing evidence across multiple items, genres, or media.',
-        'Avoid giving everyone the same four attributes (世界観没入 / 機構偏愛 / 越境回遊 / 少年回路). Prefer a distinctive mix when supported, but do not force variety if the evidence is weak.',
-        'Write summary around the mainAttribute first, then mention lowerModules, practiceModes, meaning tags, and specific selection patterns for personal flavor. Put item-level evidence mainly in mainAttribute.reason.',
-        'In summary, do not claim that three attributes are equally defining. Say what was strongest this time, and what else subtly mixed in.',
+        'Evaluate all fixed upper attributes below before choosing exactly three. Treat every attribute as equally available at the start: there is no preferred attribute, target distribution, or quota. Do not invent new attributes, and return each name exactly as written in Japanese.',
+        'Attribute definitions:',
+        attrCatalogLineEn,
+        'Use the following role criteria. mainAttribute is the strongest recurring pattern, supported by multiple selected items or by especially strong meaning tags with corroborating selections. subAttribute is the clearest independent second pattern. hiddenAttribute is a weaker background tendency that is still supported by concrete selections; it must not be a leftover choice made merely to fill the third slot.',
+        'Compare all attributes internally against the evidence before deciding. Choose an attribute because its definition matches why the user selected items, not merely because a title belongs to a familiar genre.',
+        'Before selecting the three attributes, privately rate the evidence for all eleven on a four-level scale: none, weak/general, coherent across several selections, or distinctive enough to organize the whole response. Do not use a high-base-rate attribute as a convenient fallback for the third slot. This is evidence calibration, not a quota: a less common attribute should outrank a common one whenever its concrete evidence is clearer.',
+        'Keep neighboring concepts distinct: 機構偏愛 concerns attraction to tools and systems, while 未来感受 concerns sensitivity to novelty and transitions of an era; 反復愛着 concerns returning repeatedly, while 記録蒐集 concerns preserving lineage and records; 世界観没入 concerns entering a represented world, while 日常浸透 concerns something becoming part of everyday life.',
+        'Calibrate the common attributes conservatively. Do not infer 機構偏愛 merely from choosing computers, games, or devices; the mechanism, operation, construction, or system itself must matter. 作者偏信 is eligible only when at least two concrete selections show continuity toward the same creator, maker, brand, or clearly shared creative stance, or when multiple Oshi/Support tags explicitly indicate maker-level allegiance. A work merely having a creator, or admiring craftsmanship in one item, is never enough. 記録蒐集 does not require literal ownership of a physical collection: tracing history, comparing generations, preserving cultural memory, or arranging favorites as a lineage can support it when several selections make that archival viewpoint coherent. Old works or nostalgia alone are still insufficient. Narrative works alone do not establish 世界観没入.',
+        'Read 日常浸透 more broadly than quiet slice-of-life taste. It includes works, products, services, music, games, or tools that have settled into routines, accompanied daily life for years, become familiar infrastructure, or gained affection through ordinary repeated use. Distinguish it from 反復愛着: 日常浸透 is about living alongside something as part of life, while 反復愛着 is about deliberately returning to it.',
+        'Read 未来感受 historically as well as currently. Evidence includes reacting to something that felt like the next era when first encountered: a new medium, interface, network culture, production method, design language, technological possibility, or a visible handoff between generations. It need not still be new today. Distinguish it from 機構偏愛: 未来感受 loves the arrival and change announced by a thing, not only how the thing works.',
+        'Calibrate 世界観没入 and 反復愛着 carefully. 世界観没入 does not require the word "world" or a dedicated meaning tag. It can be inferred when several selections consistently privilege setting, atmosphere, relationships, internal rules, or the feeling of entering and dwelling in a represented world. Merely selecting anime, manga, films, or games is not enough, but a coherent world-oriented pattern is strong evidence.',
+        'When several narrative selections support immersion but the specific motifs of adventure/discovery or transformation/inner relationships are not dominant, prefer 世界観没入 over 少年回路 or 少女回路. 少年回路 requires recurring adventure-and-discovery evidence; 少女回路 requires recurring transformation, relationship, or inner-sway evidence. Do not use those two as generic labels for narrative works.',
+        'Because this test asks people to choose things they already love, the meaning tag "Returned to" has a high base rate. Do not select 反復愛着 merely as a convenient subAttribute or hiddenAttribute. As a practical threshold, normally exclude it unless Returned to appears on at least three items and on roughly half or more of all meaning-tagged selected items, across more than one period or medium. Even above that threshold, choose it only when repeated return itself—not just liking the works—is a distinctive way of loving culture. Below the threshold, omit 反復愛着 unless the selections contain unusually explicit evidence of ritual rereading, rewatching, replaying, or continued reuse.',
+        '少年回路 and 少女回路 describe motifs and imaginative circuits, never the user\'s gender. Do not infer either from gender, age, or a broad genre label alone.',
+        'Read 少年回路 broadly as an imagination ignited by adventure and discovery. Evidence may recur across adventure stories, games, robots, science fiction frontiers, secret-base fantasies, gadgets, building, experimenting, searching, or unlocking what a system can do. Distinguish it from 機構偏愛: mechanism loves the tool or system itself, while boyhood circuit loves the expedition, experiment, discovery, and possibility opened by it. When one exploratory curiosity links selections across media, prefer 少年回路 over 越境回遊.',
+        'Treat 越境回遊 as a residual but meaningful pattern, not as a reward for selecting multiple fields. Crossing several genres or media is common in this test and is never sufficient by itself. Obey the Crossing eligibility line above as a hard output constraint: when it says NOT ELIGIBLE, returning 越境回遊 in any of the three attribute fields is invalid, with no exception. When ELIGIBLE, first test whether another attribute—especially 世界観没入, 機構偏愛, 少年回路, 少女回路, 作者偏信, or 記録蒐集—provides a stronger common axis. If one does, prefer that attribute and omit 越境回遊. Choose 越境回遊 only when no single stronger tendency organizes the response and the person\'s light movement among otherwise different fields is itself the clearest pattern. It is usually a subAttribute or hiddenAttribute; make it mainAttribute only with unusually strong evidence that crossing boundaries itself is central.',
+        'Do not force rare attributes for variety, but do not suppress them because they may be uncommon. The evidence in this individual response is the only basis for selection.',
+        'In each attribute object, name must contain only one exact Japanese attribute name from the fixed list above. Do not append a code, explanation, parentheses, or a meaning-tag name. Taste, Impact, Feels like me, and the other meaning tags are not attribute names.',
+        'The epithet, summary, and all three attribute reasons must express one coherent interpretation built from exactly the same mainAttribute, subAttribute, and hiddenAttribute. They must never imply a different attribute set.',
+        'Before writing, privately form one bold thesis about how this person relates to works, products, and culture. The thesis should reveal an unexpected connection or tension among the three attributes, not merely restate their definitions.',
+        'Write summary as a compact editorial portrait: open with that thesis, support it with at least two concrete selections or clearly identifiable selection patterns and their meaning tags, and end with a memorable implication about how the person chooses or returns to culture.',
+        'Do not explain the three attributes one by one, do not list them in role order, and do not write a catalog of selected titles. Avoid generic templates such as "You are drawn to...", "These elements combine...", or "This can be said to be your style." Prefer a decisive, insightful claim grounded in evidence.',
+        'Attribute names do not need to appear in summary. If any attribute name is used, it must be one of the exact three names returned in the attribute objects and must describe the same role. Never mention a fourth attribute.',
+        'mainAttribute.reason must identify the strongest recurring evidence and explain why it is the organizing principle. subAttribute.reason must identify a distinct secondary current and how it modifies the main one. hiddenAttribute.reason must identify subtler but concrete evidence and explain why it remains in the background. Do not copy the fixed attribute descriptions.',
+        'Do not return 作者偏信 as hiddenAttribute. Allegiance to a maker must be explicit and coherent enough to rank as mainAttribute or subAttribute; if it would rank only third, its evidence is insufficient. For hiddenAttribute, also avoid 反復愛着 or 記録蒐集 as generic safe choices and use either only when its specific threshold is independently met. When several hidden candidates have comparable concrete evidence, choose the one that reveals a different, less obvious selection logic—such as 日常浸透 or 未来感受—rather than repeating the same nostalgia or repetition already explained elsewhere.',
+        'Before returning JSON, perform a private consistency check: the epithet and every sentence of summary must fit the final three attribute names and roles; every reason must support its own attribute; no claim may contradict the selected items or meaning tags.',
         'Then think about lower modules in this order.',
         'First, examine whether any DEEP lower modules clearly fit. Use them only when there is strong evidence in the selections and meaning tags.',
         'Deep lower modules:', deepLowerModules.join(' / '),
@@ -9156,18 +9214,18 @@ function buildMode2AiPrompt(payload) {
         practiceModes.join(' / '),
         'Return JSON only. No markdown. No code fences. No commentary outside JSON.',
         'For mainAttribute, subAttribute, and hiddenAttribute, keep name in Japanese, but write short and reason in English.',
-        'mainAttribute.reason should be the strongest evidence-based explanation. subAttribute.reason and hiddenAttribute.reason should be shorter and softer, as traces rather than equal claims.',
+        'Keep subAttribute.reason and hiddenAttribute.reason shorter than mainAttribute.reason, while retaining concrete evidence.',
         'Write module reasons, practice reasons, summary, and shareText in English.',
         'epithet must be one string in the form "Japanese epithet || English alias". Japanese and English must be translations of the same epithet, not separate images.',
         'mainAttribute, subAttribute, and hiddenAttribute must be three different attribute names. Do not repeat the same attribute.',
-        'In summary, do not re-list every attribute name that will appear below. Keep it centered on the main attribute.',
+        'In summary, synthesize the three attributes into one interpretation instead of re-listing their names.',
         'epithet should be a longer and distinctive English alias. Do not directly paste product names, work titles, or character names. Instead, convert them into symbolic fragments or metaphoric hints. If a JSON keyword exists for an item, prefer that keyword. If not, imply the source indirectly rather than naming it directly.',
         'Make epithet clearly longer than epithetShort. Aim for about 8 to 16 words so it feels rich and specific.',
         'epithetShort should be a shorter English alias for sharing. It should also avoid direct product or title names and use a symbolic or atmospheric phrase instead.',
         'For epithet wording, avoid harsh or negative terms such as "scrap", "junk", or "waste"; prefer neutral or poetic vocabulary such as "mechanism", "workshop", "circuit", and "transmutation".',
         ...extraPromptLines,
         'Set emblemCode to an English code only, such as GH-DY-RP.',
-        'summary should be in English, about 80 to 180 words.',
+        'summary should be in English, about 110 to 190 words, dense with interpretation rather than classification labels.',
         'shareText should be in English and within 120 characters.',
         'The JSON must contain exactly these keys: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, summary, shareText.',
         'Each attribute object must contain name, short, and reason.',
@@ -9184,15 +9242,38 @@ function buildMode2AiPrompt(payload) {
       '意味付け候補とニュアンスは次のとおりです。',
       meaningCatalogLineJa || '好み / 萌え / 影響 / 繰り返し触れた / 自分らしい / 推す',
       meaningTrend ? ('今回の意味付け選択の傾向: ' + meaningTrend) : '',
+      repeatEvidenceLineJa,
+      genreFamilyLineJa,
+      crossingEligibilityLineJa,
       '選択対象そのものだけでなく、項目の並び方、ジャンルや媒体のまたぎ方、時代の飛び方、各タグの付き方を読んでください。',
       '属性判定・下位モジュール・総評・異名生成では、意味ラベルだけでなく description のニュアンスも根拠として使ってください。',
-      `上位属性は次の${attrsCount}属性の中から3つを選んでください。自由に新しい属性名を作ってはいけません。`,
+      `次の${attrsCount}属性をすべて同じ出発点に置いて比較してから、上位属性を3つ選んでください。優先属性、目標比率、人数合わせはありません。自由に新しい属性名を作らず、属性名は下記の日本語表記をそのまま返してください。`,
+      '属性の定義:',
+      attrCatalogLineJa,
+      '役割は次の基準で決めてください。主属性は、複数の選択項目に繰り返し表れるか、強い意味タグとそれを裏づける別の選択がある、最も明確な傾向です。副属性は、主属性とは別に確認できる第2の傾向です。裏属性は、主・副ほど強くないものの具体的な選択に根拠を持つ背景的傾向です。3枠目を埋めるための消去法だけで選んではいけません。',
+      '決定前に、11属性すべてについて選択項目と意味タグの根拠を内部で比較してください。作品のジャンル名だけで決めず、「なぜその項目を選んだか」が属性の定義に合うかを重視してください。',
+      '3属性を選ぶ前に、11属性すべての根拠を内部で「なし／一般的で弱い／複数選択に一貫している／回答全体を束ねるほど特徴的」の4段階で比較してください。基礎率の高い属性を3枠目の便利な埋め草にしてはいけません。これは人数合わせではなく根拠の補正です。出現しにくい属性でも具体的根拠がより明確なら、ありふれた属性より上位にしてください。',
+      '近い概念を混同しないでください。機構偏愛は道具・仕組みへの関心、未来感受は新しさや時代の転換への感応です。反復愛着は何度も戻る行為、記録蒐集は系譜・資料・記録として保持する志向です。世界観没入は表現された世界へ入る感覚、日常浸透は生活の一部として馴染む感覚です。',
+      '基礎率の高い属性は厳密に判定してください。コンピューター・ゲーム・機器を選んだだけで機構偏愛にせず、機構・操作・構造・システムそのものへの関心を必要とします。作者偏信は、同じ作者・作り手・ブランド・明確に共通する制作姿勢への継続した肩入れが具体的な2項目以上にある場合、または複数の「推す」タグが作り手への支持を明示する場合だけ候補にできます。作品に作者がいることや、1項目の作り込みを評価しただけでは根拠になりません。記録蒐集は物理的な所有だけを意味しません。複数の選択から、歴史をたどる、世代を比較する、文化的記憶を残す、好きなものを系譜として並べる視点が一貫して読める場合も根拠になります。ただし古い作品や懐かしさだけでは不足です。物語作品を選んだだけで世界観没入にしてはいけません。',
+      '日常浸透は、静かな日常系作品だけに限定せず広く読んでください。作品・製品・サービス・音楽・ゲーム・道具が、日々の習慣に入り、長年生活に伴走し、身近なインフラになり、普段使いのなかで愛着を得た場合も有力な根拠です。反復愛着との違いは、日常浸透が「生活の一部として共にある」こと、反復愛着が「意識して何度も戻る」ことです。',
+      '未来感受は現在の新製品だけでなく、選んだ当時の歴史的な新しさまで読んでください。新しい媒体・インターフェース・ネット文化・制作方法・デザイン言語・技術的可能性や、世代交代の瞬間に「次が始まる」と反応した選択は根拠になります。現在では古くても構いません。機構偏愛が仕組みそのものを愛するのに対し、未来感受はその対象が告げた到来や変化を愛します。',
+      '世界観没入と反復愛着は、次の基準で慎重に補正してください。世界観没入には「世界」という語や専用の意味タグは不要です。舞台設定、空気感、登場人物の関係、作品世界の規則、その中へ入って暮らすような感覚を重視する選択が複数項目で一貫していれば、有力な根拠になります。アニメ・マンガ・映画・ゲームを選んだだけでは不足ですが、世界の手触りを重視するまとまりを過小評価してはいけません。',
+      '複数の物語作品に没入の根拠がありながら、冒険・発見という少年回路固有のモチーフや、変身・関係性・内面の揺れという少女回路固有のモチーフが支配的でない場合は、少年回路・少女回路より世界観没入を優先してください。少年回路・少女回路を物語作品全般の受け皿にしてはいけません。',
+      'この診断は、もともと好きなものを選ぶため、「繰り返し触れた」は基礎率の高い意味タグです。反復愛着を副属性・裏属性の便利な埋め草にしてはいけません。実用上の基準として、原則、反復タグが3項目以上、かつ意味タグの付いた全選択項目のおおむね半数以上にあり、複数の時期または媒体にまたがる場合にだけ候補にしてください。その基準を超えていても、単に作品が好きなのではなく、戻る行為そのものがこの人の愛し方を特徴づけている場合に限って選んでください。基準未満では、儀式的な再読・再視聴・再プレイ・継続使用が明示的に読み取れる例外を除き、反復愛着を選ばないでください。',
+      '少年回路・少女回路は性別ではなく、作品内のモチーフや想像力への反応を表します。ユーザーの性別・年齢や大まかなジャンル名だけから判定してはいけません。',
+      '少年回路は、冒険と発見によって点火される想像力として広く読んでください。冒険物語、ゲーム、ロボット、SFの辺境、秘密基地、ガジェット、自作、実験、探索、仕組みの可能性を解き放つ行為など、異なる媒体に同じ探索心が繰り返し見える場合は有力です。機構偏愛は道具や仕組みそのものを愛し、少年回路はそれによって可能になる探検・実験・発見を愛する、という違いを守ってください。同じ探索心が複数媒体を貫く場合は、越境回遊より少年回路を優先してください。',
+      '越境回遊は、複数分野を選んだことへの加点ではなく、ほかに強い軸がないときに現れる、残余的だが意味のある属性として扱ってください。この診断で複数ジャンル・媒体にまたがること自体は珍しくなく、それだけでは根拠になりません。上記の「越境回遊の候補資格」を出力上の絶対条件として守ってください。「候補外」の場合、例外なく主属性・副属性・裏属性のどこにも越境回遊を返してはいけません。返した場合は無効な出力です。「候補可」の場合も、まず世界観没入・機構偏愛・少年回路・少女回路・作者偏信・記録蒐集など、回答全体を束ねる別の強い軸がないか検討し、あればそちらを優先して越境回遊を外してください。単一の強い傾向では説明できず、異なる領域を軽やかに渡り歩く選び方そのものが最も明確な特徴である場合にだけ選んでください。通常は副属性または裏属性とし、境界を越えること自体が中心だという非常に強い根拠がある場合だけ主属性にしてください。',
+      '多様性を作るために出にくい属性を無理に選んではいけません。一方、珍しそうだからという理由で除外してもいけません。この回答者の選択内容だけを根拠に判断してください。',
       '主属性を今回の読み解きの軸にしてください。副属性・裏属性は「にじむ属性」「背景の属性」として、主属性ほど強く語らないでください。3つを対等な性格タイプのように描写してはいけません。',
-      attrs.join(' / '),
-      '「越境回遊」は、複数項目にまたがって明確なジャンル横断・媒体横断の根拠が繰り返し見える場合にのみ選んでください。',
-      '世界観没入・機構偏愛・越境回遊・少年回路に偏りやすいことは自然です。無理に散らさず、主属性を軸に、その人の選択内容・意味タグ・下位モジュールで個性を出してください。',
-      'summary は、主属性を中心に書いてください。選択項目の並び、意味タグ、下位モジュール、関わり方から、その人だけの手触りを具体的に語ってください。作品別の根拠は mainAttribute.reason に厚く書いてください。',
-      'summary では「3属性が対等にあなたを定義する」とは書かず、「今回いちばん強かった属性」と「ほかに混じる属性」という温度差を保ってください。',
+      '属性オブジェクトの name には、上記11属性の日本語名だけを完全一致で入れてください。コード、説明、括弧、意味タグ名を付け足してはいけません。「好み」「影響」「自分らしい」などは意味タグであり、属性名ではありません。',
+      '異名・summary・3属性の reason は、確定した同じ主属性・副属性・裏属性だけから導かれる、一つの首尾一貫した解釈にしてください。別の属性の組み合わせを示唆してはいけません。',
+      '文章を書く前に、この人が作品・製品・文化とどのような関係を結ぶ人なのか、3属性の組み合わせから一つの大胆な命題を内部で立ててください。属性定義の言い換えではなく、3属性のあいだにある意外なつながりや緊張関係を見つけてください。',
+      'summary は短い評論または人物スケッチとして書いてください。冒頭でその命題を言い切り、少なくとも2つの具体的な選択項目、または明確に特定できる選択パターンと意味タグを根拠にし、最後はその人が文化を選ぶ／使う／戻る方法について余韻のある洞察で締めてください。',
+      '主属性・副属性・裏属性を順番に一つずつ説明してはいけません。選択作品の羅列も禁止です。「〜に惹かれる傾向があります」「これらの要素が組み合わさり」「あなた独自の〜と言えるでしょう」のような定型的で内容の薄いまとめを避け、根拠のある大胆な解釈を優先してください。',
+      'summary に属性名を出す必要はありません。属性名を出す場合は、属性オブジェクトで返す3つの正確な名称だけを、同じ役割・同じ意味で使用してください。第4の属性を示唆してはいけません。',
+      'mainAttribute.reason は、最も繰り返し現れる具体的根拠を示し、なぜ全体を束ねる軸なのかを説明してください。subAttribute.reason は、主属性とは異なる第2の流れと、それが主属性をどう変化させるかを説明してください。hiddenAttribute.reason は、弱いが具体的な根拠と、なぜ背景に留まるのかを説明してください。属性の固定説明文をコピーしてはいけません。',
+      '作者偏信を裏属性に返してはいけません。作り手への肩入れは、主属性または副属性に上がるほど明示的で一貫した根拠がある場合だけ採用し、3番手にしかならないなら根拠不足として外してください。裏属性では反復愛着・記録蒐集も無難な選択肢として使わず、それぞれ固有の基準を独立して満たす場合だけ選べます。具体的根拠が同程度の裏属性候補が複数ある場合は、すでに説明した懐古や反復を重ねるのではなく、日常浸透や未来感受など、別の意外な選択原理を明らかにする属性を優先してください。',
+      'JSONを返す直前に内部で整合性を確認してください。異名とsummaryの全文が、最終的な3属性の名称・役割と一致していること。各reasonがそれぞれ自分の属性を裏づけていること。選択項目や意味タグと矛盾する主張がないことを確認してください。',
       '下位モジュールは、まず「深いモジュール」が十分に当てはまるかを検討してください。十分な根拠があるときだけ採用してください。',
       '深いモジュール候補:',
       deepLowerModules.join(' / '),
@@ -9205,7 +9286,7 @@ function buildMode2AiPrompt(payload) {
       'また、実践モードは次の固定リストから1〜2つ選んでください。',
       practiceModes.join(' / '),
       '出力は必ずJSONのみで返してください。Markdownや説明文を付けてはいけません。JSONの前後に余計な文字を付けてはいけません。',
-      '主属性・副属性・裏属性を選び、それぞれ短い説明と理由をつけてください。主属性の reason は最も根拠を厚くし、副属性・裏属性の reason は短く控えめにしてください。',
+      '主属性・副属性・裏属性を選び、それぞれ理由をつけてください。主属性の reason は最も根拠を厚くし、副属性・裏属性は主属性より短くしながらも具体的根拠を残してください。',
       'また、ユーザー固有の少し長めの異名を1つ作ってください。作品名・製品名・キャラクター名をそのまま異名に入れてはいけません。代わりに、それらを感じさせる象徴語・比喩語・断片語に変換してください。JSONの diagnostic.keywords がある項目では、その keywords を優先して使ってください。keywords がない場合も、媒体・文化圏・手触りを匂わせる抽象語に置き換え、直接名は避けてください。異名は戒名・家紋名・種族名のように、少し謎めいていても雰囲気が伝わるものにしてください。',
       'epithet（長い異名）は epithetShort（短い異名）より明確に長くしてください。日本語では目安として16〜36文字程度で、象徴語を2〜3個つないだ厚みのある言い回しにしてください。',
       'あわせて、短い異名も1つ返してください。短い異名も同様に、直接的な固有名詞ではなく、象徴語ベースにしてください。',
@@ -9215,7 +9296,7 @@ function buildMode2AiPrompt(payload) {
       'epithet は「日本語の異名 || English alias」の1つの文字列にしてください。日本語と英語は別々のイメージではなく、同じ異名の対訳にしてください。',
       'epithetShort は「日本語の短い異名 || Short English alias」の1つの文字列にしてください。',
       'mainAttribute, subAttribute, hiddenAttribute は必ず3つとも異なる属性名にしてください。同じ属性を2回以上使わないでください。',
-      'summary では、下に出る属性名をすべて列挙し直さないでください。主属性を中心にした総評に留めてください。',
+      'summary では属性名を列挙せず、3属性を一つの解釈へ統合してください。',
       '制約:',
       '- 露骨な性格診断や病理的解釈をしない',
       '- 性別を決めつけない',
@@ -9223,7 +9304,7 @@ function buildMode2AiPrompt(payload) {
       '- 選択内容に根拠のある範囲で解釈する',
       '- lowerModules は空配列、または1〜2件の配列にする',
       '- practiceModes は1〜2件の配列にする',
-      '- summary は日本語で120〜220字程度',
+      '- summary は日本語で180〜320字程度。分類説明ではなく、含蓄のある読み解きにする',
       '- shareText は日本語で80字以内',
       'JSONは必ず次のキーを含めてください: mainAttribute, subAttribute, hiddenAttribute, lowerModules, practiceModes, emblemCode, epithet, epithetShort, summary, shareText',
       'mainAttribute, subAttribute, hiddenAttribute は、それぞれ name, short, reason を含むオブジェクトです。',
@@ -9491,6 +9572,27 @@ function buildMode2AiPrompt(payload) {
     if (Object.prototype.hasOwnProperty.call(MODE2_ATTRS, candidate) && MODE2_ATTRS[candidate]) {
       return MODE2_ATTRS[candidate].ja || fb;
     }
+    // AIが「少女回路［GH］」「Girlhood Circuit / 少女回路」のように
+    // コードや英語名を添えても、意図した属性を別属性へフォールバックさせない。
+    const directMatches = Object.entries(MODE2_ATTRS).filter(([key, info]) => {
+      const ja = String(info && info.ja ? info.ja : '').trim();
+      return ja && candidate.includes(ja);
+    });
+    if (directMatches.length === 1) return directMatches[0][1].ja || fb;
+    const lowered = candidate.toLowerCase();
+    const aliasMatches = Object.entries(MODE2_ATTRS).filter(([key, info]) => {
+      const en = String(info && info.en ? info.en : '').trim().toLowerCase();
+      const code = String(info && info.code ? info.code : '').trim().toLowerCase();
+      const keyToken = String(key || '').trim().toLowerCase();
+      if (en && (lowered === en || lowered.includes(en))) return true;
+      if (keyToken && lowered === keyToken) return true;
+      if (code) {
+        const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`(?:^|[\\s\\[\\]（）()・/:_-])${escaped}(?:$|[\\s\\[\\]（）()・/:_-])`, 'i').test(candidate)) return true;
+      }
+      return false;
+    });
+    if (aliasMatches.length === 1) return aliasMatches[0][1].ja || fb;
     return fb;
   }
 
