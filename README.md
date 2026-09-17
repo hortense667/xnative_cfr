@@ -71,8 +71,9 @@
 
 ### Mode2 関連ドキュメント
 
-- 仕様: `docs/cfr_prompts_spec.md`
+- 仕様: `docs/cfr_prompts_spec.md`（標準11属性・画像ファイル含む）
 - ユーザー向けヘルプ: `docs/help_mode2.md`
+- 標準属性の日本語名「世界観軸」は旧称「世界観没入」。英語名は `World Immersion` のまま。画像は `assets/attrs/IMG_sekaikanjiku.webp` / `.png`。
 
 ---
 
@@ -93,6 +94,7 @@
 | ファイル | 説明 |
 |----------|------|
 | `xnative_cfr_r050.html` | メイン画面（年表・プローブ・診断フロー・ヘルプ） |
+| `docs/` | Mode2仕様とユーザー向けヘルプ |
 | `server.js` | 静的配信・診断API・蓄積API |
 | `cfr_prompts.json` | 年表別タイトル・説明・AIプロンプト |
 | `RAILWAY_DEPLOY.md` | Railway デプロイ手順 |
