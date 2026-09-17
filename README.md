@@ -131,6 +131,7 @@ npm run dev
 | ファイル | 説明 |
 |----------|------|
 | `xnative_cfr_r050.html` | メイン画面（年表・プローブ・診断フロー・ヘルプ） |
+| `docs/` | Mode2仕様とユーザー向けヘルプ |
 | `server.js` | 静的配信・診断API・蓄積API |
 | `cfr_prompts.json` | 年表別タイトル・説明・AIプロンプト |
 | `RAILWAY_DEPLOY.md` | Railway デプロイ手順 |
