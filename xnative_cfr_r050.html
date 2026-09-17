@@ -8077,7 +8077,7 @@
   ];
   const MODE2_MEANING_DEFS_FALLBACK = MODE2_MEANING_DEFS.map(def => ({ ...def }));
   const MODE2_ATTRS = {
-    world: { ja: '世界観没入', en: 'World Immersion', short: '世界', code: 'WI', desc: 'その世界に入れる感じで選ぶ属性です。', descEn: 'You choose through the feeling of entering a world.' },
+    world: { ja: '世界観軸', en: 'World Immersion', short: '世界', code: 'WI', desc: 'その世界に入れる感じで選ぶ属性です。', descEn: 'You choose through the feeling of entering a world.' },
     mechanism: { ja: '機構偏愛', en: 'Mechanism Love', short: '機構', code: 'ME', desc: '道具や仕組みそのものに心が動く属性です。', descEn: 'Tools and systems themselves move your heart.' },
     future: { ja: '未来感受', en: 'Future Sense', short: '未来', code: 'FU', desc: '次が始まる気配や時代の切り替わりに反応する属性です。', descEn: 'You respond to the breath of what comes next and shifts in era.' },
     aberration: { ja: '異形親和', en: 'Aberration Affinity', short: '異形', code: 'AB', desc: '少し危うく変なものに熱を感じる属性です。', descEn: 'You feel heat for things slightly dangerous and strange.' },
@@ -8091,7 +8091,8 @@
   };
   // 属性カード画像（テキスト焼き込み済み）。英語UIでも日本語カードを使う。
   const MODE2_ATTR_IMAGE_FILES = {
-    '世界観没入': 'IMG_sekaikan',
+    '世界観軸': 'IMG_sekaikanjiku',
+    '世界観没入': 'IMG_sekaikanjiku',
     '機構偏愛': 'IMG_kiko',
     '未来感受': 'IMG_mirai',
     '異形親和': 'IMG_ikei',
@@ -8105,7 +8106,9 @@
   };
   const MODE2_ATTR_IMAGE_BASE = 'assets/attrs';
   function getMode2AttrImagePaths(jaName) {
-    const base = MODE2_ATTR_IMAGE_FILES[String(jaName || '').trim()];
+    const raw = String(jaName || '').trim();
+    const key = raw === '世界観没入' ? '世界観軸' : raw;
+    const base = MODE2_ATTR_IMAGE_FILES[key] || MODE2_ATTR_IMAGE_FILES[raw];
     if (!base) return null;
     return {
       webp: `${MODE2_ATTR_IMAGE_BASE}/${base}.webp`,
@@ -8978,7 +8981,7 @@ function buildMode2DiagnosisLocal() {
   }
 
   function getMode2AttrDescJa(name) {
-    const key = String(name || '').trim();
+    const key = String(name || '').trim() === '世界観没入' ? '世界観軸' : String(name || '').trim();
     for (const info of Object.values(MODE2_ATTRS)) {
       if (info.ja === key) return info.desc;
     }
@@ -8986,7 +8989,7 @@ function buildMode2DiagnosisLocal() {
   }
 
   function getMode2AttrDesc(name) {
-    const key = String(name || '').trim();
+    const key = String(name || '').trim() === '世界観没入' ? '世界観軸' : String(name || '').trim();
     for (const info of Object.values(MODE2_ATTRS)) {
       if (info.ja === key) return isEnglishUi() ? (info.descEn || info.desc) : info.desc;
     }
@@ -9183,16 +9186,16 @@ function buildMode2AiPrompt(payload) {
         'Use the following role criteria. mainAttribute is the strongest recurring pattern, supported by multiple selected items or by especially strong meaning tags with corroborating selections. subAttribute is the clearest independent second pattern. hiddenAttribute is a weaker background tendency that is still supported by concrete selections; it must not be a leftover choice made merely to fill the third slot.',
         'Compare all attributes internally against the evidence before deciding. Choose an attribute because its definition matches why the user selected items, not merely because a title belongs to a familiar genre.',
         'Before selecting the three attributes, privately rate the evidence for all eleven on a four-level scale: none, weak/general, coherent across several selections, or distinctive enough to organize the whole response. Do not use a high-base-rate attribute as a convenient fallback for the third slot. This is evidence calibration, not a quota: a less common attribute should outrank a common one whenever its concrete evidence is clearer.',
-        'Keep neighboring concepts distinct: 機構偏愛 concerns attraction to tools and systems, while 未来感受 concerns sensitivity to novelty and transitions of an era; 反復愛着 concerns returning repeatedly, while 記録蒐集 concerns preserving lineage and records; 世界観没入 concerns entering a represented world, while 日常浸透 concerns something becoming part of everyday life.',
-        'Calibrate the common attributes conservatively. Do not infer 機構偏愛 merely from choosing computers, games, or devices; the mechanism, operation, construction, or system itself must matter. 作者偏信 is eligible only when at least two concrete selections show continuity toward the same creator, maker, brand, or clearly shared creative stance, or when multiple Oshi/Support tags explicitly indicate maker-level allegiance. A work merely having a creator, or admiring craftsmanship in one item, is never enough. 記録蒐集 does not require literal ownership of a physical collection: tracing history, comparing generations, preserving cultural memory, or arranging favorites as a lineage can support it when several selections make that archival viewpoint coherent. Old works or nostalgia alone are still insufficient. Narrative works alone do not establish 世界観没入.',
+        'Keep neighboring concepts distinct: 機構偏愛 concerns attraction to tools and systems, while 未来感受 concerns sensitivity to novelty and transitions of an era; 反復愛着 concerns returning repeatedly, while 記録蒐集 concerns preserving lineage and records; 世界観軸 concerns entering a represented world, while 日常浸透 concerns something becoming part of everyday life.',
+        'Calibrate the common attributes conservatively. Do not infer 機構偏愛 merely from choosing computers, games, or devices; the mechanism, operation, construction, or system itself must matter. 作者偏信 is eligible only when at least two concrete selections show continuity toward the same creator, maker, brand, or clearly shared creative stance, or when multiple Oshi/Support tags explicitly indicate maker-level allegiance. A work merely having a creator, or admiring craftsmanship in one item, is never enough. 記録蒐集 does not require literal ownership of a physical collection: tracing history, comparing generations, preserving cultural memory, or arranging favorites as a lineage can support it when several selections make that archival viewpoint coherent. Old works or nostalgia alone are still insufficient. Narrative works alone do not establish 世界観軸.',
         'Read 日常浸透 more broadly than quiet slice-of-life taste. It includes works, products, services, music, games, or tools that have settled into routines, accompanied daily life for years, become familiar infrastructure, or gained affection through ordinary repeated use. Distinguish it from 反復愛着: 日常浸透 is about living alongside something as part of life, while 反復愛着 is about deliberately returning to it.',
         'Read 未来感受 historically as well as currently. Evidence includes reacting to something that felt like the next era when first encountered: a new medium, interface, network culture, production method, design language, technological possibility, or a visible handoff between generations. It need not still be new today. Distinguish it from 機構偏愛: 未来感受 loves the arrival and change announced by a thing, not only how the thing works.',
-        'Calibrate 世界観没入 and 反復愛着 carefully. 世界観没入 does not require the word "world" or a dedicated meaning tag. It can be inferred when several selections consistently privilege setting, atmosphere, relationships, internal rules, or the feeling of entering and dwelling in a represented world. Merely selecting anime, manga, films, or games is not enough, but a coherent world-oriented pattern is strong evidence.',
-        'When several narrative selections support immersion but the specific motifs of adventure/discovery or transformation/inner relationships are not dominant, prefer 世界観没入 over 少年回路 or 少女回路. 少年回路 requires recurring adventure-and-discovery evidence; 少女回路 requires recurring transformation, relationship, or inner-sway evidence. Do not use those two as generic labels for narrative works.',
+        'Calibrate 世界観軸 and 反復愛着 carefully. 世界観軸 does not require the word "world" or a dedicated meaning tag. It can be inferred when several selections consistently privilege setting, atmosphere, relationships, internal rules, or the feeling of entering and dwelling in a represented world. Merely selecting anime, manga, films, or games is not enough, but a coherent world-oriented pattern is strong evidence.',
+        'When several narrative selections support immersion but the specific motifs of adventure/discovery or transformation/inner relationships are not dominant, prefer 世界観軸 over 少年回路 or 少女回路. 少年回路 requires recurring adventure-and-discovery evidence; 少女回路 requires recurring transformation, relationship, or inner-sway evidence. Do not use those two as generic labels for narrative works.',
         'Because this test asks people to choose things they already love, the meaning tag "Returned to" has a high base rate. Do not select 反復愛着 merely as a convenient subAttribute or hiddenAttribute. As a practical threshold, normally exclude it unless Returned to appears on at least three items and on roughly half or more of all meaning-tagged selected items, across more than one period or medium. Even above that threshold, choose it only when repeated return itself—not just liking the works—is a distinctive way of loving culture. Below the threshold, omit 反復愛着 unless the selections contain unusually explicit evidence of ritual rereading, rewatching, replaying, or continued reuse.',
         '少年回路 and 少女回路 describe motifs and imaginative circuits, never the user\'s gender. Do not infer either from gender, age, or a broad genre label alone.',
         'Read 少年回路 broadly as an imagination ignited by adventure and discovery. Evidence may recur across adventure stories, games, robots, science fiction frontiers, secret-base fantasies, gadgets, building, experimenting, searching, or unlocking what a system can do. Distinguish it from 機構偏愛: mechanism loves the tool or system itself, while boyhood circuit loves the expedition, experiment, discovery, and possibility opened by it. When one exploratory curiosity links selections across media, prefer 少年回路 over 越境回遊.',
-        'Treat 越境回遊 as a residual but meaningful pattern, not as a reward for selecting multiple fields. Crossing several genres or media is common in this test and is never sufficient by itself. Obey the Crossing eligibility line above as a hard output constraint: when it says NOT ELIGIBLE, returning 越境回遊 in any of the three attribute fields is invalid, with no exception. When ELIGIBLE, first test whether another attribute—especially 世界観没入, 機構偏愛, 少年回路, 少女回路, 作者偏信, or 記録蒐集—provides a stronger common axis. If one does, prefer that attribute and omit 越境回遊. Choose 越境回遊 only when no single stronger tendency organizes the response and the person\'s light movement among otherwise different fields is itself the clearest pattern. It is usually a subAttribute or hiddenAttribute; make it mainAttribute only with unusually strong evidence that crossing boundaries itself is central.',
+        'Treat 越境回遊 as a residual but meaningful pattern, not as a reward for selecting multiple fields. Crossing several genres or media is common in this test and is never sufficient by itself. Obey the Crossing eligibility line above as a hard output constraint: when it says NOT ELIGIBLE, returning 越境回遊 in any of the three attribute fields is invalid, with no exception. When ELIGIBLE, first test whether another attribute—especially 世界観軸, 機構偏愛, 少年回路, 少女回路, 作者偏信, or 記録蒐集—provides a stronger common axis. If one does, prefer that attribute and omit 越境回遊. Choose 越境回遊 only when no single stronger tendency organizes the response and the person\'s light movement among otherwise different fields is itself the clearest pattern. It is usually a subAttribute or hiddenAttribute; make it mainAttribute only with unusually strong evidence that crossing boundaries itself is central.',
         'Do not force rare attributes for variety, but do not suppress them because they may be uncommon. The evidence in this individual response is the only basis for selection.',
         'In each attribute object, name must contain only one exact Japanese attribute name from the fixed list above. Do not append a code, explanation, parentheses, or a meaning-tag name. Taste, Impact, Feels like me, and the other meaning tags are not attribute names.',
         'The epithet, summary, and all three attribute reasons must express one coherent interpretation built from exactly the same mainAttribute, subAttribute, and hiddenAttribute. They must never imply a different attribute set.',
@@ -9253,16 +9256,16 @@ function buildMode2AiPrompt(payload) {
       '役割は次の基準で決めてください。主属性は、複数の選択項目に繰り返し表れるか、強い意味タグとそれを裏づける別の選択がある、最も明確な傾向です。副属性は、主属性とは別に確認できる第2の傾向です。裏属性は、主・副ほど強くないものの具体的な選択に根拠を持つ背景的傾向です。3枠目を埋めるための消去法だけで選んではいけません。',
       '決定前に、11属性すべてについて選択項目と意味タグの根拠を内部で比較してください。作品のジャンル名だけで決めず、「なぜその項目を選んだか」が属性の定義に合うかを重視してください。',
       '3属性を選ぶ前に、11属性すべての根拠を内部で「なし／一般的で弱い／複数選択に一貫している／回答全体を束ねるほど特徴的」の4段階で比較してください。基礎率の高い属性を3枠目の便利な埋め草にしてはいけません。これは人数合わせではなく根拠の補正です。出現しにくい属性でも具体的根拠がより明確なら、ありふれた属性より上位にしてください。',
-      '近い概念を混同しないでください。機構偏愛は道具・仕組みへの関心、未来感受は新しさや時代の転換への感応です。反復愛着は何度も戻る行為、記録蒐集は系譜・資料・記録として保持する志向です。世界観没入は表現された世界へ入る感覚、日常浸透は生活の一部として馴染む感覚です。',
-      '基礎率の高い属性は厳密に判定してください。コンピューター・ゲーム・機器を選んだだけで機構偏愛にせず、機構・操作・構造・システムそのものへの関心を必要とします。作者偏信は、同じ作者・作り手・ブランド・明確に共通する制作姿勢への継続した肩入れが具体的な2項目以上にある場合、または複数の「推す」タグが作り手への支持を明示する場合だけ候補にできます。作品に作者がいることや、1項目の作り込みを評価しただけでは根拠になりません。記録蒐集は物理的な所有だけを意味しません。複数の選択から、歴史をたどる、世代を比較する、文化的記憶を残す、好きなものを系譜として並べる視点が一貫して読める場合も根拠になります。ただし古い作品や懐かしさだけでは不足です。物語作品を選んだだけで世界観没入にしてはいけません。',
+      '近い概念を混同しないでください。機構偏愛は道具・仕組みへの関心、未来感受は新しさや時代の転換への感応です。反復愛着は何度も戻る行為、記録蒐集は系譜・資料・記録として保持する志向です。世界観軸は表現された世界へ入る感覚、日常浸透は生活の一部として馴染む感覚です。',
+      '基礎率の高い属性は厳密に判定してください。コンピューター・ゲーム・機器を選んだだけで機構偏愛にせず、機構・操作・構造・システムそのものへの関心を必要とします。作者偏信は、同じ作者・作り手・ブランド・明確に共通する制作姿勢への継続した肩入れが具体的な2項目以上にある場合、または複数の「推す」タグが作り手への支持を明示する場合だけ候補にできます。作品に作者がいることや、1項目の作り込みを評価しただけでは根拠になりません。記録蒐集は物理的な所有だけを意味しません。複数の選択から、歴史をたどる、世代を比較する、文化的記憶を残す、好きなものを系譜として並べる視点が一貫して読める場合も根拠になります。ただし古い作品や懐かしさだけでは不足です。物語作品を選んだだけで世界観軸にしてはいけません。',
       '日常浸透は、静かな日常系作品だけに限定せず広く読んでください。作品・製品・サービス・音楽・ゲーム・道具が、日々の習慣に入り、長年生活に伴走し、身近なインフラになり、普段使いのなかで愛着を得た場合も有力な根拠です。反復愛着との違いは、日常浸透が「生活の一部として共にある」こと、反復愛着が「意識して何度も戻る」ことです。',
       '未来感受は現在の新製品だけでなく、選んだ当時の歴史的な新しさまで読んでください。新しい媒体・インターフェース・ネット文化・制作方法・デザイン言語・技術的可能性や、世代交代の瞬間に「次が始まる」と反応した選択は根拠になります。現在では古くても構いません。機構偏愛が仕組みそのものを愛するのに対し、未来感受はその対象が告げた到来や変化を愛します。',
-      '世界観没入と反復愛着は、次の基準で慎重に補正してください。世界観没入には「世界」という語や専用の意味タグは不要です。舞台設定、空気感、登場人物の関係、作品世界の規則、その中へ入って暮らすような感覚を重視する選択が複数項目で一貫していれば、有力な根拠になります。アニメ・マンガ・映画・ゲームを選んだだけでは不足ですが、世界の手触りを重視するまとまりを過小評価してはいけません。',
-      '複数の物語作品に没入の根拠がありながら、冒険・発見という少年回路固有のモチーフや、変身・関係性・内面の揺れという少女回路固有のモチーフが支配的でない場合は、少年回路・少女回路より世界観没入を優先してください。少年回路・少女回路を物語作品全般の受け皿にしてはいけません。',
+      '世界観軸と反復愛着は、次の基準で慎重に補正してください。世界観軸には「世界」という語や専用の意味タグは不要です。舞台設定、空気感、登場人物の関係、作品世界の規則、その中へ入って暮らすような感覚を重視する選択が複数項目で一貫していれば、有力な根拠になります。アニメ・マンガ・映画・ゲームを選んだだけでは不足ですが、世界の手触りを重視するまとまりを過小評価してはいけません。',
+      '複数の物語作品に没入の根拠がありながら、冒険・発見という少年回路固有のモチーフや、変身・関係性・内面の揺れという少女回路固有のモチーフが支配的でない場合は、少年回路・少女回路より世界観軸を優先してください。少年回路・少女回路を物語作品全般の受け皿にしてはいけません。',
       'この診断は、もともと好きなものを選ぶため、「繰り返し触れた」は基礎率の高い意味タグです。反復愛着を副属性・裏属性の便利な埋め草にしてはいけません。実用上の基準として、原則、反復タグが3項目以上、かつ意味タグの付いた全選択項目のおおむね半数以上にあり、複数の時期または媒体にまたがる場合にだけ候補にしてください。その基準を超えていても、単に作品が好きなのではなく、戻る行為そのものがこの人の愛し方を特徴づけている場合に限って選んでください。基準未満では、儀式的な再読・再視聴・再プレイ・継続使用が明示的に読み取れる例外を除き、反復愛着を選ばないでください。',
       '少年回路・少女回路は性別ではなく、作品内のモチーフや想像力への反応を表します。ユーザーの性別・年齢や大まかなジャンル名だけから判定してはいけません。',
       '少年回路は、冒険と発見によって点火される想像力として広く読んでください。冒険物語、ゲーム、ロボット、SFの辺境、秘密基地、ガジェット、自作、実験、探索、仕組みの可能性を解き放つ行為など、異なる媒体に同じ探索心が繰り返し見える場合は有力です。機構偏愛は道具や仕組みそのものを愛し、少年回路はそれによって可能になる探検・実験・発見を愛する、という違いを守ってください。同じ探索心が複数媒体を貫く場合は、越境回遊より少年回路を優先してください。',
-      '越境回遊は、複数分野を選んだことへの加点ではなく、ほかに強い軸がないときに現れる、残余的だが意味のある属性として扱ってください。この診断で複数ジャンル・媒体にまたがること自体は珍しくなく、それだけでは根拠になりません。上記の「越境回遊の候補資格」を出力上の絶対条件として守ってください。「候補外」の場合、例外なく主属性・副属性・裏属性のどこにも越境回遊を返してはいけません。返した場合は無効な出力です。「候補可」の場合も、まず世界観没入・機構偏愛・少年回路・少女回路・作者偏信・記録蒐集など、回答全体を束ねる別の強い軸がないか検討し、あればそちらを優先して越境回遊を外してください。単一の強い傾向では説明できず、異なる領域を軽やかに渡り歩く選び方そのものが最も明確な特徴である場合にだけ選んでください。通常は副属性または裏属性とし、境界を越えること自体が中心だという非常に強い根拠がある場合だけ主属性にしてください。',
+      '越境回遊は、複数分野を選んだことへの加点ではなく、ほかに強い軸がないときに現れる、残余的だが意味のある属性として扱ってください。この診断で複数ジャンル・媒体にまたがること自体は珍しくなく、それだけでは根拠になりません。上記の「越境回遊の候補資格」を出力上の絶対条件として守ってください。「候補外」の場合、例外なく主属性・副属性・裏属性のどこにも越境回遊を返してはいけません。返した場合は無効な出力です。「候補可」の場合も、まず世界観軸・機構偏愛・少年回路・少女回路・作者偏信・記録蒐集など、回答全体を束ねる別の強い軸がないか検討し、あればそちらを優先して越境回遊を外してください。単一の強い傾向では説明できず、異なる領域を軽やかに渡り歩く選び方そのものが最も明確な特徴である場合にだけ選んでください。通常は副属性または裏属性とし、境界を越えること自体が中心だという非常に強い根拠がある場合だけ主属性にしてください。',
       '多様性を作るために出にくい属性を無理に選んではいけません。一方、珍しそうだからという理由で除外してもいけません。この回答者の選択内容だけを根拠に判断してください。',
       '主属性を今回の読み解きの軸にしてください。副属性・裏属性は「にじむ属性」「背景の属性」として、主属性ほど強く語らないでください。3つを対等な性格タイプのように描写してはいけません。',
       '属性オブジェクトの name には、上記11属性の日本語名だけを完全一致で入れてください。コード、説明、括弧、意味タグ名を付け足してはいけません。「好み」「影響」「自分らしい」などは意味タグであり、属性名ではありません。',
@@ -9496,6 +9499,7 @@ function buildMode2AiPrompt(payload) {
   }
 
   const MODE2_ATTR_SHORT_JA = {
+    '世界観軸': '世界',
     '世界観没入': '世界',
     '機構偏愛': '機構',
     '未来感受': '未来',
@@ -9568,6 +9572,7 @@ function buildMode2AiPrompt(payload) {
     const fb = String(fallbackName || '').trim();
     const candidate = sanitizeMode2Text(rawValue, fb).trim();
     if (!candidate) return fb;
+    if (candidate === '世界観没入') return (MODE2_ATTRS.world && MODE2_ATTRS.world.ja) || '世界観軸';
     if (MODE2_ATTR_BY_JA[candidate]) return candidate;
     if (Object.prototype.hasOwnProperty.call(MODE2_ATTRS, candidate) && MODE2_ATTRS[candidate]) {
       return MODE2_ATTRS[candidate].ja || fb;
@@ -9832,7 +9837,7 @@ function buildMode2AiPrompt(payload) {
     (Array.isArray(top3) ? top3 : []).forEach(v => {
       const name = String(v && v.info && v.info.ja ? v.info.ja : '').trim();
       if (name === '記録蒐集') out.push('司書', '記録者', '蒐集家');
-      if (name === '世界観没入') out.push('巡礼者', '旅人');
+      if (name === '世界観軸' || name === '世界観没入') out.push('巡礼者', '旅人');
       if (name === '越境回遊') out.push('旅人', '案内人');
       if (name === '機構偏愛') out.push('使い手', '観測者');
       if (name === '作者偏信') out.push('語り部', '継ぎ手');
@@ -9894,14 +9899,14 @@ function normalizeMode2AiResult(parsed, fallbackLocal) {
     const sub = parsed && parsed.subAttribute ? parsed.subAttribute : {};
     const hidden = parsed && parsed.hiddenAttribute ? parsed.hiddenAttribute : {};
     const selectedSummaries = buildMode2SelectedSummaries();
-    const mainFallback = (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観没入';
+    const mainFallback = (fallbackLocal.top3[0] && fallbackLocal.top3[0].info.ja) || '世界観軸';
     const subFallback = (fallbackLocal.top3[1] && fallbackLocal.top3[1].info.ja) || '機構偏愛';
     const hiddenFallback = (fallbackLocal.top3[2] && fallbackLocal.top3[2].info.ja) || '記録蒐集';
     const mainName = normalizeMode2AttrName(main.name, mainFallback);
     const subName = normalizeMode2AttrName(sub.name, subFallback);
     const hiddenName = normalizeMode2AttrName(hidden.name, hiddenFallback);
     let normTop3 = [
-      { role: '主属性', info: { ja: mainName, en: mode2AttrLabelEn(mainName), desc: getMode2AttrDescJa(mainName || '世界観没入') }, reason: sanitizeMode2Text(main.reason, '') },
+      { role: '主属性', info: { ja: mainName, en: mode2AttrLabelEn(mainName), desc: getMode2AttrDescJa(mainName || '世界観軸') }, reason: sanitizeMode2Text(main.reason, '') },
       { role: '副属性', info: { ja: subName, en: mode2AttrLabelEn(subName), desc: getMode2AttrDescJa(subName || '機構偏愛') }, reason: sanitizeMode2Text(sub.reason, '') },
       { role: '裏属性', info: { ja: hiddenName, en: mode2AttrLabelEn(hiddenName), desc: getMode2AttrDescJa(hiddenName || '記録蒐集') }, reason: sanitizeMode2Text(hidden.reason, '') }
     ];
